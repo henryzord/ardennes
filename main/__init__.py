@@ -12,7 +12,7 @@ class Individual(object):
     def __init__(self, pmf, sets, classes):
         self._n_nodes = pmf.shape[1]
         self._nodes = None
-        self._threshold = None
+        self._threshold = np.empty(self._n_nodes, dtype=np.float32)
         self._sets = sets
         self._classes = classes
 
@@ -22,6 +22,9 @@ class Individual(object):
         self._nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
         self.set_threshold(sets['train'], self._root)
 
+    def has_children(self, pos):
+        return pos is not None and ((2*pos) + 2) < self._n_nodes
+
     @staticmethod
     def argchildren(pos):
         return (2*pos) + 1, (2*pos) + 2
@@ -30,27 +33,43 @@ class Individual(object):
         left, right = self.argchildren(pos)
         return pos[left], pos[right]
 
-    def set_threshold(self, subset, arg):
+    def set_threshold(self, subset, node):
+        """
+        Sets the threshold for the whole tree.
+
+        :param subset: Subset of objects that reach the current node.
+        :param node:
+        :return:
+        """
+
+        # TODO make method also predict for training!
+
+        arg_attr = self._nodes[node]
+
         # TODO make verification of values more smart!
+        # TODO verify only values where the class of adjacent objects changes!
 
-        unique_vals = np.sort(np.unique(subset[:, arg]))
+        unique_vals = np.sort(np.unique(subset[:, arg_attr]))
 
-        arg = 0
-        max_arg = unique_vals.shape[0]
+        t_counter = 0
+        max_t = unique_vals.shape[0]
 
-        best_threshold = unique_vals[arg]
+        if max_t <= 0:
+            return  # TODO no objects reaching this node!
 
-        entropy_left = self.entropy(subset[subset[arg] < best_threshold])
-        entropy_right = self.entropy(subset[subset[arg] >= best_threshold])
+        best_threshold = unique_vals[t_counter]
+
+        entropy_left = self.entropy(subset[subset[:, arg_attr] < best_threshold])
+        entropy_right = self.entropy(subset[subset[:, arg_attr] >= best_threshold])
 
         best_entropy = entropy_left + entropy_right
 
-        while arg < max_arg - 1:
-            arg += 1
+        while t_counter < max_t - 1:
+            t_counter += 1
+            threshold = unique_vals[t_counter]
 
-            threshold = unique_vals[arg]
-            entropy_left = self.entropy(subset[subset[arg] < best_threshold])
-            entropy_right = self.entropy(subset[subset[arg] >= best_threshold])
+            entropy_left = self.entropy(subset[subset[:, arg_attr] < threshold])
+            entropy_right = self.entropy(subset[subset[:, arg_attr] >= threshold])
             entropy = entropy_left + entropy_right
 
             # print 'entropy: %f\tthreshold:%f\targ:%d\t' % (entropy, threshold, arg)
@@ -59,16 +78,23 @@ class Individual(object):
                 best_entropy = entropy
                 best_threshold = threshold
 
-        # TODO do not return! write in self-buffer of thresholds and run all the tree!
+        self._threshold[node] = best_threshold
+        if self.has_children(node):
+            arg_left, arg_right = self.argchildren(node)
 
-        return best_threshold
+            subset_left = subset[subset[:, arg_attr] < best_threshold]
+            subset_right = subset[subset[:, arg_attr] >= best_threshold]
+
+            self.set_threshold(subset_left, arg_left)
+            self.set_threshold(subset_right, arg_right)
 
     def __str__(self):
         return ' ' + str(self._nodes)
 
     # the smaller, the better
 
-    def entropy(self, subset):
+    @staticmethod
+    def entropy(subset):
         size = float(subset.shape[0])
 
         counter = Counter(subset[:, 1])
