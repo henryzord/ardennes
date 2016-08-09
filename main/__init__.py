@@ -16,17 +16,25 @@ class Individual(object):
         self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.float32)
         self._sets = sets
         self._classes = classes
-        self._train_error = 0
+        self._train_acc = 0
         self._val_acc = 0
 
         self.sample(pmf)
 
+    @property
+    def nodes(self):
+        return self._nodes
+
+    @property
+    def fitness(self):
+        return self._val_acc
+
     def sample(self, pmf):
         self._nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
-        self._train_error = self.__set_internal__(self._sets['train'], self._root)
-        self._val_acc = self.validate(self._sets['val'])
+        self._train_acc = self.__set_internal__(self._sets['train'], self._root)
+        self._val_acc = self.__validate__(self._sets['val'])
 
-    def validate(self, set):
+    def __validate__(self, set):
         # TODO make code faster!
 
         hit_count = 0
@@ -85,8 +93,8 @@ class Individual(object):
             best_entropy = np.inf
 
             if unique_vals.shape[0] < 3:
-                error = self.__set_node__(node, subset)
-                return error
+                acc = self.__set_node__(node, subset)
+                return acc
 
             while t_counter < max_t - 1:  # may not pick the limitrophe values, since it would generate empty sets
                 threshold = unique_vals[t_counter]
@@ -111,12 +119,12 @@ class Individual(object):
             # TODO todo!
             # TODO make method also predict for training!
 
-            error_left = self.__set_internal__(best_subset_left, arg_left)
-            error_right = self.__set_internal__(best_subset_right, arg_right)
-            return error_left + error_right
+            acc_left = self.__set_internal__(best_subset_left, arg_left)
+            acc_right = self.__set_internal__(best_subset_right, arg_right)
+            return acc_left + acc_right
         else:
-            error = self.__set_node__(node, subset)
-            return error
+            acc = self.__set_node__(node, subset)
+            return acc
 
     def __set_node__(self, node, subset):
         count = Counter(subset[:, -1])
@@ -129,8 +137,8 @@ class Individual(object):
                 f_val = val
 
         self._threshold[node] = f_key  # not a threshold, but a class instead!
-        error = (subset.shape[0] - f_val) / float(subset.shape[0])
-        return error
+        acc = f_val / float(subset.shape[0])
+        return acc
 
     def __str__(self):
         return 'val accuracy: %0.2f attributes: %s' % (self._val_acc, str(self._nodes))
@@ -166,19 +174,24 @@ def get_pmf(n_attributes, n_internal):
 
 
 def set_pmf(pmf, fittest):
-    raise NotImplementedError('not implemented  yet!')
+    nodes = np.array(map(lambda x: x.nodes, fittest))
+    counts = map(lambda v: Counter(v), nodes.T)
 
+    n_internal, n_vals = pmf.shape
+    n_fittest = fittest.shape[0]
 
-def sample_population(pmf, to_replace):
-    raise NotImplementedError('not implemented yet!')
-    to_replace = map(lambda x: x.sample(pmf), to_replace)
-    return to_replace
+    for i in xrange(n_internal):  # for each node index
+        for j in xrange(n_vals):
+            try:
+                pmf[i, j] = counts[i][j] / float(n_fittest)
+            except KeyError:
+                pmf[i, j] = 0.
+
+    return pmf
 
 
 def init_pop(pmf, n_leaf, n_individuals, sets, classes):
-    # TODO leaf nodes do not require this position in the array!
-
-    pop = map(lambda x: Individual(pmf, n_leaf, sets, classes), xrange(n_individuals))
+    pop = np.array(map(lambda x: Individual(pmf, n_leaf, sets, classes), xrange(n_individuals)))
     return pop
 
 
@@ -202,24 +215,62 @@ def get_sets(X, Y, share, random_state=None):
     }
 
 
+def early_stop(iteration, mean, median, past, n_past):
+    past[iteration % n_past] = mean
+    if median == mean and np.all(past == mean):
+        raise StopIteration('you should stop.')
+    else:
+        return past
+
+
 def get_node_distribution(n_nodes):
     n_leaf = (n_nodes + 1) / 2
     n_internal = n_nodes - n_leaf
     return n_internal, n_leaf
 
 
-def main_loop(sets, classes, n_nodes, n_individuals, n_iterations=100):
+def main_loop(sets, classes, n_nodes, n_individuals, threshold=0.9, n_iterations=100, verbose=True):
     n_attributes = sets['train'].shape[1] - 1  # discards target attribute
 
     n_internal, n_leaf = get_node_distribution(n_nodes)
 
     pmf = get_pmf(n_attributes, n_internal)  # pmf has one distribution for each node
     population = init_pop(pmf, n_leaf, n_individuals, sets, classes)
+    fitness = np.array(map(lambda x: x.fitness, population))
+
+    integer_threshold = int(threshold * n_individuals)
+
+    n_past = 3
+    past = np.random.rand(n_past)
 
     iteration = 0
-    while iteration < n_iterations:
-        # evolutionary process
+    while iteration < n_iterations:  # evolutionary process
+        mean = np.mean(fitness)
+        median = np.median(fitness)
+        _max = np.max(fitness)
+
+        if verbose:
+            print 'mean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (mean, median, _max)
+
+        try:
+            past = early_stop(iteration, mean, median, past, n_past)
+        except StopIteration:
+            break
+
+        borderline = np.partition(fitness, integer_threshold)[integer_threshold]
+        fittest = population[np.flatnonzero(fitness >= borderline)]
+        pmf = set_pmf(pmf, fittest)
+
+        to_replace = population[np.flatnonzero(fitness < borderline)]
+        for ind in to_replace:
+            ind.sample(pmf)
+
+        fitness = np.array(map(lambda x: x.fitness, population))
+
         iteration += 1
+
+    fittest = population[np.argmax(fitness)]
+    return fittest
 
 if __name__ == '__main__':
     import random
@@ -233,4 +284,4 @@ if __name__ == '__main__':
     classes = np.unique(X)
     sets = get_sets(X, Y, share)
 
-    main_loop(sets=sets, classes=classes, n_nodes=7, n_individuals=100)
+    fittest = main_loop(sets=sets, classes=classes, n_nodes=15, threshold=0.9, n_individuals=100, verbose=True)
