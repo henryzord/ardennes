@@ -12,7 +12,7 @@ class Individual(object):
     def __init__(self, pmf, n_leaf, sets, classes):
         self._n_internal = pmf.shape[0]
         self._n_leaf = n_leaf
-        self._nodes = None
+        self._internal_nodes = None
         self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.float32)
         self._sets = sets
         self._classes = classes
@@ -23,14 +23,14 @@ class Individual(object):
 
     @property
     def nodes(self):
-        return self._nodes
+        return self._internal_nodes
 
     @property
     def fitness(self):
         return self._val_acc
 
     def sample(self, pmf):
-        self._nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
+        self._internal_nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
         self._train_acc = self.__set_internal__(self._sets['train'], self._root)
         self._val_acc = self.__validate__(self._sets['val'])
 
@@ -41,7 +41,7 @@ class Individual(object):
         for obj in set:
             arg_node = 0
             while not self.is_leaf(arg_node):
-                attr = self._nodes[arg_node]
+                attr = self._internal_nodes[arg_node]
 
                 arg_left, arg_right = self.__argchildren__(arg_node)
                 go_left = obj[attr] < self._threshold[arg_node]
@@ -52,8 +52,11 @@ class Individual(object):
         acc = hit_count / float(set.shape[0])
         return acc
 
+    def predict(self):
+        raise NotImplementedError('not implemented yet!')
+
     def is_internal(self, pos):
-        return pos is not None and ((2*pos) + 2) < self._n_internal
+        return pos is not None and ((2*pos) + 2) < self._n_internal + self._n_leaf
 
     def is_leaf(self, pos):
         return not self.is_internal(pos)
@@ -80,7 +83,7 @@ class Individual(object):
         if self.is_internal(node):
             arg_left, arg_right = self.__argchildren__(node)
 
-            arg_attr = self._nodes[node]  # arg_attr is the attribute chosen for split for the given node
+            arg_attr = self._internal_nodes[node]  # arg_attr is the attribute chosen for split for the given node
 
             # TODO make verification of values more smart!
             # TODO verify only values where the class of adjacent objects changes!
@@ -140,8 +143,50 @@ class Individual(object):
         acc = f_val / float(subset.shape[0])
         return acc
 
+    def plot(self, column_names, class_names):
+        from matplotlib import pyplot as plt
+        import networkx as nx
+
+        G = nx.Graph()
+
+        for i, node in enumerate(self._internal_nodes):
+            left, right = self.__argchildren__(i)
+
+            # G.add_edge(i, left)
+            # G.add_edge(i, right)
+
+            left_name = \
+                ('%d: ' % left) + (
+                    column_names[self._internal_nodes[left]]
+                    if self.is_internal(left)
+                    else class_names[self._threshold[left]]
+                )
+            right_name = \
+                ('%d: ' % right) + (
+                    column_names[self._internal_nodes[right]]
+                    if self.is_internal(right)
+                    else class_names[self._threshold[right]]
+                )
+
+            self_name = ('%d: ' % node) + column_names[node]
+
+            G.add_edge(self_name, left_name)
+            G.add_edge(self_name, right_name)
+
+        edges = [(u, v) for (u, v, d) in G.edges(data=True)]
+
+        pos = nx.spring_layout(G)  # positions for all nodes
+
+        nx.draw_networkx_nodes(G, pos, node_size=700, node_color='#CCFFFF')  # nodes
+        nx.draw_networkx_edges(G, pos, edgelist=edges, width=3)  # edges
+        nx.draw_networkx_labels(G, pos, font_size=20, font_family='sans-serif')  # labels
+
+        plt.axis('off')
+        # plt.savefig("weighted_graph.png")  # save as png
+        plt.show()  # display
+
     def __str__(self):
-        return 'val accuracy: %0.2f attributes: %s' % (self._val_acc, str(self._nodes))
+        return 'val accuracy: %0.2f attributes: %s' % (self._val_acc, str(self._internal_nodes))
 
     # the smaller, the better
 
@@ -272,16 +317,27 @@ def main_loop(sets, classes, n_nodes, n_individuals, threshold=0.9, n_iterations
     fittest = population[np.argmax(fitness)]
     return fittest
 
-if __name__ == '__main__':
+
+def main():
     import random
     random.seed(1)
     np.random.seed(1)
 
     share = {'train': 0.8, 'test': 0.1, 'val': 0.1}
     data = load_iris()
+
+    class_names = data['target_names']
+    column_names = data['feature_names']
+
     X, Y = data['data'], data['target']
 
     classes = np.unique(X)
     sets = get_sets(X, Y, share)
 
-    fittest = main_loop(sets=sets, classes=classes, n_nodes=15, threshold=0.9, n_individuals=100, verbose=True)
+    fittest = main_loop(sets=sets, classes=classes, n_nodes=7, threshold=0.9, n_individuals=100, verbose=True)
+    acc = fittest.__validate__(sets['test'])
+    print 'test accuracy: %+0.2f' % acc
+    fittest.plot(column_names, class_names)
+
+if __name__ == '__main__':
+    main()
