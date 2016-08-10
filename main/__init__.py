@@ -147,43 +147,83 @@ class Individual(object):
         from matplotlib import pyplot as plt
         import networkx as nx
 
-        G = nx.Graph()
+        G = nx.DiGraph()
 
-        for i, node in enumerate(self._internal_nodes):
+        edges = dict()
+        node_labels = dict()
+        edge_labels = dict()
+        colors = dict()
+
+        for i in xrange(self._n_internal):
             left, right = self.__argchildren__(i)
+            edges[left] = i
+            edges[right] = i
 
-            # G.add_edge(i, left)
-            # G.add_edge(i, right)
+            edge_labels[(i, left)] = '< %.2f' % self._threshold[i]
+            edge_labels[(i, right)] = '>= %.2f' % self._threshold[i]
 
-            left_name = \
-                ('%d: ' % left) + (
-                    column_names[self._internal_nodes[left]]
-                    if self.is_internal(left)
-                    else class_names[self._threshold[left]]
-                )
-            right_name = \
-                ('%d: ' % right) + (
-                    column_names[self._internal_nodes[right]]
-                    if self.is_internal(right)
-                    else class_names[self._threshold[right]]
-                )
+            node_labels[i] = column_names[self.nodes[i]]
+            colors[i] = '#CCFFFF'
 
-            self_name = ('%d: ' % node) + column_names[node]
+            if self.is_leaf(left):
+                node_labels[left] = class_names[self._threshold[left]]
+                colors[left] = '#CCFF99'
 
-            G.add_edge(self_name, left_name)
-            G.add_edge(self_name, right_name)
+            if self.is_leaf(right):
+                node_labels[right] = class_names[self._threshold[right]]
+                colors[right] = '#CCFF99'
 
-        edges = [(u, v) for (u, v, d) in G.edges(data=True)]
+        edges = map(lambda x: x[::-1], edges.iteritems())
 
-        pos = nx.spring_layout(G)  # positions for all nodes
+        G.add_nodes_from(xrange(self._n_internal + self._n_leaf))
 
-        nx.draw_networkx_nodes(G, pos, node_size=700, node_color='#CCFFFF')  # nodes
-        nx.draw_networkx_edges(G, pos, edgelist=edges, width=3)  # edges
-        nx.draw_networkx_labels(G, pos, font_size=20, font_family='sans-serif')  # labels
+        G.add_edges_from(edges)
+
+        pos = nx.spectral_layout(G)
+
+        nx.draw_networkx_nodes(G, pos, node_size=1000, node_color=colors.values())  # nodes
+        nx.draw_networkx_edges(G, pos, edgelist=edges, style='dashed')
+        nx.draw_networkx_labels(G, pos, node_labels, font_size=16)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
 
         plt.axis('off')
-        # plt.savefig("weighted_graph.png")  # save as png
-        plt.show()  # display
+        plt.show()
+
+        # for i, node in enumerate(self._internal_nodes):
+        #     left, right = self.__argchildren__(i)
+        #
+        #     left_name = left
+        #     right_name = right
+        #     self_name = node
+        #
+        #     # left_name = \
+        #     #     ('%d: ' % left) + (
+        #     #         column_names[self._internal_nodes[left]]
+        #     #         if self.is_internal(left)
+        #     #         else class_names[self._threshold[left]]
+        #     #     )
+        #     # right_name = \
+        #     #     ('%d: ' % right) + (
+        #     #         column_names[self._internal_nodes[right]]
+        #     #         if self.is_internal(right)
+        #     #         else class_names[self._threshold[right]]
+        #     #     )
+        #     #
+        #     # self_name = ('%d: ' % node) + column_names[node]
+        #
+        #     G.add_edge(self_name, left_name)
+        #     G.add_edge(self_name, right_name)
+        #
+        # edges = [(u, v) for (u, v, d) in G.edges(data=True)]
+        #
+        #
+        # nx.draw_networkx_nodes(G, pos, node_size=700, node_color='#CCFFFF')  # nodes
+        # nx.draw_networkx_edges(G, pos, edgelist=edges, width=3)  # edges
+        # nx.draw_networkx_labels(G, pos, font_size=20, font_family='sans-serif')  # labels
+        #
+        # plt.axis('off')
+        # # plt.savefig("weighted_graph.png")  # save as png
+        # plt.show()  # display
 
     def __str__(self):
         return 'val accuracy: %0.2f attributes: %s' % (self._val_acc, str(self._internal_nodes))
