@@ -1,5 +1,8 @@
 # coding=utf-8
 
+import numpy as np
+from collections import Counter
+
 __author__ = 'Henry Cagnini'
 
 
@@ -7,15 +10,18 @@ class Individual(object):
 
     _root = 0
 
-    def __init__(self, pmf, n_leaf, sets, classes):
-        self._n_internal = pmf.shape[0]
+    def __init__(self, n_leaf, n_internal, pmf, classes, sets, attributes):
+        self._n_internal = n_internal
         self._n_leaf = n_leaf
-        self._internal_nodes = None
-        self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.float32)
-        self._sets = sets
         self._classes = classes
+        self._sets = sets
+        self._attributes = attributes
+
         self._train_acc = 0
         self._val_acc = 0
+
+        self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.float32)
+        self._internal_nodes = None
 
         self.sample(pmf)
 
@@ -33,8 +39,6 @@ class Individual(object):
         self._val_acc = self.__validate__(self._sets['val'])
 
     def __validate__(self, set):
-        # TODO make code faster!
-
         hit_count = 0
         for obj in set:
             arg_node = 0
@@ -67,6 +71,14 @@ class Individual(object):
         left, right = self.__argchildren__(pos)
         return pos[left], pos[right]
 
+    @staticmethod
+    def __set_categorical__(attr, subset):
+        pass
+
+    @staticmethod
+    def __set_numerical__(attr, subset):
+        pass
+
     def __set_internal__(self, subset, node):
         """
         Sets the threshold for the whole tree.
@@ -75,6 +87,10 @@ class Individual(object):
         :param node:
         :return:
         """
+
+        # TODO only deals with real-valued attributes that keep an order between itself!
+        # TODO must threat other attribute types, such as categorical
+
         if subset.shape[0] <= 0:
             raise StandardError('empty subset!')
 
@@ -82,6 +98,8 @@ class Individual(object):
             arg_left, arg_right = self.__argchildren__(node)
 
             arg_attr = self._internal_nodes[node]  # arg_attr is the attribute chosen for split for the given node
+
+            # TODO dictionary for attr!
 
             # TODO make verification of values more smart!
             # TODO verify only values where the class of adjacent objects changes!
@@ -104,8 +122,8 @@ class Individual(object):
                 subset_right = subset[subset[:, arg_attr] >= threshold]
 
                 entropy = \
-                    self.entropy(subset_left) + \
-                    self.entropy(subset_right)
+                    Individual.entropy(subset_left) + \
+                    Individual.entropy(subset_right)
 
                 if entropy < best_entropy:
                     best_entropy = entropy
@@ -116,9 +134,6 @@ class Individual(object):
                 t_counter += 1
 
             self._threshold[node] = best_threshold
-
-            # TODO todo!
-            # TODO make method also predict for training!
 
             acc_left = self.__set_internal__(best_subset_left, arg_left)
             acc_right = self.__set_internal__(best_subset_right, arg_right)
@@ -141,7 +156,7 @@ class Individual(object):
         acc = f_val / float(subset.shape[0])
         return acc
 
-    def plot(self, column_names, class_names):
+    def plot(self, attributes, class_names):
         from matplotlib import pyplot as plt
         import networkx as nx
 
@@ -160,16 +175,16 @@ class Individual(object):
             edge_labels[(i, left)] = '< %.2f' % self._threshold[i]
             edge_labels[(i, right)] = '>= %.2f' % self._threshold[i]
 
-            node_labels[i] = column_names[self.nodes[i]]
+            node_labels[i] = attributes[self.nodes[i]]['name']
 
             colors[i] = '#CCFFFF'
 
             if self.is_leaf(left):
-                node_labels[left] = class_names[self._threshold[left]]
+                node_labels[left] = class_names[int(self._threshold[left])]
                 colors[left] = '#CCFF99'
 
             if self.is_leaf(right):
-                node_labels[right] = class_names[self._threshold[right]]
+                node_labels[right] = class_names[int(self._threshold[right])]
                 colors[right] = '#CCFF99'
 
         colors[0] = '#FFFFFF'
@@ -179,8 +194,7 @@ class Individual(object):
 
         G.add_edges_from(edges)
 
-        # pos = nx.spectral_layout(G)
-        pos = nx.spring_layout(G)
+        pos = nx.spectral_layout(G)
 
         nx.draw_networkx_nodes(G, pos, node_size=1000, node_color=colors.values())  # nodes
         nx.draw_networkx_edges(G, pos, edgelist=edges, style='dashed')
@@ -210,3 +224,8 @@ class Individual(object):
             _entropy += (q / size) * np.log2(q / size)
 
         return -1. * _entropy
+
+    handler_dict = {
+        'categorical': __set_categorical__,
+        'numerical': __set_numerical__
+    }

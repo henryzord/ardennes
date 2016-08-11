@@ -5,7 +5,10 @@ from collections import Counter
 from sklearn.datasets import load_iris
 import pandas as pd
 
+from genotype import Individual
+
 __author__ = 'Henry Cagnini'
+
 
 def get_pmf(n_attributes, n_internal):
     # checks if n_nodes is a valid value for the tree
@@ -35,8 +38,20 @@ def set_pmf(pmf, fittest):
     return pmf
 
 
-def init_pop(pmf, n_leaf, n_individuals, sets, classes):
-    pop = np.array(map(lambda x: Individual(pmf, n_leaf, sets, classes), xrange(n_individuals)))
+def init_pop(n_individuals, n_leaf, n_internal, pmf, classes, sets, attributes):
+    pop = np.array(
+        map(
+            lambda x: Individual(
+                n_leaf=n_leaf,
+                n_internal=n_internal,
+                pmf=pmf,
+                classes=classes,
+                sets=sets,
+                attributes=attributes
+            ),
+            xrange(n_individuals)
+        )
+    )
     return pop
 
 
@@ -74,13 +89,13 @@ def get_node_distribution(n_nodes):
     return n_internal, n_leaf
 
 
-def main_loop(sets, classes, n_nodes, n_individuals, threshold=0.9, n_iterations=100, verbose=True):
+def main_loop(n_individuals, n_nodes, sets, classes, attributes, n_iterations=100, threshold=0.9, verbose=True):
     n_attributes = sets['train'].shape[1] - 1  # discards target attribute
 
     n_internal, n_leaf = get_node_distribution(n_nodes)
 
     pmf = get_pmf(n_attributes, n_internal)  # pmf has one distribution for each node
-    population = init_pop(pmf, n_leaf, n_individuals, sets, classes)
+    population = init_pop(n_individuals, n_leaf, n_internal, pmf, classes, sets)
     fitness = np.array(map(lambda x: x.fitness, population))
 
     integer_threshold = int(threshold * n_individuals)
@@ -126,8 +141,8 @@ def main():
     share = {'train': 0.8, 'test': 0.1, 'val': 0.1}
     data = load_iris()
 
-    class_names = data['target_names']
-    column_names = data['feature_names']
+    attributes = {i: {'name': x, 'type': 'numeral'} for i, x in enumerate(data['feature_names'])}
+    class_names = {i: x for i, x in enumerate(data['target_names'])}
 
     X, Y = data['data'], data['target']
 
@@ -139,13 +154,14 @@ def main():
     # df['class'] = df['class'].apply(lambda x: class_names[x])
     # print df[['petal width (cm)', 'class']].sort('petal width (cm)')
 
-    fittest = main_loop(sets=sets, classes=classes, n_nodes=7, threshold=0.9, n_individuals=100, verbose=True)
+    fittest = main_loop(n_individuals=100, n_nodes=7, sets=sets, classes=classes, attributes=attributes, threshold=0.9,
+                        verbose=True)
 
     for name, set in sets.iteritems():
         acc = fittest.__validate__(set)
         print '%s accuracy: %+0.2f' % (name, acc)
 
-    fittest.plot(column_names, class_names)
+    fittest.plot(attributes, class_names)
 
 if __name__ == '__main__':
     main()
