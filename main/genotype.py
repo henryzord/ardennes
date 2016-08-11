@@ -71,13 +71,50 @@ class Individual(object):
         left, right = self.__argchildren__(pos)
         return pos[left], pos[right]
 
-    @staticmethod
-    def __set_categorical__(attr, subset):
-        pass
+    def __set_categorical__(self, node, arg_attr, subset):
+        arg_left, arg_right = self.__argchildren__(node)
 
-    @staticmethod
-    def __set_numerical__(attr, subset):
-        pass
+        unique_vals = np.sort(np.unique(subset[:, [-1, arg_attr]]))
+
+        raise NotImplemented('not implemented yet!')
+
+    def __set_numerical__(self, node, arg_attr, subset):
+        arg_left, arg_right = self.__argchildren__(node)
+
+        unique_vals = np.sort(np.unique(subset[:, arg_attr]))
+
+        t_counter = 1
+        max_t = unique_vals.shape[0]
+
+        best_entropy = np.inf
+
+        if unique_vals.shape[0] < 3:
+            acc = self.__set_node__(node, subset)
+            return acc
+
+        while t_counter < max_t - 1:  # should not pick limitrophe values, since it generates empty sets
+            threshold = unique_vals[t_counter]
+
+            subset_left = subset[subset[:, arg_attr] < threshold]
+            subset_right = subset[subset[:, arg_attr] >= threshold]
+
+            entropy = \
+                Individual.entropy(subset_left) + \
+                Individual.entropy(subset_right)
+
+            if entropy < best_entropy:
+                best_entropy = entropy
+                best_threshold = threshold
+                best_subset_left = subset_left
+                best_subset_right = subset_right
+
+            t_counter += 1
+
+        self._threshold[node] = best_threshold
+
+        acc_left = self.__set_internal__(best_subset_left, arg_left)
+        acc_right = self.__set_internal__(best_subset_right, arg_right)
+        return (acc_left + acc_right) / 2.
 
     def __set_internal__(self, subset, node):
         """
@@ -88,59 +125,19 @@ class Individual(object):
         :return:
         """
 
-        # TODO only deals with real-valued attributes that keep an order between itself!
-        # TODO must threat other attribute types, such as categorical
+        # TODO make verification of values more smart!
+        # TODO verify only values where the class of adjacent objects changes!
 
         if subset.shape[0] <= 0:
             raise StandardError('empty subset!')
 
         if self.is_internal(node):
-            arg_left, arg_right = self.__argchildren__(node)
-
             arg_attr = self._internal_nodes[node]  # arg_attr is the attribute chosen for split for the given node
-
-            # TODO dictionary for attr!
-
-            # TODO make verification of values more smart!
-            # TODO verify only values where the class of adjacent objects changes!
-
-            unique_vals = np.sort(np.unique(subset[:, arg_attr]))
-
-            t_counter = 1
-            max_t = unique_vals.shape[0]
-
-            best_entropy = np.inf
-
-            if unique_vals.shape[0] < 3:
-                acc = self.__set_node__(node, subset)
-                return acc
-
-            while t_counter < max_t - 1:  # may not pick the limitrophe values, since it would generate empty sets
-                threshold = unique_vals[t_counter]
-
-                subset_left = subset[subset[:, arg_attr] < threshold]
-                subset_right = subset[subset[:, arg_attr] >= threshold]
-
-                entropy = \
-                    Individual.entropy(subset_left) + \
-                    Individual.entropy(subset_right)
-
-                if entropy < best_entropy:
-                    best_entropy = entropy
-                    best_threshold = threshold
-                    best_subset_left = subset_left
-                    best_subset_right = subset_right
-
-                t_counter += 1
-
-            self._threshold[node] = best_threshold
-
-            acc_left = self.__set_internal__(best_subset_left, arg_left)
-            acc_right = self.__set_internal__(best_subset_right, arg_right)
-            return acc_left + acc_right
+            acc = self.handler_dict[self._attributes[arg_attr]['type']](self, node, arg_attr, subset)
         else:
             acc = self.__set_node__(node, subset)
-            return acc
+
+        return acc
 
     def __set_node__(self, node, subset):
         count = Counter(subset[:, -1])
@@ -156,7 +153,7 @@ class Individual(object):
         acc = f_val / float(subset.shape[0])
         return acc
 
-    def plot(self, attributes, class_names):
+    def plot(self, class_names):
         from matplotlib import pyplot as plt
         import networkx as nx
 
@@ -175,7 +172,7 @@ class Individual(object):
             edge_labels[(i, left)] = '< %.2f' % self._threshold[i]
             edge_labels[(i, right)] = '>= %.2f' % self._threshold[i]
 
-            node_labels[i] = attributes[self.nodes[i]]['name']
+            node_labels[i] = self._attributes[self.nodes[i]]['name']
 
             colors[i] = '#CCFFFF'
 

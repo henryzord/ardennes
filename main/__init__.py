@@ -4,6 +4,7 @@ import numpy as np
 from collections import Counter
 from sklearn.datasets import load_iris
 import pandas as pd
+import itertools as it
 
 from genotype import Individual
 
@@ -95,7 +96,16 @@ def main_loop(n_individuals, n_nodes, sets, classes, attributes, n_iterations=10
     n_internal, n_leaf = get_node_distribution(n_nodes)
 
     pmf = get_pmf(n_attributes, n_internal)  # pmf has one distribution for each node
-    population = init_pop(n_individuals, n_leaf, n_internal, pmf, classes, sets)
+    population = init_pop(
+        n_individuals=n_individuals,
+        n_leaf=n_leaf,
+        n_internal=n_internal,
+        pmf=pmf,
+        classes=classes,
+        sets=sets,
+        attributes=attributes
+    )
+
     fitness = np.array(map(lambda x: x.fitness, population))
 
     integer_threshold = int(threshold * n_individuals)
@@ -133,35 +143,61 @@ def main_loop(n_individuals, n_nodes, sets, classes, attributes, n_iterations=10
     return fittest
 
 
-def main():
-    # import random
-    # random.seed(1)
-    # np.random.seed(1)
-
-    share = {'train': 0.8, 'test': 0.1, 'val': 0.1}
+def get_iris(share):
     data = load_iris()
-
-    attributes = {i: {'name': x, 'type': 'numeral'} for i, x in enumerate(data['feature_names'])}
+    attributes = {i: {'name': x, 'type': 'numerical'} for i, x in enumerate(data['feature_names'])}
     class_names = {i: x for i, x in enumerate(data['target_names'])}
 
     X, Y = data['data'], data['target']
 
-    classes = np.unique(X)
+    classes = np.unique(Y)
     sets = get_sets(X, Y, share)
 
-    # print class_names
-    # df = pd.DataFrame(sets['test'], columns=column_names + ['class'], index=None)
-    # df['class'] = df['class'].apply(lambda x: class_names[x])
-    # print df[['petal width (cm)', 'class']].sort('petal width (cm)')
+    return attributes, class_names, classes, sets
 
-    fittest = main_loop(n_individuals=100, n_nodes=7, sets=sets, classes=classes, attributes=attributes, threshold=0.9,
-                        verbose=True)
 
-    for name, set in sets.iteritems():
-        acc = fittest.__validate__(set)
+def get_bank(share):
+    dataset = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
+
+    column_names = dataset.columns[:-1].tolist()
+    # column_names = [u'age', u'job', u'marital', u'education', u'default', u'balance', \
+    # u'housing', u'loan', u'contact', u'day', u'month', u'duration', \
+    # u'campaign', u'pdays', u'previous', u'poutcome']
+    types = {0: 'categorical', 1: 'categorical', 2: 'categorical', 3: 'categorical',
+             4: 'categorical', 5: 'numerical', 6: 'numerical', 7: 'numerical',
+             8: 'numerical', 9: 'categorical', 10: 'categorical', 11: 'numerical',
+             12: 'numerical', 13: 'numerical', 14: 'numerical', 15: 'categorical',
+             16: 'numerical', 17: 'numerical', 18: 'numerical', 19: 'numerical',
+             20: 'numerical'}
+
+    attributes = {i: {'name': x, 'type': t} for i, (x, t) in enumerate(it.izip(column_names, types.itervalues()))}
+    X = dataset[column_names]
+    Y = dataset[dataset.columns[-1]]
+
+    exit(-1)
+
+
+def main():
+    share = {'train': 0.8, 'test': 0.1, 'val': 0.1}
+
+    # attributes, class_names, classes, sets = get_iris(share)
+    attributes, class_names, classes, sets = get_bank(share)
+
+    fittest = main_loop(
+        n_individuals=100,
+        n_nodes=7,
+        sets=sets,
+        classes=classes,
+        attributes=attributes,
+        threshold=0.9,
+        verbose=True
+    )
+
+    for name, jset in sets.iteritems():
+        acc = fittest.__validate__(jset)
         print '%s accuracy: %+0.2f' % (name, acc)
 
-    fittest.plot(attributes, class_names)
+    fittest.plot(class_names)
 
 if __name__ == '__main__':
     main()
