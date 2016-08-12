@@ -10,17 +10,19 @@ class Individual(object):
 
     _root = 0
 
-    def __init__(self, n_leaf, n_internal, pmf, classes, sets, attributes):
+    def __init__(self, n_leaf, n_internal, pmf, sets):
         self._n_internal = n_internal
         self._n_leaf = n_leaf
-        self._classes = classes
         self._sets = sets
-        self._attributes = attributes
 
         self._train_acc = 0
-        self._val_acc = 0
+        self._column_names = self._sets['train'].columns
+        self._column_types = map(
+            lambda x: self.type_handler_dict[str(self._sets['train'][x].dtype)],
+            self._sets['train']
+        )
 
-        self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.float32)
+        self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.object)
         self._internal_nodes = None
 
         self.sample(pmf)
@@ -31,16 +33,14 @@ class Individual(object):
 
     @property
     def fitness(self):
-        return self._val_acc
+        return self._train_acc
 
     def sample(self, pmf):
         self._internal_nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
         self._train_acc = self.__set_internal__(self._sets['train'], self._root)
-        self._val_acc = self.__validate__(self._sets['val'])
 
     def __validate__(self, set):
-        hit_count = 0
-        for obj in set:
+        def val_func(obj):
             arg_node = 0
             while not self.is_leaf(arg_node):
                 attr = self._internal_nodes[arg_node]
@@ -49,8 +49,9 @@ class Individual(object):
                 go_left = obj[attr] < self._threshold[arg_node]
                 arg_node = arg_left if go_left else arg_right
 
-            hit_count += obj[-1] == self._threshold[arg_node]
+            return obj[-1] == self._threshold[arg_node]
 
+        hit_count = set.apply(val_func, axis=1).sum()
         acc = hit_count / float(set.shape[0])
         return acc
 
@@ -71,17 +72,20 @@ class Individual(object):
         left, right = self.__argchildren__(pos)
         return pos[left], pos[right]
 
-    def __set_categorical__(self, node, arg_attr, subset):
+    def __set_error__(self, node, attr_name, subset):
+        raise TypeError('Unsupported data type for column %s!' % attr_name)
+
+    def __set_categorical__(self, node, attr_name, subset):
+        raise NotImplemented('not implemented yet!')
+
         arg_left, arg_right = self.__argchildren__(node)
 
         unique_vals = np.sort(np.unique(subset[:, [-1, arg_attr]]))
 
-        raise NotImplemented('not implemented yet!')
-
-    def __set_numerical__(self, node, arg_attr, subset):
+    def __set_numerical__(self, node, attr_name, subset):
         arg_left, arg_right = self.__argchildren__(node)
 
-        unique_vals = np.sort(np.unique(subset[:, arg_attr]))
+        unique_vals = subset[attr_name].sort_values().unique()
 
         t_counter = 1
         max_t = unique_vals.shape[0]
@@ -92,15 +96,19 @@ class Individual(object):
             acc = self.__set_node__(node, subset)
             return acc
 
+        best_threshold = None
+        best_subset_left = None
+        best_subset_right = None
+
         while t_counter < max_t - 1:  # should not pick limitrophe values, since it generates empty sets
             threshold = unique_vals[t_counter]
 
-            subset_left = subset[subset[:, arg_attr] < threshold]
-            subset_right = subset[subset[:, arg_attr] >= threshold]
+            subset_left = subset.loc[subset[attr_name] < threshold]  # TODO replace by pandas!
+            subset_right = subset.loc[subset[attr_name] >= threshold]  # TODO replace by pandas!
 
             entropy = \
-                Individual.entropy(subset_left) + \
-                Individual.entropy(subset_right)
+                self.entropy(subset_left) + \
+                self.entropy(subset_right)
 
             if entropy < best_entropy:
                 best_entropy = entropy
@@ -133,14 +141,18 @@ class Individual(object):
 
         if self.is_internal(node):
             arg_attr = self._internal_nodes[node]  # arg_attr is the attribute chosen for split for the given node
-            acc = self.handler_dict[self._attributes[arg_attr]['type']](self, node, arg_attr, subset)
+
+            attr_name = self._column_names[arg_attr]
+            attr_type = self._column_types[arg_attr]
+
+            acc = self.attr_handler_dict[attr_type](self, node, attr_name, subset)
         else:
             acc = self.__set_node__(node, subset)
 
         return acc
 
     def __set_node__(self, node, subset):
-        count = Counter(subset[:, -1])
+        count = Counter(subset[self._column_names[-1]])
 
         f_key = None
         f_val = -np.inf
@@ -153,9 +165,11 @@ class Individual(object):
         acc = f_val / float(subset.shape[0])
         return acc
 
-    def plot(self, class_names):
+    def plot(self):
         from matplotlib import pyplot as plt
         import networkx as nx
+
+        plt.figure()
 
         G = nx.DiGraph()
 
@@ -172,16 +186,16 @@ class Individual(object):
             edge_labels[(i, left)] = '< %.2f' % self._threshold[i]
             edge_labels[(i, right)] = '>= %.2f' % self._threshold[i]
 
-            node_labels[i] = self._attributes[self.nodes[i]]['name']
+            node_labels[i] = self._column_names[self.nodes[i]]
 
             colors[i] = '#CCFFFF'
 
             if self.is_leaf(left):
-                node_labels[left] = class_names[int(self._threshold[left])]
+                node_labels[left] = self._threshold[left]
                 colors[left] = '#CCFF99'
 
             if self.is_leaf(right):
-                node_labels[right] = class_names[int(self._threshold[right])]
+                node_labels[right] = self._threshold[right]
                 colors[right] = '#CCFF99'
 
         colors[0] = '#FFFFFF'
@@ -199,22 +213,17 @@ class Individual(object):
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=16)
 
         plt.axis('off')
-        plt.show()
+        # plt.show()
 
     def __str__(self):
-        return 'val accuracy: %0.2f attributes: %s' % (self._val_acc, str(self._internal_nodes))
+        return 'train accuracy: %0.2f attributes: %s' % (self._train_acc, str(self._internal_nodes))
 
     # the smaller, the better
 
-    @staticmethod
-    def gini(subset):
-        raise NotImplementedError('not implemented yet!')
-
-    @staticmethod
-    def entropy(subset):
+    def entropy(self, subset):
         size = float(subset.shape[0])
 
-        counter = Counter(subset[:, -1])
+        counter = Counter(subset[self._column_names[-1]])
 
         _entropy = 0.
         for c, q in counter.iteritems():
@@ -222,7 +231,39 @@ class Individual(object):
 
         return -1. * _entropy
 
-    handler_dict = {
-        'categorical': __set_categorical__,
-        'numerical': __set_numerical__
+    type_handler_dict = {
+        'bool': 'bool',
+        'bool_': 'bool',
+        'int': 'int',
+        'int_': 'int',
+        'intc': 'int',
+        'intp': 'int',
+        'int8': 'int',
+        'int16': 'int',
+        'int32': 'int',
+        'int64': 'int',
+        'uint8': 'int',
+        'uint16': 'int',
+        'uint32': 'int',
+        'uint64': 'int',
+        'float': 'float',
+        'float_': 'float',
+        'float16': 'float',
+        'float32': 'float',
+        'float64': 'float',
+        'complex_': 'complex',
+        'complex64': 'complex',
+        'complex128': 'complex',
+        'str': 'str',
+        'object': 'object'
+    }
+
+    attr_handler_dict = {
+        'object': __set_categorical__,
+        'str': __set_categorical__,
+        'int': __set_numerical__,
+        'float': __set_numerical__,
+        'bool': __set_categorical__,
+        'complex': __set_error__
+
     }

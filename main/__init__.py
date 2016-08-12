@@ -39,16 +39,14 @@ def set_pmf(pmf, fittest):
     return pmf
 
 
-def init_pop(n_individuals, n_leaf, n_internal, pmf, classes, sets, attributes):
+def init_pop(n_individuals, n_leaf, n_internal, pmf, sets):
     pop = np.array(
         map(
             lambda x: Individual(
                 n_leaf=n_leaf,
                 n_internal=n_internal,
                 pmf=pmf,
-                classes=classes,
-                sets=sets,
-                attributes=attributes
+                sets=sets
             ),
             xrange(n_individuals)
         )
@@ -56,24 +54,13 @@ def init_pop(n_individuals, n_leaf, n_internal, pmf, classes, sets, attributes):
     return pop
 
 
-def get_sets(X, Y, share, random_state=None):
+def get_folds(df, n_folds=10, random_state=None):
+    from sklearn.cross_validation import StratifiedKFold
 
-    from sklearn.cross_validation import train_test_split
-    x_train, _x, y_train, _y = \
-        train_test_split(X, Y, train_size=share['train'], random_state=random_state) \
-        if random_state is not None else \
-        train_test_split(X, Y, train_size=share['train'])
+    Y = df[df.columns[-1]]
 
-    x_test, x_val, y_test, y_val = \
-        train_test_split(_x, _y, train_size=share['test'] / (share['test'] + share['val']), random_state=random_state) \
-        if random_state is not None else \
-        train_test_split(_x, _y, train_size=share['test'] / (share['test'] + share['val']))
-
-    return {
-        'train': np.hstack((x_train, y_train[:, np.newaxis])),
-        'test': np.hstack((x_test, y_test[:, np.newaxis])),
-        'val': np.hstack((x_val, y_val[:, np.newaxis]))
-    }
+    folds = StratifiedKFold(Y, n_folds=n_folds, shuffle=True, random_state=random_state)
+    return folds
 
 
 def early_stop(iteration, mean, median, past, n_past):
@@ -84,26 +71,24 @@ def early_stop(iteration, mean, median, past, n_past):
         return past
 
 
-def get_node_distribution(n_nodes):
+def get_node_count(n_nodes):
     n_leaf = (n_nodes + 1) / 2
     n_internal = n_nodes - n_leaf
     return n_internal, n_leaf
 
 
-def main_loop(n_individuals, n_nodes, sets, classes, attributes, n_iterations=100, threshold=0.9, verbose=True):
-    n_attributes = sets['train'].shape[1] - 1  # discards target attribute
+def main_loop(sets, n_nodes, n_individuals, n_iterations=100, threshold=0.9, verbose=True):
+    n_pred_attr = sets['train'].columns.shape[0] - 1  # number of predictive attributes
 
-    n_internal, n_leaf = get_node_distribution(n_nodes)
+    n_internal, n_leaf = get_node_count(n_nodes)
 
-    pmf = get_pmf(n_attributes, n_internal)  # pmf has one distribution for each node
+    pmf = get_pmf(n_pred_attr, n_internal)  # pmf has one distribution for each node
     population = init_pop(
         n_individuals=n_individuals,
         n_leaf=n_leaf,
         n_internal=n_internal,
         pmf=pmf,
-        classes=classes,
-        sets=sets,
-        attributes=attributes
+        sets=sets
     )
 
     fitness = np.array(map(lambda x: x.fitness, population))
@@ -143,61 +128,54 @@ def main_loop(n_individuals, n_nodes, sets, classes, attributes, n_iterations=10
     return fittest
 
 
-def get_iris(share):
+def get_iris(n_folds=10, random_state=None):
     data = load_iris()
-    attributes = {i: {'name': x, 'type': 'numerical'} for i, x in enumerate(data['feature_names'])}
-    class_names = {i: x for i, x in enumerate(data['target_names'])}
 
-    X, Y = data['data'], data['target']
+    X, Y = data['data'], data['target_names'][data['target']]
 
-    classes = np.unique(Y)
-    sets = get_sets(X, Y, share)
+    df = pd.DataFrame(X, columns=data['feature_names'])
+    df['class'] = pd.Series(Y, index=df.index)
 
-    return attributes, class_names, classes, sets
+    folds = get_folds(df, n_folds=n_folds, random_state=random_state)
+
+    return df, folds
 
 
-def get_bank(share):
-    dataset = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
-
-    column_names = dataset.columns[:-1].tolist()
-    # column_names = [u'age', u'job', u'marital', u'education', u'default', u'balance', \
-    # u'housing', u'loan', u'contact', u'day', u'month', u'duration', \
-    # u'campaign', u'pdays', u'previous', u'poutcome']
-    types = {0: 'categorical', 1: 'categorical', 2: 'categorical', 3: 'categorical',
-             4: 'categorical', 5: 'numerical', 6: 'numerical', 7: 'numerical',
-             8: 'numerical', 9: 'categorical', 10: 'categorical', 11: 'numerical',
-             12: 'numerical', 13: 'numerical', 14: 'numerical', 15: 'categorical',
-             16: 'numerical', 17: 'numerical', 18: 'numerical', 19: 'numerical',
-             20: 'numerical'}
-
-    attributes = {i: {'name': x, 'type': t} for i, (x, t) in enumerate(it.izip(column_names, types.itervalues()))}
-    X = dataset[column_names]
-    Y = dataset[dataset.columns[-1]]
-
-    exit(-1)
+def get_bank(n_folds=10, random_state=None):
+    df = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
+    folds = get_folds(df, n_folds=n_folds, random_state=random_state)
+    return df, folds
 
 
 def main():
-    share = {'train': 0.8, 'test': 0.1, 'val': 0.1}
+    import warnings
+    import random
+    warnings.warn('WARNING: deterministic approach!')
+    random.seed(1)
+    np.random.seed(1)
 
-    # attributes, class_names, classes, sets = get_iris(share)
-    attributes, class_names, classes, sets = get_bank(share)
+    n_folds = 10
+    df, folds = get_iris(n_folds=n_folds)
+    # df, folds = get_bank(n_folds=2)
 
-    fittest = main_loop(
-        n_individuals=100,
-        n_nodes=7,
-        sets=sets,
-        classes=classes,
-        attributes=attributes,
-        threshold=0.9,
-        verbose=True
-    )
+    acc = 0.
 
-    for name, jset in sets.iteritems():
-        acc = fittest.__validate__(jset)
-        print '%s accuracy: %+0.2f' % (name, acc)
+    for i, (arg_train, arg_test) in enumerate(folds):
+        sets = {'train': df.iloc[arg_train], 'test': df.iloc[arg_test]}
 
-    fittest.plot(class_names)
+        fittest = main_loop(sets=sets, n_nodes=15, n_individuals=100, threshold=0.9, verbose=True)
+
+        test_acc = fittest.__validate__(sets['test'])
+        print '%d accuracy: %+0.2f' % (i, test_acc)
+
+        acc += test_acc
+
+        fittest.plot()
+
+    print 'mean acc: %.2f' % (acc / float(n_folds))
+
+    from matplotlib import pyplot as plt
+    plt.show()
 
 if __name__ == '__main__':
     main()
