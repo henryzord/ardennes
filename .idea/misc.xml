@@ -10,5 +10,9 @@
     <ConfirmationsSetting value="0" id="Add" />
     <ConfirmationsSetting value="0" id="Remove" />
   </component>
+<<<<<<< HEAD
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 2.7.12 (~/anaconda2/envs/eda/bin/python2.7)" project-jdk-type="Python SDK" />
+=======
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 2.7.11 (C:\Users\Henry\Anaconda2\python.exe)" project-jdk-type="Python SDK" />
+>>>>>>> parallel_validation
 </project>
