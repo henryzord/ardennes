@@ -8,6 +8,8 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.idea/workspace.xml
+.idea/dictionaries/
 env/
 build/
 develop-eggs/
