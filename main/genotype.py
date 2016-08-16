@@ -15,7 +15,9 @@ class Individual(object):
         self._n_leaf = n_leaf
         self._sets = sets
 
-        self._train_acc = 0
+        self._train_acc = 0.
+        self._val_acc = 0.
+
         self._column_names = self._sets['train'].columns
         self._column_types = map(
             lambda x: self.type_handler_dict[str(self._sets['train'][x].dtype)],
@@ -33,11 +35,12 @@ class Individual(object):
 
     @property
     def fitness(self):
-        return self._train_acc
+        return self._val_acc
 
     def sample(self, pmf):
         self._internal_nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
         self._train_acc = self.__set_internal__(self._sets['train'], self._root)
+        self._val_acc = self.__validate__(self._sets['val'])
 
     def __validate__(self, set):
         def val_func(obj):
