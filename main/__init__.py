@@ -14,14 +14,9 @@ from genotype import Individual
 __author__ = 'Henry Cagnini'
 
 
-def get_pmf(n_attributes, n_internal):
-    # checks if n_nodes is a valid value for the tree
-    if n_internal < 1 or not np.log2(n_internal + 1).is_integer():
-        raise ValueError(
-            'Invalid value for n_nodes! Must be a power of 2, minus 1 (e.g, 1, 3, 7).'
-        )
+def get_pmf(attr, depth_step):
+    df = pd.DataFrame(data=np.random.)
 
-    pmf = np.ones((n_internal, n_attributes), dtype=np.float32) / n_attributes
     return pmf
 
 
@@ -80,12 +75,14 @@ def get_node_count(n_nodes):
     return n_internal, n_leaf
 
 
-def main_loop(sets, n_max_nodes, n_individuals, n_iterations=100, threshold=0.9, verbose=True):
-    n_pred_attr = sets['train'].columns.shape[0] - 1  # number of predictive attributes
+def main_loop(sets, n_individuals, depth_step=0.1, n_iterations=100, inf_thres=0.9, verbose=True):
+    attr = sets['train'].columns
+    # classes = sets['train'][sets['train'].columns[-1]].unique()  # numpy.ndarray
 
-    n_internal, n_leaf = get_node_count(n_max_nodes)
+    pmf = get_pmf(attr, depth_step)  # pmf has one distribution for each node
 
-    pmf = get_pmf(n_pred_attr, n_internal)  # pmf has one distribution for each node
+    raise NotImplementedError('not implemented yet!')
+
     population = init_pop(
         n_individuals=n_individuals,
         n_leaf=n_leaf,
@@ -96,7 +93,7 @@ def main_loop(sets, n_max_nodes, n_individuals, n_iterations=100, threshold=0.9,
 
     fitness = np.array(map(lambda x: x.fitness, population))
 
-    integer_threshold = int(threshold * n_individuals)
+    integer_threshold = int(inf_thres * n_individuals)
 
     n_past = 3
     past = np.random.rand(n_past)
@@ -161,7 +158,7 @@ def main():
     np.random.seed(random_state)
 
     n_folds = 10
-    n_run = 10
+    n_run = 1
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
 
@@ -183,7 +180,7 @@ def main():
 
             sets = {'train': train_set, 'val': val_set, 'test': df.iloc[arg_test]}
 
-            fittest = main_loop(sets=sets, n_max_nodes=31, n_individuals=100, threshold=0.9, verbose=False)
+            fittest = main_loop(sets=sets, n_individuals=100, depth_step=0.1, inf_thres=0.9, verbose=False)
 
             test_acc = fittest.__validate__(sets['test'])
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)

@@ -2,6 +2,7 @@
 
 import numpy as np
 from collections import Counter
+import networkx as nx
 
 __author__ = 'Henry Cagnini'
 
@@ -14,6 +15,8 @@ class Individual(object):
         self._n_internal = n_internal
         self._n_leaf = n_leaf
         self._sets = sets
+
+        self._graph = None
 
         self._train_acc = 0.
         self._val_acc = 0.
@@ -38,6 +41,14 @@ class Individual(object):
         return self._val_acc
 
     def sample(self, pmf):
+        self._graph = nx.DiGraph()
+
+        root = np.random.choice(pmf, pmf.iloc[0])
+
+        # self._graph.add_node()
+
+        raise NotImplementedError('not implemented yet!')
+
         self._internal_nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
         self._train_acc = self.__set_internal__(self._sets['train'], self._root)
         self._val_acc = self.__validate__(self._sets['val'])
