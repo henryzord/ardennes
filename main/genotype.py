@@ -11,49 +11,114 @@ class Individual(object):
 
     _root = 0
 
-    def __init__(self, n_leaf, n_internal, pmf, sets):
-        self._n_internal = n_internal
-        self._n_leaf = n_leaf
-        self._sets = sets
+    def __init__(self, raw_pmf, sets):
+        """
 
-        self._graph = None
+        :type raw_pmf: dict
+        :param raw_pmf:
+        :type sets: dict
+        :param sets:
+        """
 
-        self._train_acc = 0.
-        self._val_acc = 0.
+        self._sets = sets  # type: dict
 
-        self._column_names = self._sets['train'].columns
-        self._column_types = map(
-            lambda x: self.type_handler_dict[str(self._sets['train'][x].dtype)],
-            self._sets['train']
-        )
+        self._class_name = sets['train'].columns[-1]  # type: str
 
-        self._threshold = np.empty(self._n_internal + self._n_leaf, dtype=np.object)
-        self._internal_nodes = None
+        self._column_types = {
+            x: self.type_handler_dict[str(self._sets['train'][x].dtype)] for x in self._sets['train'].columns
+        }  # type: dict
 
-        self.sample(pmf)
+        self._tree = None  # type: nx.DiGraph
+        self._train_acc = 0.  # type: float
+        self._val_acc = 0.  # type: float
 
-    @property
-    def nodes(self):
-        return self._internal_nodes
+        self.sample(raw_pmf)
 
     @property
     def fitness(self):
+        """
+        :rtype: float
+        :return: Fitness of this individual.
+        """
+
         return self._val_acc
 
-    def sample(self, pmf):
-        self._graph = nx.DiGraph()
+    def sample(self, raw_pmf):
+        """
 
-        root = np.random.choice(pmf, pmf.iloc[0])
+        :type raw_pmf: dict
+        :param raw_pmf:
+        :return:
+        """
 
-        # self._graph.add_node()
+        tree = nx.DiGraph()
 
-        raise NotImplementedError('not implemented yet!')
+        tree = self.sample_node(
+            raw_pmf=raw_pmf,
+            tree=tree,
+            id_current=0,
+            id_parent=None,
+            force_predictive=True
+        )
 
-        self._internal_nodes = map(lambda x: np.random.choice(pmf.shape[1], p=x), pmf)
-        self._train_acc = self.__set_internal__(self._sets['train'], self._root)
-        self._val_acc = self.__validate__(self._sets['val'])
+        # self._tree = tree
+        # self.plot()
+
+        dict_threshold = self.__set_internal__(
+            id_node=Individual._root,
+            dict_threshold={},
+            tree=tree,
+            subset=self._sets['train']
+        )
+
+        nx.set_node_attributes(tree, name='threshold', values=dict_threshold)
+        self._tree = tree
+        self.plot()
+
+        raise NotImplementedError('implement!')
+
+        # self._train_acc = self.__set_internal__(self._sets['train'], self._root)
+        # self._val_acc = self.__validate__(self._sets['val'])
+
+    def sample_node(self, raw_pmf, tree, id_current, id_parent=None, force_predictive=False):
+        """
+
+        :param id_parent:
+        :type raw_pmf: dict
+        :type tree: networkx.DiGraph
+        :type id_current: int
+        :type force_predictive: bool
+        :return:
+        """
+
+        label_current = np.random.choice(a=raw_pmf.keys(), p=raw_pmf.values())
+        if force_predictive:
+            while label_current == self._class_name:
+                label_current = np.random.choice(a=raw_pmf.keys(), p=raw_pmf.values())
+
+        # color setting
+        if label_current == self._class_name:
+            node_color = '#98FB98'
+        elif id_parent is not None:
+            node_color = '#AEEAFF'
+        else:
+            node_color = '#FFFFFF'
+
+        tree.add_node(id_current, label=label_current, color=node_color)
+        if id_parent is not None:
+            tree.add_edge(id_parent, id_current, attr_dict={'threshold': None})
+
+        if label_current != self._class_name:
+            id_left = (id_current * 2) + 1
+            id_right = (id_current * 2) + 2
+            tree = self.sample_node(raw_pmf, tree, id_left, id_current, force_predictive=False)
+            tree = self.sample_node(raw_pmf, tree, id_right, id_current, force_predictive=False)
+
+        return tree
 
     def __validate__(self, set):
+        raise NotImplementedError('not implemented yet!')
+
         def val_func(obj):
             arg_node = 0
             while not self.is_leaf(arg_node):
@@ -69,35 +134,38 @@ class Individual(object):
         acc = hit_count / float(set.shape[0])
         return acc
 
-    def predict(self):
-        raise NotImplementedError('not implemented yet!')
+    def __set_internal__(self, id_node, dict_threshold, tree, subset):
+        # TODO make verification of values more smart!
+        # TODO verify only values where the class of adjacent objects changes!
 
-    def is_internal(self, pos):
-        return pos is not None and ((2*pos) + 2) < self._n_internal + self._n_leaf
+        if subset.shape[0] <= 0:
+            raise StandardError('empty subset!')
+            # TODO treat this case! clear all subtrees from this one! make this one a class!
 
-    def is_leaf(self, pos):
-        return not self.is_internal(pos)
+        attr_name = tree.node[id_node]['label']
 
-    @staticmethod
-    def __argchildren__(pos):
-        return (2*pos) + 1, (2*pos) + 2
+        if attr_name != self._class_name:
+            attr_type = self._column_types[attr_name]
+            dict_threshold = self.attr_handler_dict[attr_type](self, id_node, attr_name, dict_threshold, tree, subset)
+        else:
+            dict_threshold = self.__set_terminal__(id_node, dict_threshold, subset)
 
-    def __children__(self, pos):
-        left, right = self.__argchildren__(pos)
-        return pos[left], pos[right]
+        return dict_threshold
 
-    def __set_error__(self, node, attr_name, subset):
-        raise TypeError('Unsupported data type for column %s!' % attr_name)
-
-    def __set_categorical__(self, node, attr_name, subset):
+    def __set_categorical__(self, id_node, attr_name, dict_threshold, tree, subset):
         raise NotImplemented('not implemented yet!')
 
-        arg_left, arg_right = self.__argchildren__(node)
+    def __set_numerical__(self, id_node, attr_name, dict_threshold, tree, subset):
+        """
 
-        unique_vals = np.sort(np.unique(subset[:, [-1, arg_attr]]))
-
-    def __set_numerical__(self, node, attr_name, subset):
-        arg_left, arg_right = self.__argchildren__(node)
+        :type tree: networkx.DiGraph
+        :param tree:
+        :param dict_threshold:
+        :param id_node:
+        :param attr_name:
+        :param subset:
+        :return:
+        """
 
         unique_vals = subset[attr_name].sort_values().unique()
 
@@ -107,7 +175,7 @@ class Individual(object):
         best_entropy = np.inf
 
         if unique_vals.shape[0] < 3:
-            acc = self.__set_node__(node, subset)
+            acc = self.__set_terminal__(id_node, dict_threshold, subset)
             return acc
 
         best_threshold = None
@@ -117,8 +185,8 @@ class Individual(object):
         while t_counter < max_t - 1:  # should not pick limitrophe values, since it generates empty sets
             threshold = unique_vals[t_counter]
 
-            subset_left = subset.loc[subset[attr_name] < threshold]  # TODO replace by pandas!
-            subset_right = subset.loc[subset[attr_name] >= threshold]  # TODO replace by pandas!
+            subset_left = subset.loc[subset[attr_name] < threshold]
+            subset_right = subset.loc[subset[attr_name] >= threshold]
 
             entropy = \
                 self.entropy(subset_left) + \
@@ -132,41 +200,23 @@ class Individual(object):
 
             t_counter += 1
 
-        self._threshold[node] = best_threshold
+        dict_threshold[id_node] = best_threshold
 
-        acc_left = self.__set_internal__(best_subset_left, arg_left)
-        acc_right = self.__set_internal__(best_subset_right, arg_right)
-        return (acc_left + acc_right) / 2.
+        if tree.out_degree(id_node) > 0:
+            children = tree.successors(id_node)
+            id_left = min(children)
+            id_right = max(children)
 
-    def __set_internal__(self, subset, node):
-        """
-        Sets the threshold for the whole tree.
+            dict_threshold = self.__set_internal__(id_left, dict_threshold, tree, best_subset_left)
+            dict_threshold = self.__set_internal__(id_right, dict_threshold, tree, best_subset_right)
 
-        :param subset: Subset of objects that reach the current node.
-        :param node:
-        :return:
-        """
+        return dict_threshold
 
-        # TODO make verification of values more smart!
-        # TODO verify only values where the class of adjacent objects changes!
+    def __set_error__(self, id_node, attr_name, dict_threshold, tree, subset):
+        raise TypeError('Unsupported data type for column %s!' % attr_name)
 
-        if subset.shape[0] <= 0:
-            raise StandardError('empty subset!')
-
-        if self.is_internal(node):
-            arg_attr = self._internal_nodes[node]  # arg_attr is the attribute chosen for split for the given node
-
-            attr_name = self._column_names[arg_attr]
-            attr_type = self._column_types[arg_attr]
-
-            acc = self.attr_handler_dict[attr_type](self, node, attr_name, subset)
-        else:
-            acc = self.__set_node__(node, subset)
-
-        return acc
-
-    def __set_node__(self, node, subset):
-        count = Counter(subset[self._column_names[-1]])
+    def __set_terminal__(self, id_node, dict_threshold, subset):
+        count = Counter(subset[self._class_name])
 
         f_key = None
         f_val = -np.inf
@@ -175,75 +225,46 @@ class Individual(object):
                 f_key = key
                 f_val = val
 
-        self._threshold[node] = f_key  # not a threshold, but a class instead!
-        acc = f_val / float(subset.shape[0])
-        return acc
-
-    def plot(self):
-        from matplotlib import pyplot as plt
-        import networkx as nx
-
-        plt.figure()
-
-        G = nx.DiGraph()
-
-        edges = dict()
-        node_labels = dict()
-        edge_labels = dict()
-        colors = dict()
-
-        for i in xrange(self._n_internal):
-            left, right = self.__argchildren__(i)
-            edges[left] = i
-            edges[right] = i
-
-            edge_labels[(i, left)] = '< %.2f' % self._threshold[i]
-            edge_labels[(i, right)] = '>= %.2f' % self._threshold[i]
-
-            node_labels[i] = self._column_names[self.nodes[i]]
-
-            colors[i] = '#CCFFFF'
-
-            if self.is_leaf(left):
-                node_labels[left] = self._threshold[left]
-                colors[left] = '#CCFF99'
-
-            if self.is_leaf(right):
-                node_labels[right] = self._threshold[right]
-                colors[right] = '#CCFF99'
-
-        colors[0] = '#FFFFFF'
-        edges = map(lambda x: x[::-1], edges.iteritems())
-
-        G.add_nodes_from(xrange(self._n_internal + self._n_leaf))
-
-        G.add_edges_from(edges)
-
-        pos = nx.spectral_layout(G)
-
-        nx.draw_networkx_nodes(G, pos, node_size=1000, node_color=colors.values())  # nodes
-        nx.draw_networkx_edges(G, pos, edgelist=edges, style='dashed')
-        nx.draw_networkx_labels(G, pos, node_labels, font_size=16)
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=16)
-
-        plt.axis('off')
-        # plt.show()
-
-    def __str__(self):
-        return 'train accuracy: %0.2f attributes: %s' % (self._train_acc, str(self._internal_nodes))
-
-    # the smaller, the better
+        dict_threshold[id_node] = f_key  # not a threshold, but a class instead!
+        return dict_threshold
 
     def entropy(self, subset):
+        # the smaller, the better
         size = float(subset.shape[0])
 
-        counter = Counter(subset[self._column_names[-1]])
+        counter = Counter(subset[self._class_name])
 
         _entropy = 0.
         for c, q in counter.iteritems():
             _entropy += (q / size) * np.log2(q / size)
 
         return -1. * _entropy
+
+    def plot(self):
+        from matplotlib import pyplot as plt
+
+        plt.figure()
+
+        tree = self._tree  # type: nx.DiGraph
+        pos = nx.spectral_layout(tree)
+
+        node_list = tree.nodes(data=True)
+        edge_list = tree.edges()
+
+        node_labels = {x[0]: x[1]['label'] for x in node_list}
+        node_colors = [x[1]['color'] for x in node_list]
+        edge_labels = {}
+
+        nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
+        nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
+        nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
+        nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
+
+        plt.axis('off')
+        plt.show()  # TODO remove later!
+
+    def __str__(self):
+        return 'fitness: %0.2f' % self._val_acc
 
     type_handler_dict = {
         'bool': 'bool',

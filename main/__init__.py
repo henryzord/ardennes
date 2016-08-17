@@ -10,12 +10,21 @@ from matplotlib import pyplot as plt
 
 
 from genotype import Individual
+import networkx as nx
 
 __author__ = 'Henry Cagnini'
 
 
-def get_pmf(attr, depth_step):
-    df = pd.DataFrame(data=np.random.)
+def get_pmf(pred_attr, target, target_prob):
+    n_pred = pred_attr.shape[0]
+    pred_prob = (1. - target_prob) / n_pred
+
+    pmf = nx.DiGraph()
+
+    pmf.add_node(target, prob=target_prob)
+
+    for at in pred_attr:
+        pmf.add_node(at, prob=pred_prob)
 
     return pmf
 
@@ -37,13 +46,19 @@ def set_pmf(pmf, fittest):
     return pmf
 
 
-def init_pop(n_individuals, n_leaf, n_internal, pmf, sets):
+def get_raw_pmf(pmf):
+    raw_pmf = pmf.nodes(data=True)
+    raw_pmf = {x: y['prob'] for x, y in raw_pmf}
+    return raw_pmf
+
+
+def init_pop(n_individuals, pmf, sets):
+    raw_pmf = get_raw_pmf(pmf)
+
     pop = np.array(
         map(
             lambda x: Individual(
-                n_leaf=n_leaf,
-                n_internal=n_internal,
-                pmf=pmf,
+                raw_pmf=raw_pmf,
                 sets=sets
             ),
             xrange(n_individuals)
@@ -75,21 +90,19 @@ def get_node_count(n_nodes):
     return n_internal, n_leaf
 
 
-def main_loop(sets, n_individuals, depth_step=0.1, n_iterations=100, inf_thres=0.9, verbose=True):
-    attr = sets['train'].columns
-    # classes = sets['train'][sets['train'].columns[-1]].unique()  # numpy.ndarray
+def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9, verbose=True):
+    pred_attr = sets['train'].columns[:-1]
+    target = sets['train'].columns[-1]
 
-    pmf = get_pmf(attr, depth_step)  # pmf has one distribution for each node
-
-    raise NotImplementedError('not implemented yet!')
+    pmf = get_pmf(pred_attr, target, target_prob)  # pmf has one distribution for each node
 
     population = init_pop(
         n_individuals=n_individuals,
-        n_leaf=n_leaf,
-        n_internal=n_internal,
         pmf=pmf,
         sets=sets
     )
+
+    raise NotImplementedError('not implemented yet!')
 
     fitness = np.array(map(lambda x: x.fitness, population))
 
@@ -168,19 +181,19 @@ def main():
         fold_acc = 0.
         for j in xrange(n_run):
 
-            X_train, X_val, y_train, y_val = train_test_split(
+            x_train, x_val, y_train, y_val = train_test_split(
                 df.iloc[arg_train][df.columns[:-1]],
                 df.iloc[arg_train][df.columns[-1]],
                 test_size=1./(n_folds - 1.),
                 random_state=random_state
             )
 
-            train_set = X_train.join(y_train)
-            val_set = X_val.join(y_val)
+            train_set = x_train.join(y_train)
+            val_set = x_val.join(y_val)
 
             sets = {'train': train_set, 'val': val_set, 'test': df.iloc[arg_test]}
 
-            fittest = main_loop(sets=sets, n_individuals=100, depth_step=0.1, inf_thres=0.9, verbose=False)
+            fittest = main_loop(sets=sets, n_individuals=100, target_prob=0.55, inf_thres=0.9, verbose=False)
 
             test_acc = fittest.__validate__(sets['test'])
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
