@@ -3,6 +3,8 @@
 import numpy as np
 from collections import Counter
 import networkx as nx
+import pandas as pd
+import warnings
 
 __author__ = 'Henry Cagnini'
 
@@ -11,7 +13,11 @@ class Individual(object):
 
     _root = 0
 
-    def __init__(self, raw_pmf, sets):
+    _class_name = None
+    _class_values = None
+    _column_types = None
+
+    def __init__(self, id, raw_pmf, sets):
         """
 
         :type raw_pmf: dict
@@ -20,20 +26,23 @@ class Individual(object):
         :param sets:
         """
 
-        self._sets = sets  # type: dict
+        self._id = id
 
-        self._class_name = sets['train'].columns[-1]  # type: str
-
-        self._column_types = {
-            x: self.type_handler_dict[str(self._sets['train'][x].dtype)] for x in self._sets['train'].columns
-        }  # type: dict
+        # common values to any Individual
+        if any(map(lambda x: x is None, [Individual._class_name, Individual._class_values, Individual._column_types])):
+            Individual._sets = sets  # type: dict
+            Individual._class_name = sets['train'].columns[-1]  # type: str
+            Individual._class_values = sets['train'][sets['train'].columns[-1]].unique()
+            Individual._column_types = {
+                x: self.type_handler_dict[str(Individual._sets['train'][x].dtype)] for x in Individual._sets['train'].columns
+            }  # type: dict
 
         self._tree = None  # type: nx.DiGraph
-        self._thresholds = None  # type: dict
+
         self._train_acc = 0.  # type: float
         self._val_acc = 0.  # type: float
 
-        self.sample(raw_pmf=raw_pmf, thresholds={}, subset=self._sets['train'])
+        self.sample(raw_pmf=raw_pmf)
 
     @property
     def fitness(self):
@@ -44,114 +53,140 @@ class Individual(object):
 
         return self._val_acc
 
-    def sample(self, raw_pmf, thresholds, subset):
+    def sample(self, raw_pmf):
         tree = nx.DiGraph()
+
+        subset = self._sets['train']
 
         self._tree = self.sample_node(
             raw_pmf=raw_pmf,
             tree=tree,
             id_current=0,
-            thresholds=thresholds,
             subset=subset
         )
 
         self._val_acc = self.__validate__(self._sets['val'])
-        self.plot()
+        # self.plot()
+        # warnings.warn('plotting!')
 
-    def sample_node(self, raw_pmf, tree, id_current, thresholds, subset):
-        """
-
-        :param thresholds:
-        :type raw_pmf: dict
-        :type tree: networkx.DiGraph
-        :type id_current: int
-        :param id_parent:
-        :param subset:
-        :rtype: networkx.DiGraph
-        """
-
+    def sample_node(self, raw_pmf, tree, id_current, subset):
         node_label = np.random.choice(a=raw_pmf.keys(), p=raw_pmf.values())
         if id_current == self._root:
             while node_label == self._class_name:
                 node_label = np.random.choice(a=raw_pmf.keys(), p=raw_pmf.values())
-            node_color = '#FFFFFF'  # root color
-
-        elif node_label == self._class_name:
-            node_color = '#98FB98'  # terminal node color
-        else:
-            node_color = '#AEEAFF'  # inner node color
 
         if subset.shape[0] <= 0:
-            node_label = self._class_name
-
-        thresholds, subset_left, subset_right = self.__set_internal__(
-            id_node=id_current,
-            node_label=node_label,
-            thresholds=thresholds,
-            tree=tree,
-            subset=subset
-        )
+            raise ValueError('empty subset!')
 
         if node_label != self._class_name:
+            meta, subset_left, subset_right = self.__set_internal__(
+                id_node=id_current,
+                node_label=node_label,
+                subset=subset
+            )
+
             id_left = (id_current * 2) + 1
             id_right = (id_current * 2) + 2
 
-            tree = self.sample_node(raw_pmf=raw_pmf, tree=tree, id_current=id_left, thresholds=thresholds, subset=subset_left)
-            tree = self.sample_node(raw_pmf=raw_pmf, tree=tree, id_current=id_right, thresholds=thresholds, subset=subset_right)
+            if self._id == 3 and node_label == 'petal length (cm)':
+                warnings.warn('breakpoint here!')
 
-            tree.add_node(id_current, attr_dict={'label': node_label, 'color': node_color})
+            try:  # if one of the subsets is empty, then the node is terminal
+                tree = self.sample_node(raw_pmf=raw_pmf, tree=tree, id_current=id_left, subset=subset_left)
+                tree = self.sample_node(raw_pmf=raw_pmf, tree=tree, id_current=id_right, subset=subset_right)
 
-            tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % thresholds[id_current]})
-            tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % thresholds[id_current]})
+                if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left]['label'] in self._class_values:
+                    tree.remove_node(id_left)
+                    tree.remove_node(id_right)
+                    raise ValueError('same class for terminal nodes!')
 
+                terminal = False
+                threshold = meta['value']
+
+                if id_current == self._root:
+                    node_color = '#FFFFFF'  # root color
+                else:
+                    node_color = '#AEEAFF'  # inner node color
+
+                tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
+                tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
+
+            except ValueError as e:
+                meta = self.__set_terminal__(subset)
+                terminal = True
+                threshold = None
+                node_label = meta['value']
+                id_left = None
+                id_right = None
+                node_color = '#98FB98'
         else:
-            tree.add_node(id_current, attr_dict={'label': thresholds[id_current], 'color': node_color})
+            meta = self.__set_terminal__(subset)
+            terminal = True
+            threshold = None
+            node_label = meta['value']
+            id_left = None
+            id_right = None
+            node_color = '#98FB98'
+
+        tree.add_node(
+            id_current,
+            attr_dict={
+                'label': node_label,
+                'color': node_color,
+                'terminal': terminal,
+                'threshold': threshold,
+                'left': id_left,
+                'right': id_right
+            }
+        )
+
+        if self._id == 3 and node_label == 'petal length (cm)' and abs(threshold - 1.40) == 0:
+            warnings.warn('breakpoint here!')
 
         return tree
 
-    def __validate__(self, set):
-        raise NotImplementedError('not implemented yet!')
+    def __val_func__(self, obj):
+        arg_node = 0
 
-        def val_func(obj):
-            arg_node = 0
-            while not self.is_leaf(arg_node):
-                attr = self._internal_nodes[arg_node]
+        node = self._tree.node[arg_node]
+        while not node['terminal']:
+            go_left = obj[node['label']] < node['threshold']
+            arg_node = (go_left * node['left']) + (not go_left * node['right'])
+            node = self._tree.node[arg_node]
 
-                arg_left, arg_right = self.__argchildren__(arg_node)
-                go_left = obj[attr] < self._threshold[arg_node]
-                arg_node = arg_left if go_left else arg_right
+        return obj[-1] == node['label']
 
-            return obj[-1] == self._threshold[arg_node]
+    def __validate__(self, _set):
+        if self._id == 3:
+            self.plot()
+            z = 0
 
-        hit_count = set.apply(val_func, axis=1).sum()
-        acc = hit_count / float(set.shape[0])
+        hit_count = _set.apply(self.__val_func__, axis=1).sum()
+        acc = hit_count / float(_set.shape[0])
         return acc
 
-    def __set_internal__(self, id_node, node_label, thresholds, tree, subset):
-        if subset.shape[0] <= 0:
-            raise ValueError('empty subset!')
-            # TODO treat this case! clear all subtrees from this one! make this one a class!
-
+    def __set_internal__(self, id_node, node_label, subset):
         if node_label != self._class_name:
             attr_type = self._column_types[node_label]
-            thresholds, subset_left, subset_right = self.attr_handler_dict[attr_type](self, id_node, node_label, thresholds, tree, subset)
-        else:
-            thresholds = self.__set_terminal__(id_node, thresholds, subset)
-            subset_left = []
-            subset_right = []
+            meta, subset_left, subset_right = self.attr_handler_dict[attr_type](self, node_label, subset)
 
-        return thresholds, subset_left, subset_right
+        else:
+            meta = self.__set_terminal__(subset)
+            subset_left = pd.DataFrame([])
+            subset_right = pd.DataFrame([])
+
+        return meta, subset_left, subset_right
 
     def __set_categorical__(self, id_node, attr_name, dict_threshold, tree, subset):
         raise NotImplemented('not implemented yet!')
 
     # self, id_node, node_label, thresholds, tree, subset
-    def __set_numerical__(self, id_node, node_label, thresholds, tree, subset):
+    def __set_numerical__(self, node_label, subset):
         """
 
         :type tree: networkx.DiGraph
         :param tree:
-        :param thresholds:
+        :param meta:
         :param id_node:
         :param node_label:
         :param subset:
@@ -169,8 +204,8 @@ class Individual(object):
         best_entropy = np.inf
 
         if unique_vals.shape[0] < 3:
-            acc = self.__set_terminal__(id_node, thresholds, subset)
-            return acc
+            meta = self.__set_terminal__(subset)
+            return meta, pd.DataFrame([]), pd.DataFrame([])
 
         best_threshold = None
         best_subset_left = None
@@ -194,27 +229,10 @@ class Individual(object):
 
             t_counter += 1
 
-        thresholds[id_node] = best_threshold
+        meta = {'value': best_threshold, 'terminal': False}
+        return meta, best_subset_left, best_subset_right
 
-        # if tree.out_degree(id_node) > 0:
-        #     children = tree.successors(id_node)
-        #     id_left = min(children)
-        #     id_right = max(children)
-        #
-        #     tree.add_edge(id_node, id_left, attr_dict={'threshold': '< %0.2f' % best_threshold})
-        #     tree.add_edge(id_node, id_right, attr_dict={'threshold': '>= %0.2f' % best_threshold})
-        #
-        #     dict_threshold = self.__set_internal__(id_left, dict_threshold, tree, best_subset_left)
-        #     dict_threshold = self.__set_internal__(id_right, dict_threshold, tree, best_subset_right)
-        # else:
-        #     ELSE rename node from class to the actual class!
-
-        return thresholds, best_subset_left, best_subset_right
-
-    def __set_error__(self, id_node, attr_name, dict_threshold, tree, subset):
-        raise TypeError('Unsupported data type for column %s!' % attr_name)
-
-    def __set_terminal__(self, id_node, dict_threshold, subset):
+    def __set_terminal__(self, subset):
         count = Counter(subset[self._class_name])
 
         f_key = None
@@ -224,8 +242,11 @@ class Individual(object):
                 f_key = key
                 f_val = val
 
-        dict_threshold[id_node] = f_key  # not a threshold, but a class instead!
-        return dict_threshold
+        meta = {'value': f_key, 'terminal': True}  # not a threshold, but a class label
+        return meta
+
+    def __set_error__(self, id_node, attr_name, dict_threshold, tree, subset):
+        raise TypeError('Unsupported data type for column %s!' % attr_name)
 
     def entropy(self, subset):
         """

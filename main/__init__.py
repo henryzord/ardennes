@@ -53,11 +53,14 @@ def get_raw_pmf(pmf):
 
 
 def init_pop(n_individuals, pmf, sets):
+    # TODO implement with threading.
+
     raw_pmf = get_raw_pmf(pmf)
 
     pop = np.array(
         map(
             lambda x: Individual(
+                id=x,
                 raw_pmf=raw_pmf,
                 sets=sets
             ),
@@ -76,12 +79,15 @@ def get_folds(df, n_folds=10, random_state=None):
     return folds
 
 
-def early_stop(iteration, mean, median, past, n_past):
-    past[iteration % n_past] = mean
-    if median == mean and np.all(past == mean):
-        raise StopIteration('you should stop.')
-    else:
-        return past
+def early_stop(pmf, diff=0.01):
+    """
+
+    :type pmf: networkx.DiGraph
+    :param pmf:
+    :return:
+    """
+    # TODO implement!
+    return False
 
 
 def get_node_count(n_nodes):
@@ -90,7 +96,7 @@ def get_node_count(n_nodes):
     return n_internal, n_leaf
 
 
-def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9, verbose=True):
+def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9, diff=0.01, verbose=True):
     pred_attr = sets['train'].columns[:-1]
     target = sets['train'].columns[-1]
 
@@ -102,34 +108,33 @@ def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9,
         sets=sets
     )
 
-    raise NotImplementedError('not implemented yet!')
-
     fitness = np.array(map(lambda x: x.fitness, population))
 
+    # threshold where individuals will be picked for PMF updatting/replacing
     integer_threshold = int(inf_thres * n_individuals)
 
-    n_past = 3
+    n_past = 15
     past = np.random.rand(n_past)
 
     iteration = 0
     while iteration < n_iterations:  # evolutionary process
-        mean = np.mean(fitness)
-        median = np.median(fitness)
-        _max = np.max(fitness)
+        mean = np.mean(fitness)  # type: float
+        median = np.median(fitness)  # type: float
+        _max = np.max(fitness)  # type: float
 
         if verbose:
             print 'mean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (mean, median, _max)
 
         try:
-            past = early_stop(iteration, mean, median, past, n_past)
+            past = early_stop(pmf, diff)
         except StopIteration:
             break
 
-        borderline = np.partition(fitness, integer_threshold)[integer_threshold]
-        fittest = population[np.flatnonzero(fitness >= borderline)]
+        borderline = np.partition(fitness, integer_threshold)[integer_threshold]  # TODO slow. test other implementation!
+        fittest = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
         pmf = set_pmf(pmf, fittest)
 
-        to_replace = population[np.flatnonzero(fitness < borderline)]
+        to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
         for ind in to_replace:
             ind.sample(pmf)
 
@@ -170,8 +175,10 @@ def main():
     random.seed(random_state)
     np.random.seed(random_state)
 
+    n_individuals = 10
     n_folds = 10
     n_run = 1
+    diff = 0.01
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
 
@@ -193,7 +200,7 @@ def main():
 
             sets = {'train': train_set, 'val': val_set, 'test': df.iloc[arg_test]}
 
-            fittest = main_loop(sets=sets, n_individuals=100, target_prob=0.55, inf_thres=0.9, verbose=False)
+            fittest = main_loop(sets=sets, n_individuals=n_individuals, target_prob=0.55, inf_thres=0.9, diff=diff, verbose=False)
 
             test_acc = fittest.__validate__(sets['test'])
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
