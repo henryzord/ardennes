@@ -37,11 +37,7 @@ class Node(object):
         :param id_node: ID of the node in the binary heap.
         :return: The depth of the node.
         """
-        if id_node == 0:
-            return 0
-        else:
-            level = int(np.log2(id_node + 1))
-            return level
+        return int(np.log2(id_node + 1))
 
 
 class Individual(object):
@@ -78,11 +74,13 @@ class Individual(object):
 
         self._tree = None  # type: nx.DiGraph
 
-        # self._train_acc = 0.  # type: float
+        self._val_acc = 0.  # type: float
 
-        self._tree = Individual.Initializer(
-            sets=self._sets
-        ).initialize(initial_pmf)
+        self._sampler = Individual.Sampler(sets=self._sets)
+        self.sample(initial_pmf)
+
+    def sample(self, pmf):
+        self._tree = self._sampler.sample(pmf)
         self._val_acc = self.__validate__(self._sets['val'])
 
     @property
@@ -189,23 +187,23 @@ class Individual(object):
         'object': 'object'
     }
 
-    class Initializer(object):
+    class Sampler(object):
 
         _sets = None
 
         def __init__(self, sets):
-            if Individual.Initializer._sets is None:
-                Individual.Initializer._sets = sets
+            if Individual.Sampler._sets is None:
+                Individual.Sampler._sets = sets
 
-            self._sets = Individual.Initializer._sets
+            self._sets = Individual.Sampler._sets
 
-        def initialize(self, initial_pmf):
+        def sample(self, pmf):
             tree = nx.DiGraph()
 
             subset = self._sets['train']
 
             tree = self.sample_node(
-                initial_pmf=initial_pmf,
+                pmf=pmf,
                 tree=tree,
                 id_current=0,
                 subset=subset
@@ -213,18 +211,17 @@ class Individual(object):
 
             return tree
 
-        def sample_node(self, initial_pmf, tree, id_current, subset):
-            node_label = initial_pmf.sample(level=Node.get_depth(id_current))
+        def sample_node(self, pmf, tree, id_current, subset):
+            node_label = pmf.sample(id_node=id_current)
             if id_current == Node.root:
                 while node_label == Individual.target_attr:
-                    node_label = initial_pmf.sample(level=Node.get_depth(id_current))
+                    node_label = pmf.sample(id_node=id_current)
 
             if subset.shape[0] <= 0:
                 raise ValueError('empty subset!')
 
             if node_label != Individual.target_attr:
                 meta, subset_left, subset_right = self.__set_internal__(
-                    id_node=id_current,
                     node_label=node_label,
                     subset=subset
                 )
@@ -233,11 +230,12 @@ class Individual(object):
                 id_right = (id_current * 2) + 2
 
                 try:  # if one of the subsets is empty, then the node is terminal
-                    tree = self.sample_node(initial_pmf=initial_pmf, tree=tree, id_current=id_left, subset=subset_left)
-                    tree = self.sample_node(initial_pmf=initial_pmf, tree=tree, id_current=id_right,
-                                            subset=subset_right)
+                    tree = self.sample_node(pmf=pmf, tree=tree, id_current=id_left, subset=subset_left)
+                    tree = self.sample_node(pmf=pmf, tree=tree, id_current=id_right, subset=subset_right)
 
-                    if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left]['label'] in Individual.target_values:
+                    if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left]['label'] in \
+                            Individual.target_values:
+
                         tree.remove_node(id_left)
                         tree.remove_node(id_right)
                         raise ValueError('same class for terminal nodes!')
@@ -283,11 +281,10 @@ class Individual(object):
             )
             return tree
 
-        def __set_internal__(self, id_node, node_label, subset):
+        def __set_internal__(self, node_label, subset):
             if node_label != Individual.target_attr:
                 attr_type = Individual.column_types[node_label]
                 meta, subset_left, subset_right = self.attr_handler_dict[attr_type](self, node_label, subset)
-
             else:
                 meta = self.__set_terminal__(subset, Individual.target_attr)
                 subset_left = pd.DataFrame([])
@@ -295,8 +292,7 @@ class Individual(object):
 
             return meta, subset_left, subset_right
 
-        @staticmethod
-        def __set_categorical__(id_node, attr_name, dict_threshold, tree, subset):
+        def __set_categorical__(self, node_label, subset):
             raise NotImplemented('not implemented yet!')
 
         # self, id_node, node_label, thresholds, tree, subset

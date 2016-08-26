@@ -30,6 +30,9 @@ class PMF(object):
         self._target_attr = PMF._target_attr
         self._class_values = PMF._class_values
 
+    def sample(self, id_node):
+        pass
+
 
 class InitialPMF(PMF):
     """
@@ -40,13 +43,15 @@ class InitialPMF(PMF):
         super(InitialPMF, self).__init__(pred_attr, target_attr, class_values)
         self._target_add = target_add  # type: float
 
-    def sample(self, level, n=None):
-        target_prob = np.clip(level * self._target_add, a_min=0., a_max=1.)  # type: float
+    def sample(self, id_node):
+        depth = Node.get_depth(id_node)
+
+        target_prob = np.clip(depth * self._target_add, a_min=0., a_max=1.)  # type: float
         pred_prob = [(1. - target_prob) / len(self._pred_attr) for x in xrange(len(self._pred_attr))]  # type: list
         a = self._pred_attr + [self._target_attr]  # type: list
         p = pred_prob + [target_prob]  # type: list
 
-        chosen = np.random.choice(a=a, replace=True, size=n, p=p)
+        chosen = np.random.choice(a=a, p=p)
         return chosen
 
 
@@ -71,7 +76,7 @@ class HotPMF(PMF):
 
         inner = nx.DiGraph()
 
-        for i in xrange(max_node):
+        for i in xrange(max_node + 1):
             node_labels = []
             for graph in graphs:
                 try:
@@ -84,15 +89,21 @@ class HotPMF(PMF):
 
             count = Counter(node_labels)
             count_sum = max(sum(count.itervalues()), 1.)  # prevents zero division
-            # TODO create probabilities!
             prob = {k: v / float(count_sum) for k, v in count.iteritems()}
             inner.add_node(n=i, attr_dict={k: v for k, v in prob.iteritems()})
-            inner.add_edge(i, Node.get_parent(i))
+            parent = Node.get_parent(i)
+            if parent is not None:
+                inner.add_edge(parent, i)
 
         self._inner = inner
 
-    def sample(self):
-        raise NotImplementedError('not implemented yet!')
+    def sample(self, id_node):
+        a, p = zip(*self._inner.node[id_node].items())
+        try:
+            chosen = np.random.choice(a=a, p=p)
+        except ValueError:
+            chosen = None  # when the node doesn't have any probability attached to it
+        return chosen
 
 # def set_pmf(pmf, fittest):
 #     nodes = np.array(map(lambda x: x.nodes, fittest))
@@ -225,16 +236,17 @@ def main():
     import random
     warnings.warn('WARNING: deterministic approach!')
 
-    random_state = 1
+    # random_state = 1
+    random_state = None
 
-    random.seed(random_state)
-    np.random.seed(random_state)
+    # random.seed(random_state)
+    # np.random.seed(random_state)
 
-    n_individuals = 10
+    n_individuals = 100
     n_folds = 10
-    n_run = 1
+    n_run = 10
     diff = 0.01
-    target_add = 0.20
+    target_add = 0.10
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
 
@@ -271,13 +283,10 @@ def main():
             fold_acc += test_acc
             overall_acc += test_acc
 
-            warnings.warn('exiting!')
-            exit(-1)
-
         print '%d-th fold mean accuracy: %0.2f' % (i, fold_acc / float(n_run))
 
     print 'overall mean acc: %.2f' % (overall_acc / float(n_folds))
-
+    # plt.show()
 
 if __name__ == '__main__':
     main()
