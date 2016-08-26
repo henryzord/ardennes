@@ -4,7 +4,6 @@ import numpy as np
 from collections import Counter
 import networkx as nx
 import pandas as pd
-import warnings
 
 __author__ = 'Henry Cagnini'
 
@@ -251,7 +250,7 @@ class Individual(object):
                     tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
                     tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
 
-                except ValueError as e:
+                except ValueError:
                     meta = self.__set_terminal__(subset, Individual.target_attr)
                     terminal = True
                     threshold = None
@@ -361,5 +360,4 @@ class Individual(object):
             'float': __set_numerical__,
             'bool': __set_categorical__,
             'complex': __set_error__
-
         }

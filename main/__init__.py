@@ -5,8 +5,6 @@ from collections import Counter
 from sklearn.datasets import load_iris
 from sklearn.cross_validation import train_test_split
 import pandas as pd
-import itertools as it
-from matplotlib import pyplot as plt
 
 
 from genotype import Individual, Node
@@ -225,28 +223,30 @@ def get_iris(n_folds=10, random_state=None):
     return df, folds
 
 
-def get_bank(n_folds=10, random_state=None):
-    df = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
-    folds = get_folds(df, n_folds=n_folds, random_state=random_state)
-    return df, folds
+# @deprecated
+# def get_bank(n_folds=10, random_state=None):
+#     df = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
+#     folds = get_folds(df, n_folds=n_folds, random_state=random_state)
+#     return df, folds
 
 
 def main():
-    import warnings
-    import random
-    warnings.warn('WARNING: deterministic approach!')
-
-    # random_state = 1
-    random_state = None
+    # import warnings
+    # import random
+    # warnings.warn('WARNING: deterministic approach!')
 
     # random.seed(random_state)
     # np.random.seed(random_state)
+
+    # random_state = 1
+
+    random_state = None
 
     n_individuals = 100
     n_folds = 10
     n_run = 10
     diff = 0.01
-    target_add = 0.10
+    target_add = 0.05
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
 
@@ -281,11 +281,11 @@ def main():
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
 
             fold_acc += test_acc
-            overall_acc += test_acc
 
+        overall_acc += fold_acc
         print '%d-th fold mean accuracy: %0.2f' % (i, fold_acc / float(n_run))
 
-    print 'overall mean acc: %.2f' % (overall_acc / float(n_folds))
+    print 'overall mean acc: %0.2f' % (overall_acc / float(n_folds))
     # plt.show()
 
 if __name__ == '__main__':
