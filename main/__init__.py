@@ -9,59 +9,116 @@ import itertools as it
 from matplotlib import pyplot as plt
 
 
-from genotype import Individual
+from genotype import Individual, Node
 import networkx as nx
 
 __author__ = 'Henry Cagnini'
 
 
-def get_pmf(pred_attr, target, target_prob):
-    n_pred = pred_attr.shape[0]
-    pred_prob = (1. - target_prob) / n_pred
+class PMF(object):
+    _pred_attr = None
+    _target_attr = None
+    _class_values = None
 
-    pmf = nx.DiGraph()
+    def __init__(self, pred_attr, target_attr, class_values):
+        if any(map(lambda x: x is None, [self._pred_attr, self._target_attr])):
+            PMF._pred_attr = pred_attr.values.tolist()
+            PMF._target_attr = target_attr
+            PMF._class_values = class_values
 
-    pmf.add_node(target, prob=target_prob)
-
-    for at in pred_attr:
-        pmf.add_node(at, prob=pred_prob)
-
-    return pmf
-
-
-def set_pmf(pmf, fittest):
-    nodes = np.array(map(lambda x: x.nodes, fittest))
-    counts = map(lambda v: Counter(v), nodes.T)
-
-    n_internal, n_vals = pmf.shape
-    n_fittest = fittest.shape[0]
-
-    for i in xrange(n_internal):  # for each node index
-        for j in xrange(n_vals):
-            try:
-                pmf[i, j] = counts[i][j] / float(n_fittest)
-            except KeyError:
-                pmf[i, j] = 0.
-
-    return pmf
+        self._pred_attr = PMF._pred_attr
+        self._target_attr = PMF._target_attr
+        self._class_values = PMF._class_values
 
 
-def get_raw_pmf(pmf):
-    raw_pmf = pmf.nodes(data=True)
-    raw_pmf = {x: y['prob'] for x, y in raw_pmf}
-    return raw_pmf
+class InitialPMF(PMF):
+    """
+    Initial PMF for generating diverse individuals.
+    """
+
+    def __init__(self, pred_attr, target_attr, class_values, target_add):
+        super(InitialPMF, self).__init__(pred_attr, target_attr, class_values)
+        self._target_add = target_add  # type: float
+
+    def sample(self, level, n=None):
+        target_prob = np.clip(level * self._target_add, a_min=0., a_max=1.)  # type: float
+        pred_prob = [(1. - target_prob) / len(self._pred_attr) for x in xrange(len(self._pred_attr))]  # type: list
+        a = self._pred_attr + [self._target_attr]  # type: list
+        p = pred_prob + [target_prob]  # type: list
+
+        chosen = np.random.choice(a=a, replace=True, size=n, p=p)
+        return chosen
+
+
+class HotPMF(PMF):
+    def __init__(self, pred_attr, target_attr, class_values):
+        super(HotPMF, self).__init__(pred_attr, target_attr, class_values)
+        self._inner = None
+
+    def update(self, fittest_pop):
+        graphs = map(lambda x: x.tree, fittest_pop)
+
+        max_node = max(
+            map(
+                lambda x:
+                max(x),
+                map(
+                    lambda x: x.node.keys(),
+                    graphs
+                )
+            )
+        )
+
+        inner = nx.DiGraph()
+
+        for i in xrange(max_node):
+            node_labels = []
+            for graph in graphs:
+                try:
+                    node_label = graph.node[i]['label']
+                    if node_label in self._class_values:
+                        node_label = self._target_attr
+                    node_labels += [node_label]
+                except KeyError:
+                    pass  # individual does not have the presented node
+
+            count = Counter(node_labels)
+            count_sum = max(sum(count.itervalues()), 1.)  # prevents zero division
+            # TODO create probabilities!
+            prob = {k: v / float(count_sum) for k, v in count.iteritems()}
+            inner.add_node(n=i, attr_dict={k: v for k, v in prob.iteritems()})
+            inner.add_edge(i, Node.get_parent(i))
+
+        self._inner = inner
+
+    def sample(self):
+        raise NotImplementedError('not implemented yet!')
+
+# def set_pmf(pmf, fittest):
+#     nodes = np.array(map(lambda x: x.nodes, fittest))
+#     counts = map(lambda v: Counter(v), nodes.T)
+#
+#     n_internal, n_vals = pmf.shape
+#     n_fittest = fittest.shape[0]
+#
+#     for i in xrange(n_internal):  # for each node index
+#         for j in xrange(n_vals):
+#             try:
+#                 pmf[i, j] = counts[i][j] / float(n_fittest)
+#             except KeyError:
+#                 pmf[i, j] = 0.
+#
+#     return pmf
 
 
 def init_pop(n_individuals, pmf, sets):
     # TODO implement with threading.
 
-    raw_pmf = get_raw_pmf(pmf)
-
     pop = np.array(
         map(
             lambda x: Individual(
-                id=x,
-                raw_pmf=raw_pmf,
+                ind_id=x,
+                initial_pmf=pmf,
                 sets=sets
             ),
             xrange(n_individuals)
@@ -80,12 +137,6 @@ def get_folds(df, n_folds=10, random_state=None):
 
 
 def early_stop(pmf, diff=0.01):
-    """
-
-    :type pmf: networkx.DiGraph
-    :param pmf:
-    :return:
-    """
     # TODO implement!
     return False
 
@@ -96,17 +147,22 @@ def get_node_count(n_nodes):
     return n_internal, n_leaf
 
 
-def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9, diff=0.01, verbose=True):
+def main_loop(sets, n_individuals, target_add, n_iterations=100, inf_thres=0.9, diff=0.01, verbose=True):
     pred_attr = sets['train'].columns[:-1]
-    target = sets['train'].columns[-1]
+    target_attr = sets['train'].columns[-1]
+    class_values = sets['train'][sets['train'].columns[-1]].unique()
 
-    pmf = get_pmf(pred_attr, target, target_prob)  # pmf has one distribution for each node
+    # pmf only for initializing the population
+    pmf = InitialPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, target_add=target_add)
 
     population = init_pop(
         n_individuals=n_individuals,
         pmf=pmf,
         sets=sets
     )
+
+    # changes the pmf to a final one
+    pmf = HotPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values)
 
     fitness = np.array(map(lambda x: x.fitness, population))
 
@@ -125,14 +181,13 @@ def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9,
         if verbose:
             print 'mean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (mean, median, _max)
 
-        try:
-            past = early_stop(pmf, diff)
-        except StopIteration:
+        if early_stop(pmf, diff):
             break
 
         borderline = np.partition(fitness, integer_threshold)[integer_threshold]  # TODO slow. test other implementation!
-        fittest = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
-        pmf = set_pmf(pmf, fittest)
+        fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
+
+        pmf.update(fittest_pop)
 
         to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
         for ind in to_replace:
@@ -142,8 +197,8 @@ def main_loop(sets, n_individuals, target_prob, n_iterations=100, inf_thres=0.9,
 
         iteration += 1
 
-    fittest = population[np.argmax(fitness)]
-    return fittest
+    fittest_ind = population[np.argmax(fitness)]
+    return fittest_ind
 
 
 def get_iris(n_folds=10, random_state=None):
@@ -179,6 +234,7 @@ def main():
     n_folds = 10
     n_run = 1
     diff = 0.01
+    target_add = 0.20
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
 
@@ -200,7 +256,14 @@ def main():
 
             sets = {'train': train_set, 'val': val_set, 'test': df.iloc[arg_test]}
 
-            fittest = main_loop(sets=sets, n_individuals=n_individuals, target_prob=0.55, inf_thres=0.9, diff=diff, verbose=False)
+            fittest = main_loop(
+                sets=sets,
+                n_individuals=n_individuals,
+                target_add=target_add,
+                inf_thres=0.9,
+                diff=diff,
+                verbose=False
+            )
 
             test_acc = fittest.__validate__(sets['test'])
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
@@ -208,11 +271,13 @@ def main():
             fold_acc += test_acc
             overall_acc += test_acc
 
+            warnings.warn('exiting!')
+            exit(-1)
+
         print '%d-th fold mean accuracy: %0.2f' % (i, fold_acc / float(n_run))
 
     print 'overall mean acc: %.2f' % (overall_acc / float(n_folds))
 
-    # plt.show()
 
 if __name__ == '__main__':
     main()
