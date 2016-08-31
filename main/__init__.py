@@ -6,7 +6,7 @@ from sklearn.datasets import load_iris
 from sklearn.cross_validation import train_test_split
 import pandas as pd
 
-
+from sklearn.tree import DecisionTreeClassifier, export_graphviz
 from genotype import Individual, Node
 import networkx as nx
 
@@ -17,17 +17,17 @@ class PMF(object):
     _pred_attr = None
     _target_attr = None
     _class_values = None
-
+    
     def __init__(self, pred_attr, target_attr, class_values):
         if any(map(lambda x: x is None, [self._pred_attr, self._target_attr])):
             PMF._pred_attr = pred_attr.values.tolist()
             PMF._target_attr = target_attr
             PMF._class_values = class_values
-
+        
         self._pred_attr = PMF._pred_attr
         self._target_attr = PMF._target_attr
         self._class_values = PMF._class_values
-
+    
     def sample(self, id_node):
         pass
 
@@ -36,19 +36,19 @@ class InitialPMF(PMF):
     """
     Initial PMF for generating diverse individuals.
     """
-
+    
     def __init__(self, pred_attr, target_attr, class_values, target_add):
         super(InitialPMF, self).__init__(pred_attr, target_attr, class_values)
         self._target_add = target_add  # type: float
-
+    
     def sample(self, id_node):
         depth = Node.get_depth(id_node)
-
+        
         target_prob = np.clip(depth * self._target_add, a_min=0., a_max=1.)  # type: float
         pred_prob = [(1. - target_prob) / len(self._pred_attr) for x in xrange(len(self._pred_attr))]  # type: list
         a = self._pred_attr + [self._target_attr]  # type: list
         p = pred_prob + [target_prob]  # type: list
-
+        
         chosen = np.random.choice(a=a, p=p)
         return chosen
 
@@ -57,10 +57,10 @@ class HotPMF(PMF):
     def __init__(self, pred_attr, target_attr, class_values):
         super(HotPMF, self).__init__(pred_attr, target_attr, class_values)
         self._inner = None
-
+    
     def update(self, fittest_pop):
         graphs = map(lambda x: x.tree, fittest_pop)
-
+        
         max_node = max(
             map(
                 lambda x:
@@ -71,9 +71,9 @@ class HotPMF(PMF):
                 )
             )
         )
-
+        
         inner = nx.DiGraph()
-
+        
         for i in xrange(max_node + 1):
             node_labels = []
             for graph in graphs:
@@ -84,7 +84,7 @@ class HotPMF(PMF):
                     node_labels += [node_label]
                 except KeyError:
                     pass  # individual does not have the presented node
-
+            
             count = Counter(node_labels)
             count_sum = max(sum(count.itervalues()), 1.)  # prevents zero division
             prob = {k: v / float(count_sum) for k, v in count.iteritems()}
@@ -92,9 +92,9 @@ class HotPMF(PMF):
             parent = Node.get_parent(i)
             if parent is not None:
                 inner.add_edge(parent, i)
-
+        
         self._inner = inner
-
+    
     def sample(self, id_node):
         a, p = zip(*self._inner.node[id_node].items())
         try:
@@ -102,6 +102,7 @@ class HotPMF(PMF):
         except ValueError:
             chosen = None  # when the node doesn't have any probability attached to it
         return chosen
+
 
 # def set_pmf(pmf, fittest):
 #     nodes = np.array(map(lambda x: x.nodes, fittest))
@@ -122,7 +123,7 @@ class HotPMF(PMF):
 
 def init_pop(n_individuals, pmf, sets):
     # TODO implement with threading.
-
+    
     pop = np.array(
         map(
             lambda x: Individual(
@@ -138,9 +139,9 @@ def init_pop(n_individuals, pmf, sets):
 
 def get_folds(df, n_folds=10, random_state=None):
     from sklearn.cross_validation import StratifiedKFold
-
+    
     Y = df[df.columns[-1]]
-
+    
     folds = StratifiedKFold(Y, n_folds=n_folds, shuffle=True, random_state=random_state)
     return folds
 
@@ -160,66 +161,67 @@ def main_loop(sets, n_individuals, target_add, n_iterations=100, inf_thres=0.9, 
     pred_attr = sets['train'].columns[:-1]
     target_attr = sets['train'].columns[-1]
     class_values = sets['train'][sets['train'].columns[-1]].unique()
-
+    
     # pmf only for initializing the population
     pmf = InitialPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, target_add=target_add)
-
+    
     population = init_pop(
         n_individuals=n_individuals,
         pmf=pmf,
         sets=sets
     )
-
+    
     # changes the pmf to a final one
     pmf = HotPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values)
-
+    
     fitness = np.array(map(lambda x: x.fitness, population))
-
+    
     # threshold where individuals will be picked for PMF updatting/replacing
     integer_threshold = int(inf_thres * n_individuals)
-
+    
     n_past = 15
     past = np.random.rand(n_past)
-
+    
     iteration = 0
     while iteration < n_iterations:  # evolutionary process
         mean = np.mean(fitness)  # type: float
         median = np.median(fitness)  # type: float
         _max = np.max(fitness)  # type: float
-
+        
         if verbose:
             print 'mean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (mean, median, _max)
-
+        
         if early_stop(pmf, diff):
             break
-
-        borderline = np.partition(fitness, integer_threshold)[integer_threshold]  # TODO slow. test other implementation!
+        
+        borderline = np.partition(fitness, integer_threshold)[
+            integer_threshold]  # TODO slow. test other implementation!
         fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
-
+        
         pmf.update(fittest_pop)
-
+        
         to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
         for ind in to_replace:
             ind.sample(pmf)
-
+        
         fitness = np.array(map(lambda x: x.fitness, population))
-
+        
         iteration += 1
-
+    
     fittest_ind = population[np.argmax(fitness)]
     return fittest_ind
 
 
 def get_iris(n_folds=10, random_state=None):
     data = load_iris()
-
+    
     X, Y = data['data'], data['target_names'][data['target']]
-
+    
     df = pd.DataFrame(X, columns=data['feature_names'])
     df['class'] = pd.Series(Y, index=df.index)
-
+    
     folds = get_folds(df, n_folds=n_folds, random_state=random_state)
-
+    
     return df, folds
 
 
@@ -230,44 +232,72 @@ def get_iris(n_folds=10, random_state=None):
 #     return df, folds
 
 
+def get_topdown_depth(x_train, y_train):
+    inst = DecisionTreeClassifier(
+        criterion='entropy',
+        splitter='best',
+        max_depth=None,  # as much depth as required
+        min_samples_leaf=1,  # minimum of 1 instance per leaf
+        max_leaf_nodes=None,  # as much leafs as required
+        presort=True
+    )
+    inst.fit(x_train, y_train)
+    
+    depth = inst.tree_.max_depth
+    # h = inst.predict(x_train)
+    # acc = (y_train == h).sum() / float(y_train.shape[0])
+    
+    return depth
+
+
+# for testing purposes
+# export_graphviz(inst)
+
+
 def main():
     # import warnings
     # import random
     # warnings.warn('WARNING: deterministic approach!')
-
+    
     # random.seed(random_state)
     # np.random.seed(random_state)
-
+    
     # random_state = 1
-
+    
     random_state = None
-
+    
     n_individuals = 100
     n_folds = 10
     n_run = 10
     diff = 0.01
-    target_add = 0.05
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
     # df, folds = get_bank(n_folds=2)  # bank dataset
-
+    
     overall_acc = 0.
-
+    
     for i, (arg_train, arg_test) in enumerate(folds):
         fold_acc = 0.
         for j in xrange(n_run):
-
             x_train, x_val, y_train, y_val = train_test_split(
                 df.iloc[arg_train][df.columns[:-1]],
                 df.iloc[arg_train][df.columns[-1]],
-                test_size=1./(n_folds - 1.),
+                test_size=1. / (n_folds - 1.),
                 random_state=random_state
             )
-
+            
             train_set = x_train.join(y_train)
             val_set = x_val.join(y_val)
-
-            sets = {'train': train_set, 'val': val_set, 'test': df.iloc[arg_test]}
-
+            test_set = df.iloc[arg_test]
+            
+            sets = {'train': train_set, 'val': val_set, 'test': test_set}
+            
+            x_test = df.iloc[arg_test][df.columns[:-1]]
+            y_test = df.iloc[arg_test][df.columns[-1]]
+            
+            # runs top-down inference algorithm
+            topdown_depth = get_topdown_depth(x_train, y_train)
+            target_add = 1. / topdown_depth
+            
             fittest = main_loop(
                 sets=sets,
                 n_individuals=n_individuals,
@@ -276,17 +306,20 @@ def main():
                 diff=diff,
                 verbose=False
             )
-
+            
             test_acc = fittest.__validate__(sets['test'])
             print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
-
+            
             fold_acc += test_acc
-
+        
         overall_acc += fold_acc
         print '%d-th fold mean accuracy: %0.2f' % (i, fold_acc / float(n_run))
-
+    
     print 'overall mean acc: %0.2f' % (overall_acc / float(n_folds))
-    # plt.show()
+
+
+# plt.show()
+
 
 if __name__ == '__main__':
     main()
