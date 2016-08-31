@@ -225,14 +225,13 @@ def get_iris(n_folds=10, random_state=None):
     return df, folds
 
 
-# @deprecated
-# def get_bank(n_folds=10, random_state=None):
-#     df = pd.read_csv('/home/henryzord/Projects/forrestTemp/datasets/bank-full_no_missing.csv', sep=',')
-#     folds = get_folds(df, n_folds=n_folds, random_state=random_state)
-#     return df, folds
+def get_dataset(path, n_folds=10, random_state=None):
+    df = pd.read_csv(path, sep=',')
+    folds = get_folds(df, n_folds=n_folds, random_state=random_state)
+    return df, folds
 
 
-def get_topdown_depth(x_train, y_train):
+def get_topdown_metadata(x_train, y_train, x_test, y_test):
     inst = DecisionTreeClassifier(
         criterion='entropy',
         splitter='best',
@@ -244,14 +243,14 @@ def get_topdown_depth(x_train, y_train):
     inst.fit(x_train, y_train)
     
     depth = inst.tree_.max_depth
-    # h = inst.predict(x_train)
-    # acc = (y_train == h).sum() / float(y_train.shape[0])
     
-    return depth
+    h = inst.predict(x_test)
+    acc = (y_test == h).sum() / float(y_test.shape[0])
 
-
-# for testing purposes
-# export_graphviz(inst)
+    # for testing purposes
+    # export_graphviz(inst)
+    
+    return depth, acc
 
 
 def main():
@@ -270,34 +269,40 @@ def main():
     n_folds = 10
     n_run = 10
     diff = 0.01
+
     df, folds = get_iris(n_folds=n_folds)  # iris dataset
-    # df, folds = get_bank(n_folds=2)  # bank dataset
+
+    # path = '/home/henryzord/Projects/forrestTemp/datasets/covtype_data.csv'
+    # df, folds = get_dataset(path, n_folds=10)  # csv-stored datasets
+
+    # TODO sample part of dataset for training and test!
     
     overall_acc = 0.
     
     for i, (arg_train, arg_test) in enumerate(folds):
         fold_acc = 0.
+
+        x_test = df.iloc[arg_test][df.columns[:-1]]
+        y_test = df.iloc[arg_test][df.columns[-1]]
+        test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
+
+        x_train, x_val, y_train, y_val = train_test_split(
+            df.iloc[arg_train][df.columns[:-1]],
+            df.iloc[arg_train][df.columns[-1]],
+            test_size=1. / (n_folds - 1.),
+            random_state=random_state
+        )
+
+        train_set = x_train.join(y_train)  # type: pd.DataFrame
+        val_set = x_val.join(y_val)  # type: pd.DataFrame
+
+        sets = {'train': train_set, 'val': val_set, 'test': test_set}
+
+        # runs top-down inference algorithm
+        td_depth, td_acc = get_topdown_metadata(x_train, y_train, x_test, y_test)
+        target_add = 1. / td_depth
+        
         for j in xrange(n_run):
-            x_train, x_val, y_train, y_val = train_test_split(
-                df.iloc[arg_train][df.columns[:-1]],
-                df.iloc[arg_train][df.columns[-1]],
-                test_size=1. / (n_folds - 1.),
-                random_state=random_state
-            )
-            
-            train_set = x_train.join(y_train)
-            val_set = x_val.join(y_val)
-            test_set = df.iloc[arg_test]
-            
-            sets = {'train': train_set, 'val': val_set, 'test': test_set}
-            
-            x_test = df.iloc[arg_test][df.columns[:-1]]
-            y_test = df.iloc[arg_test][df.columns[-1]]
-            
-            # runs top-down inference algorithm
-            topdown_depth = get_topdown_depth(x_train, y_train)
-            target_add = 1. / topdown_depth
-            
             fittest = main_loop(
                 sets=sets,
                 n_individuals=n_individuals,
@@ -313,7 +318,7 @@ def main():
             fold_acc += test_acc
         
         overall_acc += fold_acc
-        print '%d-th fold mean accuracy: %0.2f' % (i, fold_acc / float(n_run))
+        print '%#.d-th fold\ttopdown accuracy: %0.2f\tEDA mean accuracy: %0.2f' % (i, td_acc, fold_acc / float(n_run))
     
     print 'overall mean acc: %0.2f' % (overall_acc / float(n_folds))
 
