@@ -1,14 +1,15 @@
 # coding=utf-8
 
-import numpy as np
+import os
 from collections import Counter
-from sklearn.datasets import load_iris
-from sklearn.cross_validation import train_test_split
-import pandas as pd
 
-from sklearn.tree import DecisionTreeClassifier, export_graphviz
-from genotype import Individual, Node
 import networkx as nx
+import numpy as np
+import pandas as pd
+from sklearn.cross_validation import train_test_split
+from sklearn.datasets import load_iris
+
+from genotype import Individual, Node
 
 __author__ = 'Henry Cagnini'
 
@@ -231,98 +232,151 @@ def get_dataset(path, n_folds=10, random_state=None):
     return df, folds
 
 
-def get_topdown_metadata(x_train, y_train, x_test, y_test):
-    inst = DecisionTreeClassifier(
-        criterion='entropy',
-        splitter='best',
-        max_depth=None,  # as much depth as required
-        min_samples_leaf=1,  # minimum of 1 instance per leaf
-        max_leaf_nodes=None,  # as much leafs as required
-        presort=True
-    )
-    inst.fit(x_train, y_train)
-    
-    depth = inst.tree_.max_depth
-    
-    h = inst.predict(x_test)
-    acc = (y_test == h).sum() / float(y_test.shape[0])
+# @deprecated
+# def get_topdown_metadata(x_train, y_train, x_test, y_test):
+#     inst = DecisionTreeClassifier(
+#         criterion='entropy',
+#         splitter='best',
+#         max_depth=None,  # as much depth as required
+#         min_samples_leaf=1,  # minimum of 1 instance per leaf
+#         max_leaf_nodes=None,  # as much leafs as required
+#         presort=True
+#     )
+#     inst.fit(x_train, y_train)
+#
+#     depth = inst.tree_.max_depth
+#
+#     h = inst.predict(x_test)
+#     acc = (y_test == h).sum() / float(y_test.shape[0])
+#
+#     # for testing purposes
+#     # export_graphviz(inst)
+#
+#     return depth, acc
 
-    # for testing purposes
-    # export_graphviz(inst)
+
+def run_fold(fold, df, arg_train, arg_test, **kwargs):
+    fold_acc = 0.
     
-    return depth, acc
+    x_test = df.iloc[arg_test][df.columns[:-1]]
+    y_test = df.iloc[arg_test][df.columns[-1]]
+    test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
+    
+    x_train, x_val, y_train, y_val = train_test_split(
+        df.iloc[arg_train][df.columns[:-1]],
+        df.iloc[arg_train][df.columns[-1]],
+        test_size=1. / (kwargs['n_folds'] - 1.),
+        random_state=kwargs['random_state']
+    )
+    
+    train_set = x_train.join(y_train)  # type: pd.DataFrame
+    val_set = x_val.join(y_val)  # type: pd.DataFrame
+    
+    sets = {'train': train_set, 'val': val_set, 'test': test_set}
+    
+    # runs top-down inference algorithm
+    td_depth = j48(train_set)
+    target_add = 1. / td_depth
+    
+    for j in xrange(kwargs['n_run']):
+        fittest = main_loop(
+            sets=sets,
+            n_individuals=kwargs['n_individuals'],
+            target_add=target_add,
+            inf_thres=0.9,
+            diff=kwargs['diff'],
+            verbose=False
+        )
+        
+        test_acc = fittest.__validate__(sets['test'])
+        print 'fold: %d run: %d accuracy: %0.2f' % (fold, j, test_acc)
+        
+        fold_acc += test_acc
+    
+    print '%0.d-th fold\ttopdown accuracy: %0.2f\tEDA mean accuracy: %0.2f' % (fold, td_acc, fold_acc / float(kwargs['n_run']))
+
+
+def j48(train_set):
+    """
+    Uses J48 algorithm from Weka to get the maximum height of a 100% accuracy decision tree.
+    
+    :type train_set: pandas.DataFrame
+    :param train_set:
+    :return:
+    """
+
+    # TODO must pick only a subset of the instances! currently is picking the whole dataset!
+
+    import math
+    import StringIO
+    import weka.core.jvm as jvm
+    from weka.classifiers import Classifier
+    from weka.core.converters import Loader
+
+    filepath = 'temp_train_set.csv'
+
+    try:
+        train_set.to_csv(filepath, sep=',', quotechar='\"', encoding='utf-8')
+        
+        jvm.start()
+    
+        loader = Loader(classname='weka.core.converters.CSVLoader')
+        data = loader.load_file(filepath)
+        data.class_is_last()  # set class as the last attribute
+        
+        # J-48 parameters:
+        # -B : binary splits
+        # -M 1: min leaf objects
+        # -U : unprunned
+        cls = Classifier(classname="weka.classifiers.trees.J48", options=['-U', '-B', '-M', '1'])
+        cls.build_classifier(data)
+        graph = cls.graph.encode('ascii')
+    
+        jvm.stop()
+    except:
+        pass
+    finally:
+        os.remove(filepath)
+    
+    out = StringIO.StringIO(graph)
+    G = nx.Graph(nx.nx_pydot.read_dot(out))
+    n_nodes = G.number_of_nodes()
+    height = math.ceil(np.log2(n_nodes + 1))
+    
+    return height
 
 
 def main():
-    # import warnings
-    # import random
-    # warnings.warn('WARNING: deterministic approach!')
+    import warnings
+    import random
+    warnings.warn('WARNING: deterministic approach!')
+
+    random_state = 1
     
-    # random.seed(random_state)
-    # np.random.seed(random_state)
+    random.seed(random_state)
+    np.random.seed(random_state)
     
-    # random_state = 1
-    
-    random_state = None
-    
-    n_individuals = 100
     n_folds = 10
-    n_run = 10
-    diff = 0.01
-
-    df, folds = get_iris(n_folds=n_folds)  # iris dataset
-
-    # path = '/home/henryzord/Projects/forrestTemp/datasets/covtype_data.csv'
-    # df, folds = get_dataset(path, n_folds=10)  # csv-stored datasets
-
-    # TODO sample part of dataset for training and test!
     
-    overall_acc = 0.
-    
+    kwargs = {
+        'random_state': None,
+        'n_individuals': 200,
+        'n_run': 10,
+        'diff': 0.01,
+        'n_folds': n_folds
+    }
+
+    # df, folds = get_iris(n_folds=n_folds)  # iris dataset
+    dataset_path = '/home/henryzord/Projects/forrestTemp/datasets/iris.csv'
+    df, folds = get_dataset(dataset_path, n_folds=n_folds)  # csv-stored datasets
+
     for i, (arg_train, arg_test) in enumerate(folds):
-        fold_acc = 0.
-
-        x_test = df.iloc[arg_test][df.columns[:-1]]
-        y_test = df.iloc[arg_test][df.columns[-1]]
-        test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
-
-        x_train, x_val, y_train, y_val = train_test_split(
-            df.iloc[arg_train][df.columns[:-1]],
-            df.iloc[arg_train][df.columns[-1]],
-            test_size=1. / (n_folds - 1.),
-            random_state=random_state
-        )
-
-        train_set = x_train.join(y_train)  # type: pd.DataFrame
-        val_set = x_val.join(y_val)  # type: pd.DataFrame
-
-        sets = {'train': train_set, 'val': val_set, 'test': test_set}
-
-        # runs top-down inference algorithm
-        td_depth, td_acc = get_topdown_metadata(x_train, y_train, x_test, y_test)
-        target_add = 1. / td_depth
+        run_fold(i, df, arg_train, arg_test, **kwargs)
         
-        for j in xrange(n_run):
-            fittest = main_loop(
-                sets=sets,
-                n_individuals=n_individuals,
-                target_add=target_add,
-                inf_thres=0.9,
-                diff=diff,
-                verbose=False
-            )
-            
-            test_acc = fittest.__validate__(sets['test'])
-            print 'fold: %d run: %d accuracy: %0.2f' % (i, j, test_acc)
-            
-            fold_acc += test_acc
-        
-        overall_acc += fold_acc
-        print '%#.d-th fold\ttopdown accuracy: %0.2f\tEDA mean accuracy: %0.2f' % (i, td_acc, fold_acc / float(n_run))
+        # t = threading.Thread(target=run_fold, args=(i, df, arg_train, arg_test, kwargs))
+        # t.daemon = True
+        # t.start()
     
-    print 'overall mean acc: %0.2f' % (overall_acc / float(n_folds))
-
-
 # plt.show()
 
 

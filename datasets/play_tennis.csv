@@ -1,0 +1,15 @@
+windy, outlook, temperature, humidity, "play tennis?"
+No,Sunny,Hot,High,False
+No,Sunny,Hot,High,True
+Yes,Overcast,Hot,High,False
+Yes,Rainy,Mild,High,False
+Yes,Rainy,Cold,Normal,False
+No,Rainy,Cold,Normal,True
+Yes,Overcast,Cold,Normal,True
+No,Sunny,Mild,High,False
+Yes,Sunny,Cold,Normal,False
+Yes,Rainy,Mild,Normal,False
+Yes,Sunny,Mild,Normal,True
+Yes,Overcast,Mild,High,True
+Yes,Overcast,Hot,Normal,False
+No,Rainy,Mild,High,True
