@@ -14,32 +14,32 @@ from genotype import Individual, Node
 __author__ = 'Henry Cagnini'
 
 
-class PMF(object):
+class GM(object):
     _pred_attr = None
     _target_attr = None
     _class_values = None
     
     def __init__(self, pred_attr, target_attr, class_values):
         if any(map(lambda x: x is None, [self._pred_attr, self._target_attr])):
-            PMF._pred_attr = pred_attr.values.tolist()
-            PMF._target_attr = target_attr
-            PMF._class_values = class_values
+            GM._pred_attr = pred_attr.values.tolist()
+            GM._target_attr = target_attr
+            GM._class_values = class_values
         
-        self._pred_attr = PMF._pred_attr
-        self._target_attr = PMF._target_attr
-        self._class_values = PMF._class_values
+        self._pred_attr = GM._pred_attr
+        self._target_attr = GM._target_attr
+        self._class_values = GM._class_values
     
     def sample(self, id_node):
         pass
 
 
-class InitialPMF(PMF):
+class StartGM(GM):
     """
     Initial PMF for generating diverse individuals.
     """
     
     def __init__(self, pred_attr, target_attr, class_values, target_add):
-        super(InitialPMF, self).__init__(pred_attr, target_attr, class_values)
+        super(StartGM, self).__init__(pred_attr, target_attr, class_values)
         self._target_add = target_add  # type: float
     
     def sample(self, id_node):
@@ -54,10 +54,10 @@ class InitialPMF(PMF):
         return chosen
 
 
-class HotPMF(PMF):
+class FinalGM(GM):
     def __init__(self, pred_attr, target_attr, class_values):
-        super(HotPMF, self).__init__(pred_attr, target_attr, class_values)
-        self._inner = None
+        super(FinalGM, self).__init__(pred_attr, target_attr, class_values)
+        self._graph = None
     
     def update(self, fittest_pop):
         graphs = map(lambda x: x.tree, fittest_pop)
@@ -94,16 +94,19 @@ class HotPMF(PMF):
             if parent is not None:
                 inner.add_edge(parent, i)
         
-        self._inner = inner
+        self._graph = inner
     
     def sample(self, id_node):
-        a, p = zip(*self._inner.node[id_node].items())
+        a, p = zip(*self._graph.node[id_node].items())
         try:
             chosen = np.random.choice(a=a, p=p)
         except ValueError:
             chosen = None  # when the node doesn't have any probability attached to it
         return chosen
 
+    @property
+    def graph(self):
+        return self._graph
 
 # def set_pmf(pmf, fittest):
 #     nodes = np.array(map(lambda x: x.nodes, fittest))
@@ -147,8 +150,38 @@ def get_folds(df, n_folds=10, random_state=None):
     return folds
 
 
-def early_stop(pmf, diff=0.01):
-    # TODO implement!
+def early_stop(gm, diff=0.01):
+    """
+    
+    :type gm: FinalGM
+    :param gm: The Probabilistic Graphical Model (GM) for the current generation.
+    :type diff: float
+    :param diff: Maximum allowed uncertainty for each probability, for each node.
+    :return:
+    """
+    
+    def __max_prob__(node):
+        if len(node) > 0:
+            max_prob = reduce(
+                max,
+                map(
+                    lambda prob: min(abs(1. - prob), prob),
+                    node.itervalues()
+                )
+            )
+            return max_prob
+        return 0.
+    
+    nodes = gm.graph.node
+    maximum_prob = reduce(
+        max,
+        map(
+            __max_prob__,
+            nodes.itervalues()
+        )
+    )
+    if maximum_prob < diff:
+        return True
     return False
 
 
@@ -164,16 +197,16 @@ def main_loop(sets, n_individuals, target_add, n_iterations=100, inf_thres=0.9, 
     class_values = sets['train'][sets['train'].columns[-1]].unique()
     
     # pmf only for initializing the population
-    pmf = InitialPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, target_add=target_add)
+    gm = StartGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, target_add=target_add)
     
     population = init_pop(
         n_individuals=n_individuals,
-        pmf=pmf,
+        pmf=gm,
         sets=sets
     )
     
     # changes the pmf to a final one
-    pmf = HotPMF(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values)
+    gm = FinalGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values)
     
     fitness = np.array(map(lambda x: x.fitness, population))
     
@@ -192,18 +225,18 @@ def main_loop(sets, n_individuals, target_add, n_iterations=100, inf_thres=0.9, 
         if verbose:
             print 'mean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (mean, median, _max)
         
-        if early_stop(pmf, diff):
-            break
-        
-        borderline = np.partition(fitness, integer_threshold)[
-            integer_threshold]  # TODO slow. test other implementation!
+        # TODO slow. test other implementation!
+        borderline = np.partition(fitness, integer_threshold)[integer_threshold]
         fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
         
-        pmf.update(fittest_pop)
+        gm.update(fittest_pop)
         
         to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
         for ind in to_replace:
-            ind.sample(pmf)
+            ind.sample(gm)
+        
+        if early_stop(gm, diff):
+            break
         
         fitness = np.array(map(lambda x: x.fitness, population))
         
@@ -258,8 +291,9 @@ def get_dataset(path, n_folds=10, random_state=None):
 def run_fold(fold, df, arg_train, arg_test, **kwargs):
     fold_acc = 0.
     
-    x_test = df.iloc[arg_test][df.columns[:-1]]
-    y_test = df.iloc[arg_test][df.columns[-1]]
+    # x_test = df.iloc[arg_test][df.columns[:-1]]
+    # y_test = df.iloc[arg_test][df.columns[-1]]
+    
     test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
     
     x_train, x_val, y_train, y_val = train_test_split(
@@ -275,7 +309,10 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
     sets = {'train': train_set, 'val': val_set, 'test': test_set}
     
     # runs top-down inference algorithm
-    td_depth = j48(train_set)
+    if kwargs['tree_depth'] is None:
+        td_depth = j48(train_set)
+    else:
+        td_depth = kwargs['tree_depth']
     target_add = 1. / td_depth
     
     for j in xrange(kwargs['n_run']):
@@ -285,7 +322,7 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
             target_add=target_add,
             inf_thres=0.9,
             diff=kwargs['diff'],
-            verbose=False
+            verbose=kwargs['verbose']
         )
         
         test_acc = fittest.__validate__(sets['test'])
@@ -293,7 +330,7 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         
         fold_acc += test_acc
     
-    print '%0.d-th fold\ttopdown accuracy: %0.2f\tEDA mean accuracy: %0.2f' % (fold, td_acc, fold_acc / float(kwargs['n_run']))
+    print '%0.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_run']))
 
 
 def j48(train_set):
@@ -305,19 +342,17 @@ def j48(train_set):
     :return:
     """
 
-    # TODO must pick only a subset of the instances! currently is picking the whole dataset!
-
     import math
     import StringIO
     import weka.core.jvm as jvm
     from weka.classifiers import Classifier
     from weka.core.converters import Loader
 
-    filepath = 'temp_train_set.csv'
-
+    filepath = 'dataset_temp.csv'
+    
+    train_set.to_csv(filepath, sep=',', quotechar='\"', encoding='utf-8', index=False)
+    
     try:
-        train_set.to_csv(filepath, sep=',', quotechar='\"', encoding='utf-8')
-        
         jvm.start()
     
         loader = Loader(classname='weka.core.converters.CSVLoader')
@@ -331,41 +366,46 @@ def j48(train_set):
         cls = Classifier(classname="weka.classifiers.trees.J48", options=['-U', '-B', '-M', '1'])
         cls.build_classifier(data)
         graph = cls.graph.encode('ascii')
-    
-        jvm.stop()
-    except:
-        pass
-    finally:
-        os.remove(filepath)
-    
-    out = StringIO.StringIO(graph)
-    G = nx.Graph(nx.nx_pydot.read_dot(out))
-    n_nodes = G.number_of_nodes()
-    height = math.ceil(np.log2(n_nodes + 1))
-    
-    return height
 
+        out = StringIO.StringIO(graph)
+        G = nx.Graph(nx.nx_pydot.read_dot(out))
+        n_nodes = G.number_of_nodes()
+        height = math.ceil(np.log2(n_nodes + 1))
+
+        return height
+    except RuntimeError as e:
+        jvm.stop()
+        os.remove(filepath)
+        raise e
+    
 
 def main():
     import warnings
     import random
-    warnings.warn('WARNING: deterministic approach!')
 
+    tree_depth = None
     random_state = 1
-    
-    random.seed(random_state)
-    np.random.seed(random_state)
-    
     n_folds = 10
-    
+
     kwargs = {
         'random_state': None,
-        'n_individuals': 200,
+        'n_individuals': 100,
         'n_run': 10,
         'diff': 0.01,
-        'n_folds': n_folds
+        'n_folds': n_folds,
+        'tree_depth': tree_depth,
+        'verbose': True
     }
 
+    if random_state is not None:
+        warnings.warn('WARNING: deterministic approach!')
+        
+        random.seed(random_state)
+        np.random.seed(random_state)
+    
+    if tree_depth is not None:
+        warnings.warn('WARNING: hard-coded size of tree!')
+    
     # df, folds = get_iris(n_folds=n_folds)  # iris dataset
     dataset_path = '/home/henryzord/Projects/forrestTemp/datasets/iris.csv'
     df, folds = get_dataset(dataset_path, n_folds=n_folds)  # csv-stored datasets
