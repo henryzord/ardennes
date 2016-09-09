@@ -5,38 +5,9 @@ from collections import Counter
 import networkx as nx
 import pandas as pd
 
+from heap import Node
+
 __author__ = 'Henry Cagnini'
-
-
-class Node(object):
-    _root = 0
-
-    @property
-    def root(self):
-        return self._root
-
-    @staticmethod
-    def get_left_child(id_node):
-        return (id_node * 2) + 1
-
-    @staticmethod
-    def get_right_child(id_node):
-        return (id_node * 2) + 2
-
-    @staticmethod
-    def get_parent(id_node):
-        if id_node > 0:
-            return int((id_node - 1) / 2.)
-        return None
-
-    @staticmethod
-    def get_depth(id_node):
-        """
-        Gets depth of node in a binary heap.
-        :param id_node: ID of the node in the binary heap.
-        :return: The depth of the node.
-        """
-        return int(np.log2(id_node + 1))
 
 
 class Individual(object):
@@ -44,16 +15,16 @@ class Individual(object):
     target_values = None
     column_types = None
 
-    def __init__(self, ind_id, initial_pmf, sets):
+    def __init__(self, initial_pmf, sets, **kwargs):
         """
-
-        :type initial_pmf: dict
+        
+        :param id: ID of the individual. For debugging purposes.
         :param initial_pmf:
-        :type sets: dict
         :param sets:
         """
 
-        self._id = ind_id
+        if 'id' in kwargs:
+            self._id = kwargs['id']
 
         # common values to any Individual
         if any(map(lambda x: x is None, [Individual.target_attr, Individual.target_values, Individual.column_types])):
@@ -196,28 +167,29 @@ class Individual(object):
 
             self._sets = Individual.Sampler._sets
 
-        def sample(self, pmf):
+        def sample(self, gm):
             tree = nx.DiGraph()
 
             subset = self._sets['train']
 
             tree = self.sample_node(
-                pmf=pmf,
+                gm=gm,
                 tree=tree,
+                subset=subset,
                 id_current=0,
-                subset=subset
+                id_parent=None
             )
 
             return tree
 
-        def sample_node(self, pmf, tree, id_current, subset):
-            node_label = pmf.sample(id_node=id_current)
-            if id_current == Node.root:
-                while node_label == Individual.target_attr:
-                    node_label = pmf.sample(id_node=id_current)
-
+        def sample_node(self, gm, tree, subset, id_current, id_parent):
             if subset.shape[0] <= 0:
                 raise ValueError('empty subset!')
+            
+            node_label = gm.sample(id_node=id_current, id_parent=id_parent)
+            if id_current == Node.root:  # enforces sampling of non-terminal attribute
+                while node_label == Individual.target_attr:
+                    node_label = gm.sample(id_node=id_current, id_parent=id_parent)
 
             if node_label != Individual.target_attr:
                 meta, subset_left, subset_right = self.__set_internal__(
@@ -229,8 +201,8 @@ class Individual(object):
                 id_right = (id_current * 2) + 2
 
                 try:  # if one of the subsets is empty, then the node is terminal
-                    tree = self.sample_node(pmf=pmf, tree=tree, id_current=id_left, subset=subset_left)
-                    tree = self.sample_node(pmf=pmf, tree=tree, id_current=id_right, subset=subset_right)
+                    tree = self.sample_node(gm=gm, tree=tree, subset=subset_left, id_current=id_left, id_parent=id_parent)
+                    tree = self.sample_node(gm=gm, tree=tree, subset=subset_right, id_current=id_right, id_parent=id_parent)
 
                     if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left]['label'] in \
                             Individual.target_values:
