@@ -1,5 +1,8 @@
+import warnings
+
 from evolution.trees import Individual
 from evolution.graphical_models import *
+from matplotlib import pyplot as plt
 
 __author__ = 'Henry Cagnini'
 
@@ -56,19 +59,21 @@ class Ardennes(object):
             return True
         return False
     
-    def fit_predict(self, sets, n_individuals, target_add, n_iterations=100, inf_thres=0.9, diff=0.01, verbose=True):
+    def fit_predict(self, sets, n_individuals, max_height, n_iterations=100, inf_thres=0.9, diff=0.01, verbose=True):
         pred_attr = sets['train'].columns[:-1]
         target_attr = sets['train'].columns[-1]
         class_values = sets['train'][sets['train'].columns[-1]].unique()
         
         # pmf only for initializing the population
-        gm = StartGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, target_add=target_add)
+        gm = StartGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, max_height=max_height)
         
         population = self.init_population(
             n_individuals=n_individuals,
             gm=gm,
             sets=sets
         )
+        
+        heights = map(lambda x: x.height, population)
         
         # changes the pmf to a final one
         gm = FinalGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, population=population)
@@ -77,9 +82,6 @@ class Ardennes(object):
         
         # threshold where individuals will be picked for PMF updating/replacing
         integer_threshold = int(inf_thres * n_individuals)
-        
-        n_past = 15
-        past = np.random.rand(n_past)
         
         iteration = 0
         while iteration < n_iterations:  # evolutionary process
@@ -95,6 +97,14 @@ class Ardennes(object):
             fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
             
             gm.update(fittest_pop)
+
+            # warnings.warn('WARNIGN: Plotting gm!')
+            # gm.plot()
+            # plt.show()
+
+            # warnings.warn('WARNING: Plotting fittest population!')
+            # map(lambda x: x.plot(), fittest_pop)
+            # plt.show()
             
             to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
             for ind in to_replace:

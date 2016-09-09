@@ -50,25 +50,24 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         td_depth = j48(train_set)
     else:
         td_depth = kwargs['tree_depth']
-    target_add = 1. / td_depth
     
     for j in xrange(kwargs['n_run']):  # run the evolutionary process several times
         inst = Ardennes()
         fittest = inst.fit_predict(
             sets=sets,
             n_individuals=kwargs['n_individuals'],
-            target_add=target_add,
+            max_height=td_depth,
             inf_thres=0.9,
             diff=kwargs['diff'],
             verbose=kwargs['verbose']
         )
         
         test_acc = fittest.__validate__(sets['test'])
-        print 'fold: %d run: %d accuracy: %0.2f' % (fold, j, test_acc)
+        print 'fold: %02.d run: %02.d accuracy: %0.2f' % (fold, j, test_acc)
         
         fold_acc += test_acc
     
-    print '%0.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_run']))
+    print '%02.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_run']))
 
 
 def j48(train_set):
@@ -128,7 +127,7 @@ def main():
 
     kwargs = {
         'random_state': None,
-        'n_individuals': 25,
+        'n_individuals': 100,
         'n_run': 1,
         'diff': 0.01,
         'n_folds': n_folds,
@@ -149,7 +148,8 @@ def main():
 
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(i, df, arg_train, arg_test, **kwargs)
-        exit(-1)
+        # warnings.warn('WARNING: exiting after first fold!')
+        # exit(-1)
         
         # TODO for parallel processing
         # t = threading.Thread(target=run_fold, args=(i, df, arg_train, arg_test, kwargs))

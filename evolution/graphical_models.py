@@ -1,4 +1,4 @@
-from collections import Counter
+from matplotlib import pyplot
 from heap import Node
 
 import numpy as np
@@ -23,7 +23,10 @@ class GM(object):
         self._target_attr = GM._target_attr
         self._class_values = GM._class_values
     
-    def sample(self, id_node, id_parent):
+    def sample(self, id_node, parent_label):
+        pass
+    
+    def plot(self):
         pass
 
 
@@ -32,13 +35,18 @@ class StartGM(GM):
     Initial PMF for generating diverse individuals.
     """
     
-    def __init__(self, pred_attr, target_attr, class_values, target_add):
-        super(StartGM, self).__init__(pred_attr, target_attr, class_values)
-        self._target_add = target_add  # type: float
+    max_depth = 0
     
-    def sample(self, id_node, id_parent):
+    def __init__(self, pred_attr, target_attr, class_values, max_height):
+        super(StartGM, self).__init__(pred_attr, target_attr, class_values)
+
+        self._target_add = 1. / max_height  # type: float
+    
+    def sample(self, id_node, parent_label):
         depth = Node.get_depth(id_node)
         
+        StartGM.max_depth = max(depth, StartGM.max_depth)
+            
         target_prob = np.clip(depth * self._target_add, a_min=0., a_max=1.)  # type: float
         pred_prob = [(1. - target_prob) / len(self._pred_attr) for x in xrange(len(self._pred_attr))]  # type: list
         a = self._pred_attr + [self._target_attr]  # type: list
@@ -124,12 +132,14 @@ class FinalGM(GM):
 
         self._graph = inner
     
-    def sample(self, id_node, id_parent):
+    def sample(self, id_node, parent_label):
         prob_matrix = self._graph.node[id_node]['probs']
 
         a = prob_matrix.index
-        p = prob_matrix[id_parent]/prob_matrix[id_parent].sum()
-
+        if parent_label is not None:
+            p = prob_matrix[parent_label] / prob_matrix[parent_label].sum()
+        else:
+            p = prob_matrix[None]
         # try:
         # must build a conditional probability from the marginals; thus, sums the probability
         chosen = np.random.choice(a=a, p=p)
@@ -140,3 +150,21 @@ class FinalGM(GM):
     @property
     def graph(self):
         return self._graph
+
+    def plot(self):
+        from matplotlib import pyplot as plt
+    
+        fig = plt.figure()
+    
+        tree = self.graph   # type: nx.DiGraph
+        pos = nx.spectral_layout(tree)
+    
+        node_list = tree.nodes()
+        edge_list = tree.edges()
+    
+        nx.draw_networkx_nodes(tree, pos, node_size=1000)  # nodes
+        nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
+        # nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
+        # nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
+    
+        plt.axis('off')

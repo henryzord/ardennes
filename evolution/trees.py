@@ -4,6 +4,7 @@ import numpy as np
 from collections import Counter
 import networkx as nx
 import pandas as pd
+import itertools as it
 
 from heap import Node
 
@@ -48,10 +49,20 @@ class Individual(object):
 
         self._sampler = Individual.Sampler(sets=self._sets)
         self.sample(initial_pmf)
+        self._height = self.__get_height__()
 
     def sample(self, pmf):
         self._tree = self._sampler.sample(pmf)
         self._val_acc = self.__validate__(self._sets['val'])
+
+    def __get_height__(self):
+        node_dict = self._tree.node
+        last = Node.get_depth(max(node_dict.keys()))
+        return last
+
+    @property
+    def height(self):
+        return self._height
 
     @property
     def fitness(self):
@@ -115,9 +126,19 @@ class Individual(object):
         nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
 
         plt.text(
+            0.8,
             0.9,
-            0.9,
-            '%0.4f' % self._val_acc,
+            'Fitness: %0.4f' % self._val_acc,
+            fontsize=15,
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform=fig.transFigure
+        )
+
+        plt.text(
+            0.1,
+            0.1,
+            'ID: %03.d' % self._id,
             fontsize=15,
             horizontalalignment='center',
             verticalalignment='center',
@@ -125,7 +146,6 @@ class Individual(object):
         )
 
         plt.axis('off')
-        # plt.show()
 
     def __str__(self):
         return 'fitness: %0.2f' % self._val_acc
@@ -177,79 +197,78 @@ class Individual(object):
                 tree=tree,
                 subset=subset,
                 id_current=0,
-                id_parent=None
+                parent_label=None
             )
 
             return tree
 
-        def sample_node(self, gm, tree, subset, id_current, id_parent):
+        def sample_node(self, gm, tree, subset, id_current, parent_label):
+            def node_attr(subset, target_attr):
+                meta = self.__set_terminal__(subset, target_attr)
+        
+                attr_dict = {
+                    'label': meta['value'],
+                    'color': '#98FB98',
+                    'terminal': True,
+                    'threshold': None,
+                    'left': None,
+                    'right': None
+                }
+                return attr_dict
+            
             if subset.shape[0] <= 0:
                 raise ValueError('empty subset!')
             
-            node_label = gm.sample(id_node=id_current, id_parent=id_parent)
+            node_label = gm.sample(id_node=id_current, parent_label=parent_label)
             if id_current == Node.root:  # enforces sampling of non-terminal attribute
                 while node_label == Individual.target_attr:
-                    node_label = gm.sample(id_node=id_current, id_parent=id_parent)
+                    node_label = gm.sample(id_node=id_current, parent_label=parent_label)
 
             if node_label != Individual.target_attr:
-                meta, subset_left, subset_right = self.__set_internal__(
-                    node_label=node_label,
-                    subset=subset
-                )
+                try:
+                    meta, subset_left, subset_right = self.__set_internal__(
+                        node_label=node_label,
+                        subset=subset
+                    )
 
-                id_left = (id_current * 2) + 1
-                id_right = (id_current * 2) + 2
+                    id_left, id_right = (Node.get_left_child(id_current), Node.get_right_child(id_current))
 
-                try:  # if one of the subsets is empty, then the node is terminal
-                    tree = self.sample_node(gm=gm, tree=tree, subset=subset_left, id_current=id_left, id_parent=id_parent)
-                    tree = self.sample_node(gm=gm, tree=tree, subset=subset_right, id_current=id_right, id_parent=id_parent)
-
-                    if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left]['label'] in \
-                            Individual.target_values:
-
-                        tree.remove_node(id_left)
-                        tree.remove_node(id_right)
-                        raise ValueError('same class for terminal nodes!')
-
-                    terminal = False
-                    threshold = meta['value']
-
-                    if id_current == Node.root:
-                        node_color = '#FFFFFF'  # root color
-                    else:
-                        node_color = '#AEEAFF'  # inner node color
-
-                    tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
-                    tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
-
-                except ValueError:
-                    meta = self.__set_terminal__(subset, Individual.target_attr)
-                    terminal = True
-                    threshold = None
-                    node_label = meta['value']
-                    id_left = None
-                    id_right = None
-                    node_color = '#98FB98'
+                    try:  # if one of the subsets is empty, then the node is terminal
+                        for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+                            tree = self.sample_node(
+                                gm=gm,
+                                tree=tree,
+                                subset=child_subset,
+                                id_current=id_child,
+                                parent_label=node_label
+                            )
+    
+                        if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left][
+                            'label'] in Individual.target_values:  # both children have the same class label
+                            tree.remove_node(id_left)
+                            tree.remove_node(id_right)
+        
+                            _node_attr = node_attr(subset, Individual.target_attr)
+                        else:
+                            tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
+                            tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
+        
+                            _node_attr = {
+                                'label': node_label,
+                                'color': '#FFFFFF' if id_current == Node.root else '#AEEAFF',
+                                'terminal': False,
+                                'threshold': meta['value'],
+                                'left': id_left,
+                                'right': id_right
+                            }
+                    except ValueError as ve:
+                        _node_attr = node_attr(subset, Individual.target_attr)
+                except ValueError as ve:
+                    _node_attr = node_attr(subset, Individual.target_attr)
             else:
-                meta = self.__set_terminal__(subset, Individual.target_attr)
-                terminal = True
-                threshold = None
-                node_label = meta['value']
-                id_left = None
-                id_right = None
-                node_color = '#98FB98'
+                _node_attr = node_attr(subset, Individual.target_attr)
 
-            tree.add_node(
-                id_current,
-                attr_dict={
-                    'label': node_label,
-                    'color': node_color,
-                    'terminal': terminal,
-                    'threshold': threshold,
-                    'left': id_left,
-                    'right': id_right
-                }
-            )
+            tree.add_node(id_current, attr_dict=_node_attr)
             return tree
 
         def __set_internal__(self, node_label, subset):
@@ -268,41 +287,40 @@ class Individual(object):
 
         # self, id_node, node_label, thresholds, tree, subset
         def __set_numerical__(self, node_label, subset):
-            # TODO make verification of values more smart!
-            # TODO verify only values where the class of adjacent objects changes!
+            def slide_filter(x):
+                first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
+                second = x.name
+                column = Individual.target_attr
+                
+                return ss[column].iloc[first] == ss[column].iloc[second]
 
-            unique_vals = subset[node_label].sort_values().unique()
-
-            t_counter = 1
-            max_t = unique_vals.shape[0]
-
-            best_entropy = np.inf
-
-            if unique_vals.shape[0] < 3:
-                meta = self.__set_terminal__(subset, Individual.target_attr)
-                return meta, pd.DataFrame([]), pd.DataFrame([])
-
-            best_threshold = None
-            best_subset_left = None
-            best_subset_right = None
-
-            while t_counter < max_t - 1:  # should not pick limitrophe values, since it generates empty sets
-                threshold = unique_vals[t_counter]
-
+            def get_entropy(threshold):
+                
                 subset_left = subset.loc[subset[node_label] < threshold]
                 subset_right = subset.loc[subset[node_label] >= threshold]
-
+                
                 entropy = \
                     Individual.entropy(subset_left, Individual.target_attr) + \
                     Individual.entropy(subset_right, Individual.target_attr)
+    
+                return entropy
 
-                if entropy < best_entropy:
-                    best_entropy = entropy
-                    best_threshold = threshold
-                    best_subset_left = subset_left
-                    best_subset_right = subset_right
-
-                t_counter += 1
+            ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
+            ss = ss.sort_values(by=node_label).reset_index()
+            
+            ss['change'] = ss.apply(slide_filter, axis=1)
+            unique_vals = ss[ss['change'] == False]
+            
+            if unique_vals.empty:
+                raise ValueError('no valid threshold values!')
+            
+            unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
+            best_entropy = unique_vals['entropy'].min()
+            
+            best_threshold = (unique_vals[unique_vals['entropy'] == best_entropy])[node_label].values[0]
+            
+            best_subset_left = subset.loc[subset[node_label] < best_threshold]
+            best_subset_right = subset.loc[subset[node_label] >= best_threshold]
 
             meta = {'value': best_threshold, 'terminal': False}
             return meta, best_subset_left, best_subset_right
