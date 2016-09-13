@@ -1,4 +1,5 @@
 # coding=utf-8
+import json
 
 import numpy as np
 from collections import Counter
@@ -12,9 +13,11 @@ __author__ = 'Henry Cagnini'
 
 
 class Individual(object):
-    target_attr = None
-    target_values = None
-    column_types = None
+    target_attr = None  # type: str
+    target_values = None  # type: list
+    column_types = None  # type: dict
+    _sets = None  # type: dict
+    _sampler = None  # type: Individual.Sampler
 
     def __init__(self, initial_pmf, sets, **kwargs):
         """
@@ -28,37 +31,110 @@ class Individual(object):
             self._id = kwargs['id']
 
         # common values to any Individual
-        if any(map(lambda x: x is None, [Individual.target_attr, Individual.target_values, Individual.column_types])):
-            Individual._sets = sets  # type: dict
-
-            Individual.target_attr = sets['train'].columns[-1]  # type: str
-            Individual.target_values = sets['train'][sets['train'].columns[-1]].unique()
-            Individual.column_types = {
-                x: self.type_handler_dict[str(Individual._sets['train'][x].dtype)] for x in Individual._sets['train'].columns
-            }  # type: dict
+        Individual.__set_class_values__(sets)
 
         # only for pycharm variable resolving; won't result in error if removed
-        self._sets = Individual._sets
-        self.target_attr = Individual.target_attr
-        self.target_values = Individual.target_values
-        self.column_types = Individual.column_types
+        self.__set_instance_values__()
 
         self._tree = None  # type: nx.DiGraph
 
         self._val_acc = 0.  # type: float
 
-        self._sampler = Individual.Sampler(sets=self._sets)
         self.sample(initial_pmf)
         self._height = self.__get_height__()
 
-    def sample(self, pmf):
-        self._tree = self._sampler.sample(pmf)
-        self._val_acc = self.__validate__(self._sets['val'])
+    @classmethod
+    def __set_class_values__(cls, sets):
+        if any(map(lambda x: x is None, [cls.target_attr, cls.target_values, cls.column_types])):
+            cls._sets = sets  # type: dict
+
+            cls.target_attr = sets['train'].columns[-1]  # type: str
+            cls.target_values = sets['train'][sets['train'].columns[-1]].unique()
+            cls.column_types = {
+                x: cls.type_handler_dict[str(cls._sets['train'][x].dtype)] for x in cls._sets['train'].columns
+            }  # type: dict
+
+            cls._sampler = cls.Sampler(sets=cls._sets)
+    
+    def __set_instance_values__(self):
+        self._sampler = Individual._sampler
+        self._sets = Individual._sets
+        self.target_attr = Individual.target_attr
+        self.target_values = Individual.target_values
+        self.column_types = Individual.column_types
 
     def __get_height__(self):
         node_dict = self._tree.node
         last = Node.get_depth(max(node_dict.keys()))
         return last
+
+    @classmethod
+    def mash(cls, trees, sets, max_height, **kwargs):
+        """
+        
+        :param trees:
+        :param sets:
+        :param max_height:
+        :param kwargs:
+        :return:
+        """
+        
+        def set_thresholds(current_set, compiled, parents):
+            """
+            
+            :type current_set: pandas.DataFrame
+            :param current_set:
+            :param compiled:
+            :type parents: list
+            :param parents:
+            :return:
+            """
+            
+            level = len(parents)
+            
+            if current_set.empty or level >= max_height:
+                return {}
+            
+            # TODO must choose if going for right or left!
+            
+            unique_nodes = Counter(
+                map(
+                    lambda x: eval('*x' + '[%d]' % level),  # + ('[0]' * (level == 0))),
+                    trees
+                )
+            )
+            # meta = map(lambda x: cls._sampler.__set_node__(node_label=x, subset=current_set), unique_nodes.iterkeys())
+            metadata, subset_left, subset_right = vfunc(node_label=unique_nodes.keys(), subset=current_set)
+            
+            dumped = json.dumps(parents)
+            
+            compiled = dict()
+            compiled[dumped] = dict(it.izip(
+                unique_nodes.iterkeys(),
+                map(
+                    lambda i: {
+                        'threshold': metadata[i]['value'], 'subset_left': subset_left[i], 'subset_right': subset_right[i]
+                        # 'threshold': meta[i][0]['value'], 'subset_left': meta[i][1], 'subset_right': meta[i][2]
+                    },
+                    xrange(len(unique_nodes))
+                )
+            ))
+
+            for i, label in enumerate(unique_nodes.iterkeys()):
+                for some_set in [subset_left[i], subset_right[i]]:
+                # for some_set in [meta[i][1], meta[i][2]]:
+                    compiled = set_thresholds(current_set=some_set, compiled=compiled, parents=parents + [label])
+                
+            return compiled
+
+        cls.__set_class_values__(sets)
+        vfunc = np.vectorize(cls._sampler.__set_node__, excluded=['subset'])
+        thresholds = set_thresholds(sets['train'], compiled=dict(), parents=[])
+        z = 0
+        
+    def sample(self, pmf):
+        self._tree = self._sampler.sample(pmf)
+        self._val_acc = self.__validate__(self._sets['val'])
 
     @property
     def height(self):
@@ -100,12 +176,24 @@ class Individual(object):
 
         return obj[-1] == node['label']
 
-    def __validate__(self, _set):
-        hit_count = _set.apply(self.__val_func__, axis=1).sum()
-        acc = hit_count / float(_set.shape[0])
+    def __validate__(self, test_set):
+        """
+        Assess the accuracy of this Individual against the provided set.
+        
+        :type test_set: pandas.DataFrame
+        :param test_set: a matrix with the class attribute in the last position (i.e, column).
+        :return: The accuracy of this model when testing with test_set.
+        """
+        
+        hit_count = test_set.apply(self.__val_func__, axis=1).sum()
+        acc = hit_count / float(test_set.shape[0])
         return acc
 
     def plot(self):
+        """
+        Plots this individual.
+        """
+        
         from matplotlib import pyplot as plt
 
         fig = plt.figure()
@@ -178,6 +266,9 @@ class Individual(object):
     }
 
     class Sampler(object):
+        """
+        Sampler class, bound to Individual.
+        """
 
         _sets = None
 
@@ -219,74 +310,84 @@ class Individual(object):
             if subset.shape[0] <= 0:
                 raise ValueError('empty subset!')
             
-            node_label = gm.sample(id_node=id_current, parent_label=parent_label)
+            def twin_nodes(tree, id_left, id_right):
+                """
+                Checks if two children nodes have the same class.
+                :type tree: networkx.DiGraph
+                :param tree: A DiGraph object representing a binary tree.
+                :param id_left: ID of the left child.
+                :param id_right: ID of the right child.
+                :return: Whether right and left children are twins.
+                """
+                return tree.node[id_left]['label'] == tree.node[id_right]['label'] and \
+                       tree.node[id_left]['label'] in Individual.target_values
+            
+            node_label = gm.sample_by_id(id_node=id_current, parent_label=parent_label)
             if id_current == Node.root:  # enforces sampling of non-terminal attribute
                 while node_label == Individual.target_attr:
-                    node_label = gm.sample(id_node=id_current, parent_label=parent_label)
+                    node_label = gm.sample_by_id(id_node=id_current, parent_label=parent_label)
 
-            if node_label != Individual.target_attr:
-                try:
-                    meta, subset_left, subset_right = self.__set_internal__(
-                        node_label=node_label,
-                        subset=subset
-                    )
+            try:
+                meta, subset_left, subset_right = self.__set_node__(
+                    node_label=node_label,
+                    subset=subset
+                )
+                id_left, id_right = (Node.get_left_child(id_current), Node.get_right_child(id_current))
 
-                    id_left, id_right = (Node.get_left_child(id_current), Node.get_right_child(id_current))
+                try:  # if one of the subsets is empty, then the node is terminal
+                    for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+                        tree = self.sample_node(
+                            gm=gm,
+                            tree=tree,
+                            subset=child_subset,
+                            id_current=id_child,
+                            parent_label=node_label
+                        )
 
-                    try:  # if one of the subsets is empty, then the node is terminal
-                        for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
-                            tree = self.sample_node(
-                                gm=gm,
-                                tree=tree,
-                                subset=child_subset,
-                                id_current=id_child,
-                                parent_label=node_label
-                            )
+                    if twin_nodes(tree, id_left, id_right):
+                        tree.remove_node(id_left)
+                        tree.remove_node(id_right)
     
-                        if tree.node[id_left]['label'] == tree.node[id_right]['label'] and tree.node[id_left][
-                            'label'] in Individual.target_values:  # both children have the same class label
-                            tree.remove_node(id_left)
-                            tree.remove_node(id_right)
-        
-                            _node_attr = node_attr(subset, Individual.target_attr)
-                        else:
-                            tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
-                            tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
-        
-                            _node_attr = {
-                                'label': node_label,
-                                'color': '#FFFFFF' if id_current == Node.root else '#AEEAFF',
-                                'terminal': False,
-                                'threshold': meta['value'],
-                                'left': id_left,
-                                'right': id_right
-                            }
-                    except ValueError as ve:
                         _node_attr = node_attr(subset, Individual.target_attr)
+                    else:
+                        tree.add_edge(id_current, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
+                        tree.add_edge(id_current, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
+    
+                        _node_attr = {
+                            'label': node_label,
+                            'color': '#FFFFFF' if id_current == Node.root else '#AEEAFF',
+                            'terminal': False,
+                            'threshold': meta['value'],
+                            'left': id_left,
+                            'right': id_right
+                        }
                 except ValueError as ve:
                     _node_attr = node_attr(subset, Individual.target_attr)
-            else:
+            except ValueError as ve:
                 _node_attr = node_attr(subset, Individual.target_attr)
 
             tree.add_node(id_current, attr_dict=_node_attr)
             return tree
-
-        def __set_internal__(self, node_label, subset):
-            if node_label != Individual.target_attr:
-                attr_type = Individual.column_types[node_label]
-                meta, subset_left, subset_right = self.attr_handler_dict[attr_type](self, node_label, subset)
-            else:
-                meta = self.__set_terminal__(subset, Individual.target_attr)
+        
+        def __set_node__(self, node_label, subset, **kwargs):
+            def set_terminal():
+                meta = self.__set_terminal__(subset, Individual.target_attr, **kwargs)
                 subset_left = pd.DataFrame([])
                 subset_right = pd.DataFrame([])
+                
+                return meta, subset_left, subset_right
+            
+            if node_label != Individual.target_attr:
+                attr_type = Individual.column_types[node_label]
+                try:
+                    out = self.attr_handler_dict[attr_type](self, node_label, subset, **kwargs)
+                except ValueError as ve:
+                    out = set_terminal()
+            else:
+                out = set_terminal()
+            return out
 
-            return meta, subset_left, subset_right
-
-        def __set_categorical__(self, node_label, subset):
-            raise NotImplemented('not implemented yet!')
-
-        # self, id_node, node_label, thresholds, tree, subset
-        def __set_numerical__(self, node_label, subset):
+        def __set_numerical__(self, node_label, subset, **kwargs):
             def slide_filter(x):
                 first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
                 second = x.name
@@ -322,11 +423,14 @@ class Individual(object):
             best_subset_left = subset.loc[subset[node_label] < best_threshold]
             best_subset_right = subset.loc[subset[node_label] >= best_threshold]
 
-            meta = {'value': best_threshold, 'terminal': False}
-            return meta, best_subset_left, best_subset_right
-
+            if 'get_meta' in kwargs and kwargs['get_meta'] == False:
+                return best_subset_left, best_subset_right
+            else:
+                meta = {'value': best_threshold, 'terminal': False}
+                return meta, best_subset_left, best_subset_right
+        
         @staticmethod
-        def __set_terminal__(subset, target_attr):
+        def __set_terminal__(subset, target_attr, **kwargs):
             count = Counter(subset[target_attr])
 
             f_key = None
@@ -338,6 +442,9 @@ class Individual(object):
 
             meta = {'value': f_key, 'terminal': True}  # not a threshold, but a class label
             return meta
+
+        def __set_categorical__(self, node_label, subset):
+            raise NotImplemented('not implemented yet!')
 
         @staticmethod
         def __set_error__(id_node, attr_name, dict_threshold, tree, subset):
@@ -351,3 +458,4 @@ class Individual(object):
             'bool': __set_categorical__,
             'complex': __set_error__
         }
+

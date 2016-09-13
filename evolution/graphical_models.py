@@ -23,7 +23,10 @@ class GM(object):
         self._target_attr = GM._target_attr
         self._class_values = GM._class_values
     
-    def sample(self, id_node, parent_label):
+    def sample_by_id(self, id_node, parent_label):
+        pass
+    
+    def sample_by_level(self, level, n_sample=1):
         pass
     
     def plot(self):
@@ -32,7 +35,7 @@ class GM(object):
 
 class StartGM(GM):
     """
-    Initial PMF for generating diverse individuals.
+    Initial PMF for guaranteeing diversity in the initial population.
     """
     
     max_depth = 0
@@ -41,20 +44,25 @@ class StartGM(GM):
         super(StartGM, self).__init__(pred_attr, target_attr, class_values)
 
         self._target_add = 1. / max_height  # type: float
+        
+        self._a = self._pred_attr + [self._target_attr]  # type: list
+        self._n_pred = len(self._pred_attr)
     
-    def sample(self, id_node, parent_label):
+    def sample_by_level(self, level, n_sample=1):
+        target_prob = np.clip(level * self._target_add, a_min=0., a_max=1.)  # type: float
+        p = map(lambda x: (1. - target_prob) / self._n_pred, xrange(self._n_pred)) + [target_prob]  # type: list
+        
+        chosen = np.random.choice(a=self._a, p=p, replace=True, size=n_sample)
+        if n_sample == 1:
+            return chosen[0]
+        return chosen
+    
+    def sample_by_id(self, id_node, parent_label):
         depth = Node.get_depth(id_node)
         
         StartGM.max_depth = max(depth, StartGM.max_depth)
-            
-        target_prob = np.clip(depth * self._target_add, a_min=0., a_max=1.)  # type: float
-        pred_prob = [(1. - target_prob) / len(self._pred_attr) for x in xrange(len(self._pred_attr))]  # type: list
-        a = self._pred_attr + [self._target_attr]  # type: list
-        p = pred_prob + [target_prob]  # type: list
         
-        chosen = np.random.choice(a=a, p=p)
-        return chosen
-
+        return self.sample_by_level(depth)
 
 class FinalGM(GM):
     def __init__(self, pred_attr, target_attr, class_values, population):
@@ -132,7 +140,7 @@ class FinalGM(GM):
 
         self._graph = inner
     
-    def sample(self, id_node, parent_label):
+    def sample_by_id(self, id_node, parent_label):
         prob_matrix = self._graph.node[id_node]['probs']
 
         a = prob_matrix.index

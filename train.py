@@ -52,13 +52,15 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         td_depth = kwargs['tree_depth']
     
     for j in xrange(kwargs['n_run']):  # run the evolutionary process several times
-        inst = Ardennes()
-        fittest = inst.fit_predict(
-            sets=sets,
+        inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
             max_height=td_depth,
-            inf_thres=0.9,
-            diff=kwargs['diff'],
+            threshold=kwargs['threshold'],
+            uncertainty=kwargs['uncertainty']
+        )
+        
+        fittest = inst.fit_predict(
+            sets=sets,
             verbose=kwargs['verbose']
         )
         
@@ -120,16 +122,17 @@ def main():
     import warnings
     import random
 
-    tree_depth = 7
-    random_state = 2
+    tree_depth = 3  # TODO roll back to 7
+    random_state = 1
     n_folds = 10
     dataset_path = '/home/henryzord/Projects/forrestTemp/datasets/iris.csv'
 
     kwargs = {
         'random_state': None,
-        'n_individuals': 100,
-        'n_run': 1,
-        'diff': 0.01,
+        'n_individuals': 50,
+        'threshold': 0.9,
+        'n_run': 10,
+        'uncertainty': 0.01,
         'n_folds': n_folds,
         'tree_depth': tree_depth,
         'verbose': True
@@ -148,8 +151,8 @@ def main():
 
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(i, df, arg_train, arg_test, **kwargs)
-        # warnings.warn('WARNING: exiting after first fold!')
-        # exit(-1)
+        warnings.warn('WARNING: exiting after first fold!')
+        exit(-1)
         
         # TODO for parallel processing
         # t = threading.Thread(target=run_fold, args=(i, df, arg_train, arg_test, kwargs))
