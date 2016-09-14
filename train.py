@@ -125,7 +125,7 @@ def main():
     tree_depth = 3  # TODO roll back to 7
     random_state = 1
     n_folds = 10
-    dataset_path = '/home/henryzord/Projects/forrestTemp/datasets/iris.csv'
+    dataset_path = 'datasets/iris.csv'
 
     kwargs = {
         'random_state': None,

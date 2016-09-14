@@ -96,13 +96,13 @@ class Individual(object):
                 return {}
             
             # TODO must choose if going for right or left!
-            
-            unique_nodes = Counter(
-                map(
-                    lambda x: eval('*x' + '[%d]' % level),  # + ('[0]' * (level == 0))),
-                    trees
-                )
+            nodes = map(
+                lambda x: eval('x' + '[%d]' % level),  # + ('[0]' * (level == 0))),
+                trees
             )
+            nodes = list(it.chain(*nodes))
+
+            unique_nodes = Counter(nodes)
             # meta = map(lambda x: cls._sampler.__set_node__(node_label=x, subset=current_set), unique_nodes.iterkeys())
             metadata, subset_left, subset_right = vfunc(node_label=unique_nodes.keys(), subset=current_set)
             
@@ -372,8 +372,8 @@ class Individual(object):
         def __set_node__(self, node_label, subset, **kwargs):
             def set_terminal():
                 meta = self.__set_terminal__(subset, Individual.target_attr, **kwargs)
-                subset_left = pd.DataFrame([])
-                subset_right = pd.DataFrame([])
+                subset_left = pd.DataFrame([0.])
+                subset_right = pd.DataFrame([0.])
                 
                 return meta, subset_left, subset_right
             
