@@ -383,8 +383,8 @@ class Individual(object):
         def __set_node__(self, node_label, subset, **kwargs):
             def set_terminal():
                 meta = self.__set_terminal__(subset, Individual.target_attr, **kwargs)
-                subset_left = pd.DataFrame([])
-                subset_right = pd.DataFrame([])
+                subset_left = pd.DataFrame([0.])
+                subset_right = pd.DataFrame([0.])
                 
                 return meta, subset_left, subset_right
             
