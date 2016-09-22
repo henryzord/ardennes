@@ -45,6 +45,12 @@ class Individual(object):
 
     @classmethod
     def __set_class_values__(cls, sets):
+        """
+        Convenient method for setting attributes that are common to all instances from this class.
+        
+        :param sets: Train, test and val sets used for evolutionary process.
+        """
+
         if any(map(lambda x: x is None, [cls.target_attr, cls.target_values, cls.column_types])):
             cls._sets = sets  # type: dict
 
@@ -79,12 +85,11 @@ class Individual(object):
         :return:
         """
         
-        def set_thresholds(current_set, compiled, parents):
+        def set_thresholds(current_set, parents):
             """
             
             :type current_set: pandas.DataFrame
             :param current_set:
-            :param compiled:
             :type parents: list
             :param parents:
             :return:
@@ -92,29 +97,38 @@ class Individual(object):
             
             level = len(parents)
             
+            # if no data is available for this node
             if current_set.empty or level >= max_height:
                 return {}
             
-            # TODO must choose if going for right or left!
+            # TODO annotate probabilities in thresholds!
             
             unique_nodes = Counter(
                 map(
-                    lambda x: eval('*x' + '[%d]' % level),  # + ('[0]' * (level == 0))),
+                    lambda x: eval('x' + '[%d][0]' % level),
                     trees
                 )
             )
-            # meta = map(lambda x: cls._sampler.__set_node__(node_label=x, subset=current_set), unique_nodes.iterkeys())
-            metadata, subset_left, subset_right = vfunc(node_label=unique_nodes.keys(), subset=current_set)
+                
+            metadata = []
+            subset_left = []
+            subset_right = []
+            for i, key in enumerate(unique_nodes.keys()):
+                data = cls._sampler.__set_node__(node_label=key, subset=current_set)
+                metadata.append(data[0])
+                subset_left.append(data[1])
+                subset_right.append(data[2])
             
             dumped = json.dumps(parents)
             
-            compiled = dict()
-            compiled[dumped] = dict(it.izip(
+            thresholds[dumped] = dict(it.izip(
                 unique_nodes.iterkeys(),
                 map(
                     lambda i: {
-                        'threshold': metadata[i]['value'], 'subset_left': subset_left[i], 'subset_right': subset_right[i]
-                        # 'threshold': meta[i][0]['value'], 'subset_left': meta[i][1], 'subset_right': meta[i][2]
+                        'threshold': metadata[i]['value'],
+                        'subset_left': subset_left[i],
+                        'subset_right': subset_right[i],
+                        'probability': unique_nodes.values()[i] / float(sum(unique_nodes.values()))  # TODO optimize!
                     },
                     xrange(len(unique_nodes))
                 )
@@ -122,14 +136,11 @@ class Individual(object):
 
             for i, label in enumerate(unique_nodes.iterkeys()):
                 for some_set in [subset_left[i], subset_right[i]]:
-                # for some_set in [meta[i][1], meta[i][2]]:
-                    compiled = set_thresholds(current_set=some_set, compiled=compiled, parents=parents + [label])
+                    set_thresholds(current_set=some_set, parents=parents + [label])
                 
-            return compiled
-
         cls.__set_class_values__(sets)
-        vfunc = np.vectorize(cls._sampler.__set_node__, excluded=['subset'])
-        thresholds = set_thresholds(sets['train'], compiled=dict(), parents=[])
+        thresholds = dict()
+        set_thresholds(sets['train'], parents=[])
         z = 0
         
     def sample(self, pmf):
