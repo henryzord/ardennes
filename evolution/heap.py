@@ -61,7 +61,6 @@ class Node(object):
         :rtype: int
         :return: The number of nodes in this tree.
         """
-        
         return np.power(2, height + 1) - 1
 
     @staticmethod

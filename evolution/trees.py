@@ -78,6 +78,7 @@ class Individual(object):
     def mash(cls, trees, sets, max_height, **kwargs):
         """
         
+        :type trees: pandas.DataFrame
         :param trees:
         :param sets:
         :param max_height:
@@ -85,63 +86,58 @@ class Individual(object):
         :return:
         """
         
-        def set_thresholds(current_set, parents):
-            """
+        def get_parents(i, l):
+            parent = Node.get_parent(i)
+            if parent is not None:
+                l += [parent]
+                get_parents(parent, l)
+            return l
+        
+        def set_first_node_threshold(current_set):
+            # if no data is available for this node, or it exceeds the maximum height
+            if current_set.empty:
+                return {}
+    
+            first_level = trees.groupby(_first_node)[_first_node].count()
+            _sum = first_level.sum()
+    
+            thresholds[None] = dict()
+
+            left, right = Node.get_left_child(_first_node), Node.get_right_child(_first_node)
+    
+            for key, value in it.izip(first_level.index, first_level.values):
+                _metadata, _subset_left, _subset_right = cls._sampler.__set_node__(node_label=key, subset=current_set)
+        
+                thresholds[None][key] = {
+                    'threshold': _metadata['value'],
+                    'probability': value / float(_sum)
+                }
             
-            :type current_set: pandas.DataFrame
-            :param current_set:
-            :type parents: list
-            :param parents:
-            :return:
-            """
-            
-            level = len(parents)
-            
-            # if no data is available for this node
-            if current_set.empty or level >= max_height:
+                set_thresholds(left, _subset_left, [key], [_first_node])
+                set_thresholds(right, _subset_right, [key], [_first_node])
+        
+        def set_thresholds(id_node, current_set, parents, arg_parents):
+            if current_set.empty or len(parents) > max_height:
                 return {}
             
-            # TODO annotate probabilities in thresholds!
-            
-            unique_nodes = Counter(
-                map(
-                    lambda x: eval('x' + '[%d][0]' % level),
-                    trees
-                )
-            )
-                
-            metadata = []
-            subset_left = []
-            subset_right = []
-            for i, key in enumerate(unique_nodes.keys()):
-                data = cls._sampler.__set_node__(node_label=key, subset=current_set)
-                metadata.append(data[0])
-                subset_left.append(data[1])
-                subset_right.append(data[2])
-            
-            dumped = json.dumps(parents)
-            
-            thresholds[dumped] = dict(it.izip(
-                unique_nodes.iterkeys(),
-                map(
-                    lambda i: {
-                        'threshold': metadata[i]['value'],
-                        'subset_left': subset_left[i],
-                        'subset_right': subset_right[i],
-                        'probability': unique_nodes.values()[i] / float(sum(unique_nodes.values()))  # TODO optimize!
-                    },
-                    xrange(len(unique_nodes))
-                )
-            ))
+            print trees.iloc[trees[arg_parents] == parents]
+            exit(-1)
+    
+            n_level = trees.iloc[trees[arg_parents] == parents].groupby(arg_parents)[id_node].count()  # TODO wrong expression! must fix!
 
+            # TODO must take into consideration the father of each node! currently does not do that!
+            
             for i, label in enumerate(unique_nodes.iterkeys()):
                 for some_set in [subset_left[i], subset_right[i]]:
-                    set_thresholds(current_set=some_set, parents=parents + [label])
-                
+                    set_thresholds(current_set=some_set, parents=parents + [label], arg_parents=arg_parents + [i])
+
+        _first_node = 0
+        _last_node = Node.get_total_nodes(len(trees[_first_node]))
         cls.__set_class_values__(sets)
         thresholds = dict()
-        set_thresholds(sets['train'], parents=[])
-        z = 0
+        set_first_node_threshold(sets['train'])
+        
+        return thresholds
         
     def sample(self, pmf):
         self._tree = self._sampler.sample(pmf)

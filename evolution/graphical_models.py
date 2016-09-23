@@ -23,7 +23,7 @@ class GM(object):
         self._target_attr = GM._target_attr
         self._class_values = GM._class_values
     
-    def sample_by_id(self, id_node, parent_label):
+    def sample_by_id(self, id_node, parent_label, n_sample=1):
         pass
     
     def sample_by_level(self, level, n_sample=1):
@@ -57,12 +57,21 @@ class StartGM(GM):
             return chosen[0]
         return chosen
     
-    def sample_by_id(self, id_node, parent_label):
+    def sample_by_id(self, id_node, parent_label=None, n_sample=1):
+        """
+        
+        :param id_node:
+        :param parent_label: Not used by this function.
+        :param n_sample:
+        :return:
+        """
+        
         depth = Node.get_depth(id_node)
         
         StartGM.max_depth = max(depth, StartGM.max_depth)
-        
-        return self.sample_by_level(depth)
+        node = self.sample_by_level(depth, n_sample=n_sample)
+        return node
+
 
 class FinalGM(GM):
     def __init__(self, pred_attr, target_attr, class_values, population):
@@ -140,7 +149,7 @@ class FinalGM(GM):
 
         self._graph = inner
     
-    def sample_by_id(self, id_node, parent_label):
+    def sample_by_id(self, id_node, parent_label, n_sample=1):
         prob_matrix = self._graph.node[id_node]['probs']
 
         a = prob_matrix.index

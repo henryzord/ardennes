@@ -1,5 +1,7 @@
 from collections import Counter
 
+import operator
+
 from evolution.graphical_models import *
 from evolution.trees import Individual
 import itertools as it
@@ -39,31 +41,33 @@ class Ardennes(object):
         :param sets:
         :return:
         """
+
+        # levels = map(
+        #     lambda (l, n): list(self.group(gm.sample_by_level(level=l, n_sample=n), np.power(2, l))),
+        #     it.izip(
+        #         xrange(self._max_height),
+        #         map(
+        #             lambda i: self._n_individuals * np.power(2, i), xrange(self._max_height)
+        #         )
+        #     )
+        # )
+        # trees = list(it.izip(*levels))
+        # trees = map(lambda x: reduce(operator.add, map(list, x)), trees)
+        # trees = np.array(trees)
+        # some_other_trees = Individual.mash(trees, sets, self._max_height)
         
-        # def sample_below(level, n_upper=0):
-        #     n_sample = np.power(2, level) * n_upper
-        #     nodes = gm.sample_by_level(level, n_sample=n_sample)
-        #     lower_count = Counter(nodes)
-        #
-        #     if level + 1 < self._max_height:
-        #         return vfunc(level+1, lower_count.values())
-        #     return lower_count.items()
+        total_nodes = Node.get_total_nodes(self._max_height)
         
-        levels = map(
-            lambda (l, n): list(self.group(gm.sample_by_level(level=l, n_sample=n), np.power(2, l))),
-            it.izip(
-                xrange(self._max_height),
-                map(
-                    lambda i: self._n_individuals * np.power(2, i), xrange(self._max_height)
-                )
-            )
-        )
+        trees = pd.DataFrame(map(
+            lambda x: map(
+                lambda i: gm.sample_by_id(i),
+                xrange(total_nodes)
+            ),
+            xrange(self._n_individuals)
+        ))
         
-        trees = list(it.izip(*levels))
-        # unique_trees = Counter(trees)
-        some_other_trees = Individual.mash(trees, sets, self._max_height)
-        z = 0
-        
+        metavals = Individual.mash(trees, sets, self._max_height)
+        raise NotImplementedError('implement!')
         # pop = np.array(
         #     map(
         #         lambda x: Individual(
