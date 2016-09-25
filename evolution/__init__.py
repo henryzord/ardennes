@@ -1,90 +1,95 @@
-from collections import Counter
-
-import operator
-
 from evolution.graphical_models import *
 from evolution.trees import Individual
-import itertools as it
+from treelib.eda import AbstractEDA
 
 __author__ = 'Henry Cagnini'
 
 
-class Ardennes(object):
-    def __init__(self, n_individuals, max_height, n_iterations=100, threshold=0.9, uncertainty=0.01):
-        self._n_individuals = n_individuals
-        self._max_height = max_height
-        self._n_iterations = n_iterations
-        self._threshold = threshold
-        self._uncertainty = uncertainty
+class Ardennes(AbstractEDA):
+    pred_attr = None
+    target_attr = None
+    class_labels = None
 
-    @staticmethod
-    def group(lst, n):
-        """
-        Groups objects in a list into n-tuples.
-        
-        :param lst: A list.
-        :param n: Size of the tuple.
-        :return: Objects from the list grouped into n-tuples.
-        """
-        for i in range(0, len(lst), n):
-            val = lst[i:i + n]
-            if len(val) == n:
-                yield tuple(val)
-                # yield val
-    
-    def init_population(self, n_individuals, gm, sets):
-        """
-        
-        :param n_individuals:
-        :type gm: evolution.graphical_models.StartGM
-        :param gm:
-        :param sets:
-        :return:
-        """
+    def fit_predict(self, verbose=True, **kwargs):
+        if 'sets' not in kwargs or not all(map(lambda x: x in kwargs['sets'], ['train', 'val'])):  # TODO optimize!
+            raise KeyError('You need to pass train and val sets to this method!')
+        else:
+            sets = kwargs['sets']
 
-        # levels = map(
-        #     lambda (l, n): list(self.group(gm.sample_by_level(level=l, n_sample=n), np.power(2, l))),
-        #     it.izip(
-        #         xrange(self._max_height),
-        #         map(
-        #             lambda i: self._n_individuals * np.power(2, i), xrange(self._max_height)
-        #         )
-        #     )
-        # )
-        # trees = list(it.izip(*levels))
-        # trees = map(lambda x: reduce(operator.add, map(list, x)), trees)
-        # trees = np.array(trees)
-        # some_other_trees = Individual.mash(trees, sets, self._max_height)
-        
-        total_nodes = Node.get_total_nodes(self._max_height)
-        
-        trees = pd.DataFrame(map(
-            lambda x: map(
-                lambda i: gm.sample_by_id(i),
-                xrange(total_nodes)
-            ),
-            xrange(self._n_individuals)
-        ))
-        
-        metavals = Individual.mash(trees, sets, self._max_height)
+        class_values = {
+            'pred_attr': sets['train'].columns[:-1],
+            'target_attr': sets['train'].columns[-1],
+            'class_labels': sets['train'][sets['train'].columns[-1]].unique()
+        }
+
+        self.__class__.set_values(**class_values)
+        gm = GraphicalModel(**class_values)
+
+        population = self.init_population(
+            n_individuals=self.n_individuals,
+            gm=gm,
+            sets=sets
+        )
+
         raise NotImplementedError('implement!')
-        # pop = np.array(
-        #     map(
-        #         lambda x: Individual(
-        #             initial_pmf=gm,
-        #             sets=sets,
-        #             id=x
-        #         ),
-        #         xrange(n_individuals)
-        #     )
-        # )
-        # return pop
+
+        # TODO update!
+        fitness = np.array(map(lambda x: x.fitness, population))
+
+        # threshold where individuals will be picked for PMF updating/replacing
+        integer_threshold = int(self._threshold * self._n_individuals)
+
+        iteration = 0
+        while iteration < self._n_iterations:  # evolutionary process
+            mean = np.mean(fitness)  # type: float
+            median = np.median(fitness)  # type: float
+            _max = np.max(fitness)  # type: float
+
+            if verbose:
+                print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (iteration, mean, median, _max)
+
+            # TODO slow. test other implementation!
+            borderline = np.partition(fitness, integer_threshold)[integer_threshold]
+            fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
+
+            gm.update(fittest_pop)
+
+            # warnings.warn('WARNIGN: Plotting gm!')
+            # gm.plot()
+            # plt.show()
+
+            # warnings.warn('WARNING: Plotting fittest population!')
+            # map(lambda x: x.plot(), fittest_pop)
+            # plt.show()
+
+            to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
+            for ind in to_replace:
+                ind.sample_by_id(gm)
+
+            if self.early_stop(gm, self._uncertainty):
+                break
+
+            fitness = np.array(map(lambda x: x.fitness, population))
+
+            iteration += 1
+
+        fittest_ind = population[np.argmax(fitness)]
+        return fittest_ind
+
+    def init_population(self, n_individuals, gm, sets):
+        vfunc = np.vectorize(Individual)
+
+        individuals = vfunc()
+
+        population = pd.DataFrame(individuals, columns=['individual'], dtype=np.object)
+
+        z = 0
     
     @staticmethod
     def early_stop(gm, diff=0.01):
         """
 
-        :type gm: FinalGM
+        :type gm: FinalAbstractGraphicalModel
         :param gm: The Probabilistic Graphical Model (GM) for the current generation.
         :type diff: float
         :param diff: Maximum allowed uncertainty for each probability, for each node.
@@ -113,66 +118,3 @@ class Ardennes(object):
         if maximum_prob < diff:
             return True
         return False
-    
-    def fit_predict(self, sets, verbose=True):
-        pred_attr = sets['train'].columns[:-1]
-        target_attr = sets['train'].columns[-1]
-        class_values = sets['train'][sets['train'].columns[-1]].unique()
-        
-        # pmf only for initializing the population
-        gm = StartGM(
-            pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, max_height=self._max_height
-        )
-        
-        population = self.init_population(
-            n_individuals=self._n_individuals,
-            gm=gm,
-            sets=sets
-        )
-        
-        heights = map(lambda x: x.height, population)
-        
-        # changes the pmf to a final one
-        gm = FinalGM(pred_attr=pred_attr, target_attr=target_attr, class_values=class_values, population=population)
-        
-        fitness = np.array(map(lambda x: x.fitness, population))
-        
-        # threshold where individuals will be picked for PMF updating/replacing
-        integer_threshold = int(self._threshold * self._n_individuals)
-        
-        iteration = 0
-        while iteration < self._n_iterations:  # evolutionary process
-            mean = np.mean(fitness)  # type: float
-            median = np.median(fitness)  # type: float
-            _max = np.max(fitness)  # type: float
-            
-            if verbose:
-                print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (iteration, mean, median, _max)
-            
-            # TODO slow. test other implementation!
-            borderline = np.partition(fitness, integer_threshold)[integer_threshold]
-            fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
-            
-            gm.update(fittest_pop)
-            
-            # warnings.warn('WARNIGN: Plotting gm!')
-            # gm.plot()
-            # plt.show()
-            
-            # warnings.warn('WARNING: Plotting fittest population!')
-            # map(lambda x: x.plot(), fittest_pop)
-            # plt.show()
-            
-            to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
-            for ind in to_replace:
-                ind.sample_by_id(gm)
-            
-            if self.early_stop(gm, self._uncertainty):
-                break
-            
-            fitness = np.array(map(lambda x: x.fitness, population))
-            
-            iteration += 1
-        
-        fittest_ind = population[np.argmax(fitness)]
-        return fittest_ind

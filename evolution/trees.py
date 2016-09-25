@@ -9,39 +9,20 @@ import itertools as it
 
 from heap import Node
 
+from treelib.setter import SetterClass
+
 __author__ = 'Henry Cagnini'
 
 
-class Individual(object):
+class Individual(SetterClass):
     target_attr = None  # type: str
     target_values = None  # type: list
     column_types = None  # type: dict
     _sets = None  # type: dict
     _sampler = None  # type: Individual.Sampler
 
-    def __init__(self, initial_pmf, sets, **kwargs):
-        """
-        
-        :param id: ID of the individual. For debugging purposes.
-        :param initial_pmf:
-        :param sets:
-        """
-
-        if 'id' in kwargs:
-            self._id = kwargs['id']
-
-        # common values to any Individual
-        Individual.__set_class_values__(sets)
-
-        # only for pycharm variable resolving; won't result in error if removed
-        self.__set_instance_values__()
-
-        self._tree = None  # type: nx.DiGraph
-
-        self._val_acc = 0.  # type: float
-
-        self.sample(initial_pmf)
-        self._height = self.__get_height__()
+    def __init__(self, gm, sets, **kwargs):
+        pass
 
     @classmethod
     def __set_class_values__(cls, sets):

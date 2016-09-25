@@ -44,18 +44,11 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
     val_set = x_val.join(y_val)  # type: pd.DataFrame
     
     sets = {'train': train_set, 'val': val_set, 'test': test_set}
-    
-    # runs top-down inference algorithm
-    if kwargs['tree_depth'] is None:
-        td_depth = j48(train_set)
-    else:
-        td_depth = kwargs['tree_depth']
-    
-    for j in xrange(kwargs['n_run']):  # run the evolutionary process several times
+
+    for j in xrange(kwargs['n_runs']):  # run the evolutionary process several times
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
-            max_height=td_depth,
-            threshold=kwargs['threshold'],
+            threshold=kwargs['decile'],
             uncertainty=kwargs['uncertainty']
         )
         
@@ -122,20 +115,19 @@ def main():
     import warnings
     import random
 
-    tree_depth = 3  # TODO roll back to 7
     random_state = 1
     n_folds = 10
+    n_runs = 10
     dataset_path = 'datasets/iris.csv'
 
     kwargs = {
-        'random_state': None,
         'n_individuals': 50,
-        'threshold': 0.9,
-        'n_run': 10,
+        'decile': 0.9,
         'uncertainty': 0.01,
+        'verbose': True,
         'n_folds': n_folds,
-        'tree_depth': tree_depth,
-        'verbose': True
+        'n_runs': n_runs,
+        'random_state': random_state
     }
 
     if random_state is not None:
@@ -143,14 +135,11 @@ def main():
         
         random.seed(random_state)
         np.random.seed(random_state)
-    
-    if tree_depth is not None:
-        warnings.warn('WARNING: hard-coded size of tree!')
-    
+
     df, folds = get_dataset(dataset_path, n_folds=n_folds)  # csv-stored datasets
 
     for i, (arg_train, arg_test) in enumerate(folds):
-        run_fold(i, df, arg_train, arg_test, **kwargs)
+        run_fold(fold=i, df=df, arg_train=arg_train, arg_test=arg_test, **kwargs)
         warnings.warn('WARNING: exiting after first fold!')
         exit(-1)
         
