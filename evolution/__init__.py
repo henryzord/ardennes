@@ -1,6 +1,6 @@
-from evolution.graphical_models import *
 from evolution.trees import Individual
 from treelib.eda import AbstractEDA
+from treelib.graphical_models import *
 
 __author__ = 'Henry Cagnini'
 
@@ -17,17 +17,17 @@ class Ardennes(AbstractEDA):
             sets = kwargs['sets']
 
         class_values = {
-            'pred_attr': sets['train'].columns[:-1],
+            'pred_attr': list(sets['train'].columns[:-1]),
             'target_attr': sets['train'].columns[-1],
-            'class_labels': sets['train'][sets['train'].columns[-1]].unique()
+            'class_labels': list(sets['train'][sets['train'].columns[-1]].unique())
         }
 
-        self.__class__.set_values(**class_values)
+        self.__class__.set_class_values(**class_values)
         gm = GraphicalModel(**class_values)
 
         population = self.init_population(
             n_individuals=self.n_individuals,
-            gm=gm,
+            graphical_model=gm,
             sets=sets
         )
 
@@ -75,13 +75,13 @@ class Ardennes(AbstractEDA):
 
         fittest_ind = population[np.argmax(fitness)]
         return fittest_ind
+    
+    def init_population(self, n_individuals, graphical_model, sets):
+        raw_pop = map(lambda i: Individual(id=i, graphical_model=graphical_model, sets=sets), xrange(n_individuals))
 
-    def init_population(self, n_individuals, gm, sets):
-        vfunc = np.vectorize(Individual)
-
-        individuals = vfunc()
-
-        population = pd.DataFrame(individuals, columns=['individual'], dtype=np.object)
+        z = 0
+        
+        population = pd.DataFrame(raw_pop, columns=['individual'], dtype=np.object)
 
         z = 0
     

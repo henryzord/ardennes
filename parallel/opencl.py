@@ -21,7 +21,7 @@ def main():
 
     code = open('./kernel.cl', 'r').read()
 
-    prg = cl.Program(ctx, code).build()
+    prg = cl.Program(ctx, code).sample()
 
     res_g = cl.Buffer(ctx, mf.WRITE_ONLY, a_np.nbytes)
     prg.sum(queue, a_np.shape, None, a_g, b_g, res_g)

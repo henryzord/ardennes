@@ -3,13 +3,6 @@
 __author__ = 'Henry Cagnini'
 
 
-class Tensor(dict):
-    pass
-
-    def build(self):
-        pass
-
-
 class Node(object):
     _root = 0
 

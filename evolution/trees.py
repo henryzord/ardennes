@@ -9,7 +9,7 @@ import itertools as it
 
 from heap import Node
 
-from treelib.setter import SetterClass
+from treelib.utils import SetterClass
 
 __author__ = 'Henry Cagnini'
 
@@ -20,9 +20,11 @@ class Individual(SetterClass):
     column_types = None  # type: dict
     _sets = None  # type: dict
     _sampler = None  # type: Individual.Sampler
-
-    def __init__(self, gm, sets, **kwargs):
-        pass
+    
+    def __init__(self, graphical_model, sets, **kwargs):
+        super(Individual, self).__init__(**kwargs)
+        
+        z = graphical_model.sample()
 
     @classmethod
     def __set_class_values__(cls, sets):

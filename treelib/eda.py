@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from setter import SetterClass
+from utils import SetterClass
 
 __author__ = 'Henry Cagnini'
 
