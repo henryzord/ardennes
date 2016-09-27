@@ -1,6 +1,7 @@
-from evolution.trees import Individual
+from evolution.individual import Individual
 from treelib.eda import AbstractEDA
 from treelib.graphical_models import *
+import pandas as pd
 
 __author__ = 'Henry Cagnini'
 
@@ -78,12 +79,8 @@ class Ardennes(AbstractEDA):
     
     def init_population(self, n_individuals, graphical_model, sets):
         raw_pop = map(lambda i: Individual(id=i, graphical_model=graphical_model, sets=sets), xrange(n_individuals))
-
-        z = 0
-        
         population = pd.DataFrame(raw_pop, columns=['individual'], dtype=np.object)
-
-        z = 0
+        return population
     
     @staticmethod
     def early_stop(gm, diff=0.01):

@@ -1,5 +1,4 @@
 from treelib.utils import SetterClass, Session
-import pandas as pd
 import numpy as np
 
 __author__ = 'Henry Cagnini'
@@ -50,7 +49,7 @@ class Tensor(SetterClass):
         if len(self.parents) == 0:
             p = self.weights
         else:
-            axis = [str(self.reverse_values[session[p]]) for p in self.parents]
+            axis = [str(self.global_gms[self.gm_id][p].reverse_values[session[p]]) for p in self.parents]
             coords = ','.join(axis)
             p = eval('self.weights[%s]' % coords)
         
@@ -59,19 +58,25 @@ class Tensor(SetterClass):
         return value
             
 
-class AbstractGraphicalModel(SetterClass):
+class AbstractTree(object):
     pred_attr = None
     target_attr = None
     class_labels = None
     
     def __init__(self, **kwargs):
-        super(AbstractGraphicalModel, self).__init__(**kwargs)
+        attrs = ['pred_attr', 'target_attr', 'class_labels']
+        
+        for k in attrs:
+            if k in kwargs and getattr(self.__class__.__base__, k) is None:
+                setattr(self.__class__.__base__, k, kwargs[k])
+            else:
+                setattr(self, k, getattr(self.__class__.__base__, k))
 
     def plot(self):
         pass
 
 
-class GraphicalModel(AbstractGraphicalModel):
+class GraphicalModel(AbstractTree):
     """
         A graphical model is a tree itself.
     """
@@ -95,15 +100,19 @@ class GraphicalModel(AbstractGraphicalModel):
         :rtype: list
         :return: A list of 3 tensors.
         """
-        values = self.pred_attr + [self.target_attr]
+        # TODO enhance to perform any kind of initialization!
         
         tensors = [
-            Tensor(0, values, gm_id=self.gm_id),
-            Tensor(1, values, [0], gm_id=self.gm_id),
-            Tensor(2, values, [0, 1], gm_id=self.gm_id)
+            Tensor(0, self.pred_attr, gm_id=self.gm_id),
+            Tensor(1, [self.target_attr], [0], gm_id=self.gm_id),
+            Tensor(2, [self.target_attr], [0, 1], gm_id=self.gm_id)
         ]
         
         return tensors
+
+    def update(self):
+        # TODO must suffer possibility to mutate!
+        pass
 
     def sample(self):
         sess = Session()
@@ -111,6 +120,4 @@ class GraphicalModel(AbstractGraphicalModel):
         for tensor in self.tensors:
             tensor.sample(sess)
         
-        # TODO must suffer possibility to mutate!
-        
-        raise NotImplementedError('not implemented yet!')
+        return sess
