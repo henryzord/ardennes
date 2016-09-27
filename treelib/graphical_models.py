@@ -1,5 +1,6 @@
-from treelib.utils import SetterClass, Session
 import numpy as np
+
+from treelib.classes import SetterClass, Session, AbstractTree
 
 __author__ = 'Henry Cagnini'
 
@@ -20,20 +21,25 @@ class Tensor(SetterClass):
         self.name = name
         self.parents = parents if parents is not None else []
         self.values = values
+        
         self.reverse_values = {k: i for i, k in enumerate(values)}
         
         self.weights = self.__init_probabilities__(values, probability)
 
         self.__class__.global_gms[gm_id][name] = self
         
+    @property
+    def n_values(self):
+        return len(self.values)
+        
     def __init_probabilities__(self, values, probability='uniform'):
-        n_values = len(values)
-        n_parents = len(self.parents)
+        n_self_values = len(values)
         
         if probability == 'uniform':
-            # TODO tuple with self.parents or 1 positions and values values for each!
-            shape = tuple([n_values for i in xrange(n_parents + 1)])
-            weights = np.zeros(shape=shape) + 1./n_values
+            shape = tuple([self.global_gms[self.gm_id][p].n_values for p in self.parents])
+            if len(shape) == 0:
+                shape = (self.n_values, )
+            weights = np.zeros(shape=shape) + 1./n_self_values
             return weights
         elif isinstance(probability, list):
             if len(probability) != len(values):
@@ -49,31 +55,16 @@ class Tensor(SetterClass):
         if len(self.parents) == 0:
             p = self.weights
         else:
-            axis = [str(self.global_gms[self.gm_id][p].reverse_values[session[p]]) for p in self.parents]
+            axis = [
+                str(self.global_gms[self.gm_id][p].reverse_values[session[p]]) for p in self.parents
+                ]
             coords = ','.join(axis)
             p = eval('self.weights[%s]' % coords)
-        
+            p = [p] if not isinstance(p, list) else p
+
         value = np.random.choice(a=self.values, p=p)  # weights has the same order than values
         session[self.name] = value
         return value
-            
-
-class AbstractTree(object):
-    pred_attr = None
-    target_attr = None
-    class_labels = None
-    
-    def __init__(self, **kwargs):
-        attrs = ['pred_attr', 'target_attr', 'class_labels']
-        
-        for k in attrs:
-            if k in kwargs and getattr(self.__class__.__base__, k) is None:
-                setattr(self.__class__.__base__, k, kwargs[k])
-            else:
-                setattr(self, k, getattr(self.__class__.__base__, k))
-
-    def plot(self):
-        pass
 
 
 class GraphicalModel(AbstractTree):
@@ -110,7 +101,8 @@ class GraphicalModel(AbstractTree):
         
         return tensors
 
-    def update(self):
+    def update(self, fittest):
+        raise NotImplementedError('TODO implement!')
         # TODO must suffer possibility to mutate!
         pass
 

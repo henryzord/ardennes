@@ -10,7 +10,7 @@ import itertools as it
 from heap import Node
 from treelib.graphical_models import AbstractTree
 
-from treelib.utils import SetterClass
+from treelib.classes import SetterClass, AbstractTree
 
 __author__ = 'Henry Cagnini'
 
@@ -46,7 +46,7 @@ class Individual(AbstractTree):
         self.sample(graphical_model, sets)
 
     def __str__(self):
-        return 'fitness: %0.2f' % self._val_acc
+        return 'fitness: %0.2f' % self.val_acc
 
     def plot(self):
         """
@@ -102,7 +102,7 @@ class Individual(AbstractTree):
         :rtype: float
         :return: Fitness of this individual.
         """
-        return self._val_acc
+        return self.val_acc
 
     # ############################ #
     # sampling and related methods #
