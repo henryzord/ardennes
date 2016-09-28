@@ -1,7 +1,7 @@
-from evolution.individual import Individual
+# coding=utf-8
+
 from treelib.classes import AbstractEDA
 from treelib.graphical_models import *
-import pandas as pd
 
 __author__ = 'Henry Cagnini'
 

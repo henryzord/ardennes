@@ -44,7 +44,7 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
     val_set = x_val.join(y_val)  # type: pd.DataFrame
     
     sets = {'train': train_set, 'val': val_set, 'test': test_set}
-
+    
     for j in xrange(kwargs['n_runs']):  # run the evolutionary process several times
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
@@ -68,25 +68,25 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
 def j48(train_set):
     """
     Uses J48 algorithm from Weka to get the maximum height of a 100% accuracy decision tree.
-    
+
     :type train_set: pandas.DataFrame
     :param train_set:
     :return:
     """
-
+    
     import math
     import StringIO
     import weka.core.jvm as jvm
     from weka.classifiers import Classifier
     from weka.core.converters import Loader
-
+    
     filepath = 'dataset_temp.csv'
     
     train_set.to_csv(filepath, sep=',', quotechar='\"', encoding='utf-8', index=False)
     
     try:
         jvm.start()
-    
+        
         loader = Loader(classname='weka.core.converters.CSVLoader')
         data = loader.load_file(filepath)
         data.class_is_last()  # set class as the last attribute
@@ -98,28 +98,28 @@ def j48(train_set):
         cls = Classifier(classname="weka.classifiers.trees.J48", options=['-U', '-B', '-M', '1'])
         cls.build_classifier(data)
         graph = cls.graph.encode('ascii')
-
+        
         out = StringIO.StringIO(graph)
         G = nx.Graph(nx.nx_pydot.read_dot(out))
         n_nodes = G.number_of_nodes()
         height = math.ceil(np.log2(n_nodes + 1))
-
+        
         return height
     except RuntimeError as e:
         jvm.stop()
         os.remove(filepath)
         raise e
-    
+
 
 def main():
     import warnings
     import random
-
+    
     random_state = 1
     n_folds = 10
     n_runs = 10
     dataset_path = 'datasets/iris.csv'
-
+    
     kwargs = {
         'n_individuals': 50,
         'decile': 0.9,
@@ -129,15 +129,15 @@ def main():
         'n_runs': n_runs,
         'random_state': random_state
     }
-
+    
     if random_state is not None:
         warnings.warn('WARNING: deterministic approach!')
         
         random.seed(random_state)
         np.random.seed(random_state)
-
+    
     df, folds = get_dataset(dataset_path, n_folds=n_folds)  # csv-stored datasets
-
+    
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(fold=i, df=df, arg_train=arg_train, arg_test=arg_test, **kwargs)
         warnings.warn('WARNING: exiting after first fold!')
@@ -147,7 +147,8 @@ def main():
         # t = threading.Thread(target=run_fold, args=(i, df, arg_train, arg_test, kwargs))
         # t.daemon = True
         # t.start()
-    
+
+
 # plt.show()
 
 

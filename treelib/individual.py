@@ -1,27 +1,23 @@
 # coding=utf-8
-import json
 
-import numpy as np
 from collections import Counter
+
 import networkx as nx
+import numpy as np
 import pandas as pd
 import itertools as it
 
-from heap import Node
-from treelib.graphical_models import AbstractTree
-
-from treelib.classes import SetterClass, AbstractTree
+from evolution.heap import Node
+from treelib.classes import AbstractTree
 
 __author__ = 'Henry Cagnini'
 
 
 class Individual(AbstractTree):
-    # target_attr = None  # type: str
-    # target_labels = None  # type: list
     column_types = None  # type: dict
     sets = None  # type: dict
-    tree = None
-    val_acc = None
+    tree = None  # type: nx.DiGraph
+    val_acc = None  # type: float
     
     def __init__(self, graphical_model, sets, **kwargs):
         """
@@ -111,10 +107,20 @@ class Individual(AbstractTree):
     def sample(self, graphical_model, sets):
         sess = graphical_model.sample()
 
-        self.tree = self.__set_thresholds__(sess, sets['train'])
+        self.tree = self.__set_thresholds__(sess, sets['train'])  # type: nx.DiGraph
         self.val_acc = self.__validate__(self.sets['val'])
 
     def __set_thresholds__(self, sess, train_set):
+        """
+        
+        :type sess: dict of float
+        :param sess:
+        :type train_set: pandas.DataFrame
+        :param train_set:
+        :rtype: networkx.DiGraph
+        :return:
+        """
+
         tree = nx.DiGraph()
     
         subset = train_set
@@ -133,7 +139,7 @@ class Individual(AbstractTree):
         # definition of inline methods #
         # ############################ #
         
-        def node_attr(subset, target_attr):
+        def terminal_node_dict(subset, target_attr):
             meta = self.__set_terminal__(target_attr, subset)
         
             attr_dict = {
@@ -149,6 +155,7 @@ class Individual(AbstractTree):
         def twin_nodes(tree, id_left, id_right):
             """
             Checks if two children nodes have the same class.
+            
             :type tree: networkx.DiGraph
             :param tree: A DiGraph object representing a binary tree.
             :param id_left: ID of the left child.
@@ -156,7 +163,7 @@ class Individual(AbstractTree):
             :return: Whether right and left children are twins.
             """
             return tree.node[id_left]['label'] == tree.node[id_right]['label'] and \
-                   tree.node[id_left]['label'] in Individual.target_labels
+                   tree.node[id_left]['label'] in Individual.class_labels
     
         # ##################### #
         # end of inline methods #
@@ -171,41 +178,48 @@ class Individual(AbstractTree):
                 subset=subset,
                 sess=sess
             )
-            id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
-        
-            try:  # if one of the subsets is empty, then the node is terminal
-                for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
-                    tree = self.__set_node_threshold__(
-                        sess=sess,
-                        tree=tree,
-                        subset=child_subset,
-                        variable_name=id_child,
-                        parent_name=variable_name
-                    )
+            _node_attr = {
+                'label': sess[variable_name],
+                'color': '#FFFFFF' if variable_name == Node.name_root else '#AEEAFF',
+                'threshold': meta['value'],
+            }
             
-                if twin_nodes(tree, id_left, id_right):
-                    tree.remove_node(id_left)
-                    tree.remove_node(id_right)
-                
-                    _node_attr = node_attr(subset, Individual.target_attr)
-                else:
-                    tree.add_edge(variable_name, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
-                    tree.add_edge(variable_name, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
-                
-                    _node_attr = {
-                        'label': variable_name,
-                        'color': '#FFFFFF' if variable_name == Node.root else '#AEEAFF',
-                        'terminal': False,
-                        'threshold': meta['value'],
-                        'left': id_left,
-                        'right': id_right
-                    }
-            except ValueError as ve:
-                _node_attr = node_attr(subset, Individual.target_attr)
+            if sess[variable_name] != Individual.target_attr:
+                try:  # if one of the subsets is empty, then the node is terminal
+                    id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
+                    
+                    for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+                        tree = self.__set_node_threshold__(
+                            sess=sess,
+                            tree=tree,
+                            subset=child_subset,
+                            variable_name=id_child,
+                            parent_name=variable_name
+                        )
+    
+                    if twin_nodes(tree, id_left, id_right):
+                        tree.remove_node(id_left)
+                        tree.remove_node(id_right)
+                        _node_attr = terminal_node_dict(subset, Individual.target_attr)
+                    else:
+                        tree.add_edge(variable_name, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
+                        tree.add_edge(variable_name, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
+    
+                        _node_attr = {
+                            'label': sess[variable_name],
+                            'color': '#FFFFFF' if variable_name == Node.name_root else '#AEEAFF',
+                            'terminal': False,
+                            'threshold': meta['value'],
+                            'left': id_left,
+                            'right': id_right
+                        }
+                except ValueError as ve:
+                    _node_attr = terminal_node_dict(subset, Individual.target_attr)
         except ValueError as ve:
-            _node_attr = node_attr(subset, Individual.target_attr)
+            _node_attr = terminal_node_dict(subset, Individual.target_attr)
     
         tree.add_node(variable_name, attr_dict=_node_attr)
+        # tree.add_edge(parent_name, variable_name)
         return tree
         
     @staticmethod
@@ -224,13 +238,18 @@ class Individual(AbstractTree):
     def __val_func__(self, obj):
         arg_node = 0
 
-        node = self.tree.node[arg_node]
-        while not node['terminal']:
-            go_left = obj[node['label']] < node['threshold']
-            arg_node = (int(go_left) * node['left']) + (int(not go_left) * node['right'])
-            node = self.tree.node[arg_node]
+        tree = self.tree  # type: nx.DiGraph
 
-        return obj[-1] == node['label']
+        node = self.tree.node[arg_node]
+        successors = tree.successors(arg_node)
+        
+        while len(successors) > 0:
+            go_left = obj[node['label']] < node['threshold']
+            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
+            successors = tree.successors(arg_node)
+            node = tree.node[arg_node]
+
+        return obj[-1] == node['threshold']
 
     def __validate__(self, test_set):
         """
@@ -254,7 +273,7 @@ class Individual(AbstractTree):
             
             return meta, subset_left, subset_right
         
-        if variable_name != Individual.target_attr:
+        if sess[variable_name] != Individual.target_attr:
             attr_type = Individual.column_types[sess[variable_name]]
             try:
                 out = self.attr_handler_dict[attr_type](self, sess[variable_name], subset, **kwargs)

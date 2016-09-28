@@ -25,12 +25,3 @@ class Node(object):
     @property
     def is_root(self):
         return self.arg == self.__class__._root
-
-
-class TreeNode(Node):
-    tensor = None
-
-    def __init__(self, tensor, **kwargs):
-        super(TreeNode, self).__init__(**kwargs)
-
-        self.tensor = tensor

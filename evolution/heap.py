@@ -12,7 +12,7 @@ class Node(object):
     _root = 0
     
     @property
-    def root(self):
+    def name_root(self):
         return self._root
     
     @staticmethod
