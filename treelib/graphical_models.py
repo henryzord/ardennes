@@ -23,7 +23,7 @@ class Tensor(SetterClass):
         
         if name in self.__class__.global_gms[gm_id]:
             raise KeyError('Variable is already defined for this scope!')  # name is also an axis
-                
+        
         self.gm_id = gm_id  # type: float
         self.name = name  # type: int
         self.parents = parents if parents is not None else []
@@ -32,29 +32,29 @@ class Tensor(SetterClass):
         # self.reverse_values = {k: i for i, k in enumerate(values)}  # type: dict of str
         
         self.weights = self.__init_probabilities__(values, probability)  # type: np.ndarray
-
+        
         self.__class__.global_gms[gm_id][name] = self
-            
+    
+    @property
+    def n_parents(self):
+        return len(self.parents)
+    
     @property
     def n_values(self):
         return len(self.values)
-        
+    
     def __init_probabilities__(self, values, probability='uniform'):
         if probability == 'uniform':
-            shape = [self.n_values] + [self.global_gms[self.gm_id][p].n_values for p in self.parents]
-            if len(shape) == 0:
-                shape = [self.n_values]
+            vec_vals = [self.values] + [self.global_gms[self.gm_id][p].values for p in self.parents]
             
-            n_lines = reduce(op.mul, shape)
-            
-            # TODO error here! in the dimensions!
-            raise IndexError('error here!')
+            combs = list(it.product(*vec_vals))
+            columns = [self.name] + [self.global_gms[self.gm_id][p].name for p in self.parents]
             
             df = pd.DataFrame(
-                data=np.zeros(shape=(n_lines, max(len(self.parents), 1)), dtype=np.float32) + 1./n_lines,
-                index=np.repeat(self.values, max(len(self.parents), 1)),  # TODO possible error here!
-                columns=[self.name] + self.parents
+                data=combs,
+                columns=columns
             )
+            df['probability'] = 1. / df.shape[0]  # TODO maybe is wrong! must be conditional to the parent!
             return df
         elif isinstance(probability, list):
             if len(probability) != len(values):
@@ -64,21 +64,26 @@ class Tensor(SetterClass):
                 raise NotImplementedError('not implemented yet!')
         else:
             raise TypeError('probability must be either a string or a list!')
-            
+    
     def sample(self, session):
         if self.name in session:
             raise KeyError('value already sampled in this session!')
-        if len(self.parents) == 0:
-            p = self.weights
+        if len(self.parents) == 0:  # TODO now must calculate conditional probabilities!
+            p = self.weights['probability']
+            a = self.weights[self.name]
         else:
-            axis = [
-                str(self.global_gms[self.gm_id][p].reverse_values[session[p]]) for p in self.parents
-                ]
-            coords = ','.join(axis)
-            p = eval('self.weights[%s]' % coords)
-            p = [p] if not isinstance(p, list) else p
+            grouped = self.weights.copy()  # type: pd.DataFrame
+            for p in self.parents:
+                grouped = grouped.loc[grouped[p] == session[p]]
+            
+            _sum = grouped['probability'].sum()
+            
+            grouped['probability'] = grouped['probability'].apply(lambda x: x / _sum)
 
-        value = np.random.choice(a=self.values, p=p)  # weights has the same order than values
+            a = grouped[self.name]
+            p = grouped['probability']
+        
+        value = np.random.choice(a=a, p=p)  # weights has the same order than values
         session[self.name] = value
         return value
 
@@ -87,9 +92,9 @@ class GraphicalModel(AbstractTree):
     """
         A graphical model is a tree itself.
     """
-
+    
     tensors = None  # tensor is a dependency graph
-
+    
     def __init__(self, pattern=None, gm_id=0, **kwargs):
         super(GraphicalModel, self).__init__(**kwargs)
         
@@ -99,7 +104,7 @@ class GraphicalModel(AbstractTree):
             self.tensors = self.__init_tensor__()
         else:
             raise NotImplementedError('not implemented yet!')
-        
+    
     def __init_tensor__(self):
         """
         Initializes a simple 3 nodes tree.
@@ -116,7 +121,7 @@ class GraphicalModel(AbstractTree):
         ]
         
         return tensors
-
+    
     def update(self, fittest):
         """
         
@@ -125,53 +130,40 @@ class GraphicalModel(AbstractTree):
         :return:
         """
         
-        to_update = [0]
-        for current_node in to_update:
-            tensor = self.tensors[current_node]
-            
-            to_update.remove(current_node)
-            to_update += fittest[0].tree.successors(current_node)
-            
-            current_parents = tensor.parents
-            
-            married_values = []
-            for fit in fittest:
-                married_values += [[fit.tree.node[x]['label'] for x in current_parents + [current_node]]]  # TODO must now pick reversed values!!!
-            z = 0
+        n_fittest = float(len(fittest))
         
-        # to_update = [0]
-        # for current_node in to_update:  # current_node will update a tensor on its own
-        #     to_update.remove(current_node)
-        #     successors = fittest[0].tree.successors(current_node)
-        #     to_update.extend(successors)
-        #
-        #     labels = map(lambda x: x.tree.node[current_node]['label'], fittest)
-        #     count = Counter(labels)
-        #     _sum = sum(count.values())
-        #
-        #     tensor = self.tensors[current_node]
-        #     print tensor.weights
-        #     if len(tensor.parents) > 0:
-        #         parents = tensor.parents
-        #         self_values = ([tensor.values] if isinstance(tensor.values, list) else [[tensor.values]])
-        #         all_vals = [self.tensors[parent].values for parent in parents] + self_values
-        #         all_combinations = list(it.product(*all_vals))
-        #
-        #         tensor.weights[]
-        #
-        #         z = 0
-        #         # TODO update accordingly to the parents!!!
-        #     else:
-        #         for k, v in count.iteritems():
-        #             tensor.weights[tensor.reverse_values[k]] = v / float(_sum)  # TODO must pick parents for other nodes!!!
-        #             self.tensors[current_node] = tensor
-        #         print tensor.weights
-        #         z = 0
-                
-        raise NotImplementedError('TODO implement!')
-        # TODO must suffer possibility to mutate!
-        pass
+        for i, tensor in enumerate(self.tensors):
+            parents = tensor.parents
+            order = [tensor.name] + parents
+        
+            all_vec = []
+            for fit in fittest:
+                vec = map(
+                    lambda x: fit.tree.node[x]['label'],
+                    order
+                )
+                all_vec += [tuple(vec)]
 
+            count = Counter(all_vec)
+            weights = tensor.weights  # type: pd.DataFrame
+            weights['probability'] = 0.
+            
+            for comb, n_occur in count.iteritems():
+                click = it.izip(order, comb)
+                _slice = weights  # type: pd.DataFrame
+                for var_name, value in click:
+                    _slice = weights.loc[weights[var_name] == value]
+                
+                _slice['probability'] = n_occur
+                weights['probability'][_slice.index] = _slice['probability']  # TODO not assigning correctly!
+
+            print weights
+            weights['probability'] = weights['probability'].apply(lambda x: x / n_fittest)
+            print weights
+            
+            tensor.weights = weights
+            self.tensors[i].weights = weights
+    
     def sample(self):
         sess = Session()
         
