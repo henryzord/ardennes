@@ -1,11 +1,10 @@
 # coding=utf-8
 
-import os
+import numpy as np
 import pandas as pd
 from sklearn.cross_validation import train_test_split
-from evolution import Ardennes
-import numpy as np
-import networkx as nx
+
+from treelib import Ardennes
 
 __author__ = 'Henry Cagnini'
 
@@ -49,12 +48,13 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
-            uncertainty=kwargs['uncertainty']
+            uncertainty=kwargs['uncertainty'],
         )
         
         fittest = inst.fit_predict(
             sets=sets,
-            verbose=kwargs['verbose']
+            initial_tree_size=kwargs['initial_tree_size'],
+            verbose=kwargs['verbose'],
         )
         
         test_acc = fittest.__validate__(sets['test'])
@@ -81,6 +81,7 @@ def main():
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
+        'initial_tree_size': 7,
         'random_state': random_state
     }
     

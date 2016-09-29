@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from treelib.classes import AbstractTree
-from treelib.heap import Node
+from treelib.node import Node
 
 __author__ = 'Henry Cagnini'
 
@@ -284,7 +284,7 @@ class Individual(AbstractTree):
         return out
 
     def __set_numerical__(self, node_label, subset, **kwargs):
-        pd.options.mode.chained_assignment = None
+        # pd.options.mode.chained_assignment = None
         
         def slide_filter(x):
             first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
@@ -306,12 +306,14 @@ class Individual(AbstractTree):
 
         ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
         ss = ss.sort_values(by=node_label).reset_index()
-        
-        ss['change'] = ss.apply(slide_filter, axis=1)
-        unique_vals = ss[ss['change'] == False]
+
+        change = ss.apply(slide_filter, axis=1)
+        unique_vals = ss[change == False]
         
         if unique_vals.empty:
             raise ValueError('no valid threshold values!')
+        
+        # TODO update to use for iloc!
         
         unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
         best_entropy = unique_vals['entropy'].min()
@@ -321,7 +323,7 @@ class Individual(AbstractTree):
         best_subset_left = subset.loc[subset[node_label] < best_threshold]
         best_subset_right = subset.loc[subset[node_label] >= best_threshold]
 
-        pd.options.mode.chained_assignment = 'warn'
+        # pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right

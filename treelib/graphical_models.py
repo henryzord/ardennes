@@ -8,6 +8,7 @@ import pandas as pd
 
 from treelib.classes import SetterClass, Session, AbstractTree
 from treelib.individual import Individual
+from treelib.node import Node
 
 __author__ = 'Henry Cagnini'
 
@@ -26,12 +27,9 @@ class Tensor(SetterClass):
         
         self.gm_id = gm_id  # type: float
         self.name = name  # type: int
-        self.parents = parents if parents is not None else []
         self.values = values  # type: list of str
-        
-        # self.reverse_values = {k: i for i, k in enumerate(values)}  # type: dict of str
-        
-        self.weights = self.__init_probabilities__(values, probability)  # type: np.ndarray
+        self.parents = parents if (len(parents) > 0 or parents is not None) else []  # type: list of int
+        self.weights = self.__init_probabilities__(values, probability)  # type: pd.DataFrame
         
         self.__class__.global_gms[gm_id][name] = self
     
@@ -95,30 +93,38 @@ class GraphicalModel(AbstractTree):
     
     tensors = None  # tensor is a dependency graph
     
-    def __init__(self, pattern=None, gm_id=0, **kwargs):
+    def __init__(self, gm_id=0, initial_tree_size=3, **kwargs):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
-        
-        if pattern is None:
-            self.tensors = self.__init_tensor__()
-        else:
-            raise NotImplementedError('not implemented yet!')
+        self.tensors = self.__init_tensor__(initial_tree_size)
     
-    def __init_tensor__(self):
-        """
-        Initializes a simple 3 nodes tree.
-        
-        :rtype: list
-        :return: A list of 3 tensors.
-        """
+    def __init_tensor__(self, initial_tree_size):
         # TODO enhance to perform any kind of initialization!
         
-        tensors = [
-            Tensor(0, self.pred_attr, gm_id=self.gm_id),
-            Tensor(1, [self.target_attr], [0], gm_id=self.gm_id),
-            Tensor(2, [self.target_attr], [0], gm_id=self.gm_id)
-        ]
+        # TODO must be able to automatically perform this kind of initialization!
+        def get_parents(id):
+            parent = Node.get_parent(id)
+            val = parent
+            parents = []
+            while val is not None:
+                parents += [parent]
+                parent = Node.get_parent(val)
+                val = parent
+            return parents
+
+        def is_terminal(id):
+            return Node.get_right_child(id) >= initial_tree_size
+        
+        tensors = map(
+            lambda i: Tensor(
+                i,
+                parents=get_parents(i),
+                values=self.pred_attr if not is_terminal(i) else [self.target_attr],
+                gm_id=self.gm_id
+            ),
+            xrange(initial_tree_size)
+        )
         
         return tensors
     
