@@ -1,13 +1,13 @@
+# coding=utf-8
+
+import itertools as it
 from collections import Counter
 
 import numpy as np
-import xarray
+import pandas as pd
 
 from treelib.classes import SetterClass, Session, AbstractTree
 from treelib.individual import Individual
-import itertools as it
-import operator as op
-import pandas as pd
 
 __author__ = 'Henry Cagnini'
 
@@ -129,6 +129,8 @@ class GraphicalModel(AbstractTree):
         :param fittest:
         :return:
         """
+
+        pd.options.mode.chained_assignment = None
         
         n_fittest = float(len(fittest))
         
@@ -157,12 +159,12 @@ class GraphicalModel(AbstractTree):
                 _slice['probability'] = n_occur
                 weights['probability'][_slice.index] = _slice['probability']  # TODO not assigning correctly!
 
-            print weights
             weights['probability'] = weights['probability'].apply(lambda x: x / n_fittest)
-            print weights
             
             tensor.weights = weights
             self.tensors[i].weights = weights
+
+        pd.options.mode.chained_assignment = 'warn'
     
     def sample(self):
         sess = Session()
@@ -171,3 +173,8 @@ class GraphicalModel(AbstractTree):
             tensor.sample(sess)
         
         return sess
+
+    @classmethod
+    def reset_globals(cls):
+        del Tensor.global_gms
+        Tensor.global_gms = dict()

@@ -1,14 +1,14 @@
 # coding=utf-8
 
+import itertools as it
 from collections import Counter
 
 import networkx as nx
 import numpy as np
 import pandas as pd
-import itertools as it
 
-from evolution.heap import Node
 from treelib.classes import AbstractTree
+from treelib.heap import Node
 
 __author__ = 'Henry Cagnini'
 
@@ -284,6 +284,8 @@ class Individual(AbstractTree):
         return out
 
     def __set_numerical__(self, node_label, subset, **kwargs):
+        pd.options.mode.chained_assignment = None
+        
         def slide_filter(x):
             first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
             second = x.name
@@ -318,6 +320,8 @@ class Individual(AbstractTree):
         
         best_subset_left = subset.loc[subset[node_label] < best_threshold]
         best_subset_right = subset.loc[subset[node_label] >= best_threshold]
+
+        pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right

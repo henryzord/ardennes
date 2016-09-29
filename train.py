@@ -62,53 +62,7 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         
         fold_acc += test_acc
     
-    print '%02.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_run']))
-
-
-def j48(train_set):
-    """
-    Uses J48 algorithm from Weka to get the maximum height of a 100% accuracy decision tree.
-
-    :type train_set: pandas.DataFrame
-    :param train_set:
-    :return:
-    """
-    
-    import math
-    import StringIO
-    import weka.core.jvm as jvm
-    from weka.classifiers import Classifier
-    from weka.core.converters import Loader
-    
-    filepath = 'dataset_temp.csv'
-    
-    train_set.to_csv(filepath, sep=',', quotechar='\"', encoding='utf-8', index=False)
-    
-    try:
-        jvm.start()
-        
-        loader = Loader(classname='weka.core.converters.CSVLoader')
-        data = loader.load_file(filepath)
-        data.class_is_last()  # set class as the last attribute
-        
-        # J-48 parameters:
-        # -B : binary splits
-        # -M 1: min leaf objects
-        # -U : unprunned
-        cls = Classifier(classname="weka.classifiers.trees.J48", options=['-U', '-B', '-M', '1'])
-        cls.build_classifier(data)
-        graph = cls.graph.encode('ascii')
-        
-        out = StringIO.StringIO(graph)
-        G = nx.Graph(nx.nx_pydot.read_dot(out))
-        n_nodes = G.number_of_nodes()
-        height = math.ceil(np.log2(n_nodes + 1))
-        
-        return height
-    except RuntimeError as e:
-        jvm.stop()
-        os.remove(filepath)
-        raise e
+    print '%02.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_runs']))
 
 
 def main():
@@ -117,7 +71,7 @@ def main():
     
     random_state = 1
     n_folds = 10
-    n_runs = 10
+    n_runs = 1
     dataset_path = 'datasets/iris.csv'
     
     kwargs = {
@@ -141,16 +95,7 @@ def main():
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(fold=i, df=df, arg_train=arg_train, arg_test=arg_test, **kwargs)
         warnings.warn('WARNING: exiting after first fold!')
-        exit(-1)
-        
-        # TODO for parallel processing
-        # t = threading.Thread(target=run_fold, args=(i, df, arg_train, arg_test, kwargs))
-        # t.daemon = True
-        # t.start()
-
-
-# plt.show()
-
+        exit(0)
 
 if __name__ == '__main__':
     main()

@@ -20,10 +20,10 @@ class Ardennes(AbstractEDA):
             'class_labels': list(sets['train'][sets['train'].columns[-1]].unique())
         }
 
-        gm = GraphicalModel(**class_values)
+        gm = GraphicalModel(**class_values)  # TODO pass gm id here!
 
-        population = self.init_population(
-            n_individuals=self.n_individuals,
+        population = self.sample_individuals(
+            n_sample=self.n_individuals,
             graphical_model=gm,
             sets=sets
         )
@@ -48,13 +48,14 @@ class Ardennes(AbstractEDA):
             )
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold] # TODO slow. test other implementation!
-            fittest_pop = population[np.flatnonzero(fitness >= borderline)]  # TODO slow. test other implementation!
-
+            
+            # picks fittest population
+            fittest_pop = self.pick_fittest_population(population, borderline)
             gm.update(fittest_pop)
 
-            to_replace = population[np.flatnonzero(fitness < borderline)]  # TODO slow. test other implementation!
-            for ind in to_replace:
-                ind.sample_by_id(gm)
+            n_replace = np.count_nonzero(fitness < borderline)
+            replaced = self.sample_individuals(n_replace, gm, sets)
+            population = fittest_pop + replaced
 
             if self.early_stop(gm, self.uncertainty):
                 break
@@ -64,15 +65,26 @@ class Ardennes(AbstractEDA):
             iteration += 1
 
         fittest_ind = population[np.argmax(fitness)]
+        
+        GraphicalModel.reset_globals()
+        
         return fittest_ind
     
     @staticmethod
-    def init_population(n_individuals, graphical_model, sets):
-        population = np.array(map(
+    def pick_fittest_population(population, borderline):
+        fittest_pop = []
+        for ind in population:
+            if ind.fitness >= borderline:
+                fittest_pop += [ind]
+        return fittest_pop
+    
+    @staticmethod
+    def sample_individuals(n_sample, graphical_model, sets):
+        sample = map(
             lambda i: Individual(id=i, graphical_model=graphical_model, sets=sets),
-            xrange(n_individuals)
-        ))
-        return population
+            xrange(n_sample)
+        )
+        return sample
     
     def verbose(self, **kwargs):
         iteration = kwargs['iteration']
@@ -84,35 +96,15 @@ class Ardennes(AbstractEDA):
             print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (iteration, mean, median, max_fitness)
     
     @staticmethod
-    def early_stop(gm, diff=0.01):
+    def early_stop(gm, uncertainty=0.01):
         """
 
         :type gm: FinalAbstractGraphicalModel
         :param gm: The Probabilistic Graphical Model (GM) for the current generation.
-        :type diff: float
-        :param diff: Maximum allowed uncertainty for each probability, for each node.
+        :type uncertainty: float
+        :param uncertainty: Maximum allowed uncertainty for each probability, for each node.
         :return:
         """
-        
-        def __max_prob__(node):
-            max_prob = node['probs'].max().values[0]
-            min_prob = node['probs'].min().values[0]
-            
-            val = max(
-                abs(1. - max_prob),
-                min_prob
-            )
-            
-            return val
-        
-        nodes = gm.graph.node
-        maximum_prob = reduce(
-            max,
-            map(
-                __max_prob__,
-                nodes.itervalues()
-            )
-        )
-        if maximum_prob < diff:
-            return True
+        import warnings
+        warnings.warn('WARNING: implement!')
         return False
