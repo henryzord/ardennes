@@ -10,14 +10,20 @@ import pandas as pd
 from treelib.classes import AbstractTree
 from treelib.node import Node
 
+from matplotlib import pyplot as plt
+
 __author__ = 'Henry Cagnini'
 
 
 class Individual(AbstractTree):
+    _terminal_node_color = '#98FB98'
+    _inner_node_color = '#0099ff'
+    _root_node_color = '#FFFFFF'
     column_types = None  # type: dict
     sets = None  # type: dict
     tree = None  # type: nx.DiGraph
     val_acc = None  # type: float
+    id = None
     
     def __init__(self, graphical_model, sets, **kwargs):
         """
@@ -30,6 +36,9 @@ class Individual(AbstractTree):
         :param kwargs:
         """
         super(Individual, self).__init__(**kwargs)
+
+        if 'id' in kwargs:
+            self.id = kwargs['id']
 
         if Individual.column_types is None:
             Individual.column_types = {
@@ -49,13 +58,9 @@ class Individual(AbstractTree):
         Plots this individual.
         """
     
-        raise NotImplementedError('not implemented yet!')
-    
-        from matplotlib import pyplot as plt
-    
         fig = plt.figure()
     
-        tree = self._tree  # type: nx.DiGraph
+        tree = self.tree  # type: nx.DiGraph
         pos = nx.spectral_layout(tree)
     
         node_list = tree.nodes(data=True)
@@ -73,22 +78,23 @@ class Individual(AbstractTree):
         plt.text(
             0.8,
             0.9,
-            'Fitness: %0.4f' % self._val_acc,
+            'Fitness: %0.4f' % self.val_acc,
             fontsize=15,
             horizontalalignment='center',
             verticalalignment='center',
             transform=fig.transFigure
         )
     
-        plt.text(
-            0.1,
-            0.1,
-            'ID: %03.d' % self._id,
-            fontsize=15,
-            horizontalalignment='center',
-            verticalalignment='center',
-            transform=fig.transFigure
-        )
+        if self.id is not None:
+            plt.text(
+                0.1,
+                0.1,
+                'ID: %03.d' % self.id,
+                fontsize=15,
+                horizontalalignment='center',
+                verticalalignment='center',
+                transform=fig.transFigure
+            )
     
         plt.axis('off')
 
@@ -130,98 +136,58 @@ class Individual(AbstractTree):
             tree=tree,
             subset=subset,
             variable_name=0,
-            parent_name=None
+            parent_label=0
         )
         return tree
 
-    def __set_node_threshold__(self, sess, tree, subset, variable_name, parent_name):
-        # ############################ #
-        # definition of inline methods #
-        # ############################ #
+    def __set_node_threshold__(self, sess, tree, subset, variable_name, parent_label):
+        """
         
-        def terminal_node_dict(subset, target_attr):
-            meta = self.__set_terminal__(target_attr, subset)
+        :param sess:
+        :type tree: networkx.DiGraph
+        :param tree:
+        :param subset:
+        :param variable_name:
+        :return:
+        """
         
-            attr_dict = {
-                'label': meta['value'],
-                'color': '#98FB98',
-                'terminal': True,
-                'threshold': None,
-                'left': None,
-                'right': None
-            }
-            return attr_dict
-        
-        def twin_nodes(tree, id_left, id_right):
-            """
-            Checks if two children nodes have the same class.
-            
-            :type tree: networkx.DiGraph
-            :param tree: A DiGraph object representing a binary tree.
-            :param id_left: ID of the left child.
-            :param id_right: ID of the right child.
-            :return: Whether right and left children are twins.
-            """
-            return tree.node[id_left]['label'] == tree.node[id_right]['label'] and \
-                   tree.node[id_left]['label'] in Individual.class_labels
-    
-        # ##################### #
-        # end of inline methods #
-        # ##################### #
-    
-        if subset.shape[0] <= 0:
-            raise ValueError('empty subset!')  # TODO see what must be done!
-    
-        try:
-            meta, subset_left, subset_right = self.__set_node__(
+        if subset.shape[0] <= 0 or sess[variable_name] == Individual.target_attr:
+            meta, subset_left, subset_right = self.__set_terminal__(
                 variable_name=variable_name,
+                node_label=sess[variable_name],
+                parent_label=parent_label,
+                subset=subset
+            )
+        else:
+            meta, subset_left, subset_right = self.__set_inner_node__(
+                variable_name=variable_name,
+                parent_label=parent_label,
                 subset=subset,
                 sess=sess
             )
-            _node_attr = {
-                'label': sess[variable_name],
-                'color': '#FFFFFF' if variable_name == Node.name_root else '#AEEAFF',
-                'threshold': meta['value'],
-            }
 
-            # TODO verification must be see if it has children node!!!
+        id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
+        if id_left in sess and id_right in sess:
+            for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+                tree = self.__set_node_threshold__(
+                    sess=sess,
+                    tree=tree,
+                    subset=child_subset,
+                    variable_name=id_child,
+                    parent_label=meta['label']
+                )
 
-            if sess[variable_name] != Individual.target_attr:
-                try:  # if one of the subsets is empty, then the node is terminal
-                    id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
-                    
-                    for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
-                        tree = self.__set_node_threshold__(
-                            sess=sess,
-                            tree=tree,
-                            subset=child_subset,
-                            variable_name=id_child,
-                            parent_name=variable_name
-                        )
-    
-                    if twin_nodes(tree, id_left, id_right):
-                        tree.remove_node(id_left)
-                        tree.remove_node(id_right)
-                        _node_attr = terminal_node_dict(subset, Individual.target_attr)
-                    else:
-                        tree.add_edge(variable_name, id_left, attr_dict={'threshold': '< %0.2f' % meta['value']})
-                        tree.add_edge(variable_name, id_right, attr_dict={'threshold': '>= %0.2f' % meta['value']})
-    
-                        _node_attr = {
-                            'label': sess[variable_name],
-                            'color': '#FFFFFF' if variable_name == Node.name_root else '#AEEAFF',
-                            'terminal': False,
-                            'threshold': meta['value'],
-                            'left': id_left,
-                            'right': id_right
-                        }
-                except ValueError as ve:
-                    _node_attr = terminal_node_dict(subset, Individual.target_attr)
-        except ValueError as ve:
-            _node_attr = terminal_node_dict(subset, Individual.target_attr)
-    
-        tree.add_node(variable_name, attr_dict=_node_attr)
-        # tree.add_edge(parent_name, variable_name)
+            if meta['threshold'] is not None:
+                attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}
+                attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
+            else:
+                attr_dict_left = {'threshold': None}
+                attr_dict_right = {'threshold': None}
+            
+            tree.add_edge(variable_name, id_left, attr_dict=attr_dict_left)
+            tree.add_edge(variable_name, id_right, attr_dict=attr_dict_right)
+
+        tree.add_node(variable_name, attr_dict=meta)
         return tree
         
     @staticmethod
@@ -237,7 +203,7 @@ class Individual(AbstractTree):
 
         return -1. * _entropy
 
-    def __val_func__(self, obj):
+    def __validate_object__(self, obj):
         arg_node = 0
 
         tree = self.tree  # type: nx.DiGraph
@@ -245,13 +211,13 @@ class Individual(AbstractTree):
         node = self.tree.node[arg_node]
         successors = tree.successors(arg_node)
         
-        while len(successors) > 0:
+        while not node['terminal']:
             go_left = obj[node['label']] < node['threshold']
             arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
             successors = tree.successors(arg_node)
             node = tree.node[arg_node]
 
-        return obj[-1] == node['threshold']
+        return obj[-1] == node['label']
 
     def __validate__(self, test_set):
         """
@@ -262,33 +228,35 @@ class Individual(AbstractTree):
         :return: The accuracy of this model when testing with test_set.
         """
         
-        hit_count = test_set.apply(self.__val_func__, axis=1).sum()
+        hit_count = test_set.apply(self.__validate_object__, axis=1).sum()
         acc = hit_count / float(test_set.shape[0])
         return acc
 
-    def __set_node__(self, variable_name, subset, sess, **kwargs):
-        
-        def set_terminal():
-            meta = self.__set_terminal__(Individual.target_attr, subset, **kwargs)
-            subset_left = pd.DataFrame([])
-            subset_right = pd.DataFrame([])
-            
-            return meta, subset_left, subset_right
-        
-        if sess[variable_name] != Individual.target_attr:
-            attr_type = Individual.column_types[sess[variable_name]]
-            try:
-                out = self.attr_handler_dict[attr_type](self, sess[variable_name], subset, **kwargs)
-            except ValueError as ve:
-                out = set_terminal()
-        else:
-            out = set_terminal()
+    def __set_inner_node__(self, variable_name, parent_label, subset, sess, **kwargs):
+        attr_type = Individual.column_types[sess[variable_name]]
+        out = self.attr_handler_dict[attr_type](
+            self,
+            node_label=sess[variable_name],
+            parent_label=parent_label,
+            subset=subset,
+            variable_name=variable_name,
+            **kwargs
+        )
         return out
 
-    def __set_numerical__(self, node_label, subset, **kwargs):
+    def __set_numerical__(self, node_label, parent_label, subset, **kwargs):
         # pd.options.mode.chained_assignment = None
         
         def slide_filter(x):
+            """
+            Verifies if two neighboring objects have the same class.
+            
+            :type x: pandas.core.series.Series
+            :param x: An object with a predictive attribute and the class attribute.
+            :rtype: bool
+            :return: True if the neighbor of x have the same class; False otherwise.
+            """
+            
             first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
             second = x.name
             column = Individual.target_attr
@@ -296,6 +264,14 @@ class Individual(AbstractTree):
             return ss[column].iloc[first] == ss[column].iloc[second]
 
         def get_entropy(threshold):
+            """
+            Gets entropy for a given threshold.
+            
+            :type threshold: float
+            :param threshold: Threshold value.
+            :rtype: float
+            :return: the entropy.
+            """
             
             subset_left = subset.loc[subset[node_label] < threshold]
             subset_right = subset.loc[subset[node_label] >= threshold]
@@ -313,44 +289,58 @@ class Individual(AbstractTree):
         unique_vals = ss.loc[ss['change'] == False]
         
         if unique_vals.empty:
-            raise ValueError('no valid threshold values!')
-        
-        # TODO update to use for iloc!
-        
-        unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
-        best_entropy = unique_vals['entropy'].min()
-        
-        best_threshold = (unique_vals[unique_vals['entropy'] == best_entropy])[node_label].values[0]
-        
-        best_subset_left = subset.loc[subset[node_label] < best_threshold]
-        best_subset_right = subset.loc[subset[node_label] >= best_threshold]
+            meta, best_subset_left, best_subset_right = self.__set_terminal__(
+                node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
+            )
+        else:
+            unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
+            best_entropy = unique_vals['entropy'].min()
+            
+            best_threshold = (unique_vals[unique_vals['entropy'] == best_entropy])[node_label].values[0]
+            
+            best_subset_left = subset.loc[subset[node_label] < best_threshold]
+            best_subset_right = subset.loc[subset[node_label] >= best_threshold]
 
-        # pd.options.mode.chained_assignment = 'warn'
+            meta = {
+                'label': node_label,
+                'threshold': best_threshold,
+                'terminal': False,
+                'color': Individual._root_node_color if
+                    kwargs['variable_name'] == Node.root else Individual._inner_node_color
+            }
+            # pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right
         else:
-            meta = {'value': best_threshold, 'terminal': False}
             return meta, best_subset_left, best_subset_right
     
-    def __set_terminal__(self, node_label, subset, **kwargs):
-        count = Counter(subset[node_label])
+    def __set_terminal__(self, node_label, parent_label, subset, **kwargs):
+        if not subset.empty:
+            count = Counter(subset[node_label])
+    
+            f_key = None
+            f_val = -np.inf
+            for key, val in count.iteritems():
+                if val > f_val:
+                    f_key = key
+                    f_val = val
+        else:
+            f_key = parent_label
 
-        f_key = None
-        f_val = -np.inf
-        for key, val in count.iteritems():
-            if val > f_val:
-                f_key = key
-                f_val = val
+        meta = {
+            'label': f_key,
+            'threshold': None,
+            'terminal': True,
+            'color': Individual._terminal_node_color
+        }
+        return meta, pd.DataFrame([]), pd.DataFrame([])
 
-        meta = {'value': f_key, 'terminal': True}  # not a threshold, but a class label
-        return meta
-
-    def __set_categorical__(self, node_label, subset):
+    def __set_categorical__(self, node_label, parent_label, subset, **kwargs):
         raise NotImplemented('not implemented yet!')
 
     @staticmethod
-    def __set_error__(id_node, attr_name, dict_threshold, tree, subset):
+    def __set_error__(self, node_label, parent_label, subset, **kwargs):
         raise TypeError('Unsupported data type for column %s!' % attr_name)
 
     attr_handler_dict = {

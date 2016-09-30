@@ -9,11 +9,7 @@ class Node(object):
     Convenient class for heap tree operations and properties.
     """
     
-    _root = 0
-    
-    @property
-    def name_root(self):
-        return self._root
+    root = 0
     
     @staticmethod
     def get_left_child(id_node):

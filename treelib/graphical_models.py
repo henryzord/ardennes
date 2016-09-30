@@ -116,11 +116,14 @@ class GraphicalModel(AbstractTree):
         def is_terminal(id):
             return Node.get_right_child(id) >= initial_tree_size
         
+        inner_values = self.pred_attr + [self.target_attr]
+        outer_values = [self.target_attr]
+        
         tensors = map(
             lambda i: Tensor(
                 i,
                 parents=get_parents(i),
-                values=self.pred_attr if not is_terminal(i) else [self.target_attr],
+                values=inner_values if not is_terminal(i) else outer_values,
                 gm_id=self.gm_id
             ),
             xrange(initial_tree_size)

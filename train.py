@@ -72,7 +72,7 @@ def main():
     random_state = 1
     n_folds = 10
     n_runs = 1
-    dataset_path = 'datasets/iris.csv'
+    dataset_path = 'datasets/segment.csv'
     
     kwargs = {
         'n_individuals': 50,
@@ -81,7 +81,7 @@ def main():
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 7,
+        'initial_tree_size': 11,
         'random_state': random_state
     }
     

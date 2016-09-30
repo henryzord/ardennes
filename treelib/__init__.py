@@ -20,6 +20,7 @@ class Ardennes(AbstractEDA):
         }
         
         if 'initial_tree_size' in kwargs:
+            self.__check_tree_size__(kwargs['initial_tree_size'])
             initial_tree_size = kwargs['initial_tree_size']
         else:
             initial_tree_size = 3
@@ -104,12 +105,26 @@ class Ardennes(AbstractEDA):
     def early_stop(gm, uncertainty=0.01):
         """
 
-        :type gm: FinalAbstractGraphicalModel
+        :type gm: treelib.graphical_models.GraphicalModel
         :param gm: The Probabilistic Graphical Model (GM) for the current generation.
         :type uncertainty: float
         :param uncertainty: Maximum allowed uncertainty for each probability, for each node.
         :return:
         """
-        import warnings
-        warnings.warn('WARNING: implement!')
-        return False
+        
+        should_stop = True
+        for tensor in gm.tensors:
+            weights = tensor.weights
+            upper = abs(1. - weights['probability'].max())
+            lower = weights['probability'].min()
+            
+            if upper > uncertainty or lower > uncertainty:
+                should_stop = False
+                break
+
+        return should_stop
+
+    @staticmethod
+    def __check_tree_size__(initial_tree_size):
+        if (initial_tree_size - 1) % 2 != 0:
+            raise ValueError('Invalid number of nodes! (initial_tree_size - 1) % 2 must be an integer!')
