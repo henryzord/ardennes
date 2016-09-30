@@ -183,7 +183,9 @@ class Individual(AbstractTree):
                 'color': '#FFFFFF' if variable_name == Node.name_root else '#AEEAFF',
                 'threshold': meta['value'],
             }
-            
+
+            # TODO verification must be see if it has children node!!!
+
             if sess[variable_name] != Individual.target_attr:
                 try:  # if one of the subsets is empty, then the node is terminal
                     id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
@@ -268,8 +270,8 @@ class Individual(AbstractTree):
         
         def set_terminal():
             meta = self.__set_terminal__(Individual.target_attr, subset, **kwargs)
-            subset_left = pd.DataFrame([0.])
-            subset_right = pd.DataFrame([0.])
+            subset_left = pd.DataFrame([])
+            subset_right = pd.DataFrame([])
             
             return meta, subset_left, subset_right
         
@@ -307,8 +309,8 @@ class Individual(AbstractTree):
         ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
         ss = ss.sort_values(by=node_label).reset_index()
 
-        change = ss.apply(slide_filter, axis=1)
-        unique_vals = ss[change == False]
+        ss['change'] = ss.apply(slide_filter, axis=1)
+        unique_vals = ss.loc[ss['change'] == False]
         
         if unique_vals.empty:
             raise ValueError('no valid threshold values!')
