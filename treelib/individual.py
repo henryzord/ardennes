@@ -203,23 +203,38 @@ class Individual(AbstractTree):
 
         return -1. * _entropy
 
-    def __validate_object__(self, obj):
+    def __predict_object__(self, obj):
         arg_node = 0
-
+    
         tree = self.tree  # type: nx.DiGraph
-
+    
         node = self.tree.node[arg_node]
         successors = tree.successors(arg_node)
-        
+    
         while not node['terminal']:
             go_left = obj[node['label']] < node['threshold']
             arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
             successors = tree.successors(arg_node)
             node = tree.node[arg_node]
+            
+        return node['label']
 
-        return obj[-1] == node['label']
+    def __validate_object__(self, obj):
+        """
+        
+        :type obj: pandas.Series
+        :param obj:
+        :return:
+        """
+        label = self.__predict_object__(obj)
+        return obj.iloc[-1] == label
 
-    def __validate__(self, test_set):
+    def predict(self, samples):
+        df = pd.DataFrame(samples)
+        preds = df.apply(self.__predict_object__, axis=1)  # TODO create func for pred!
+        return preds
+
+    def __validate__(self, test_set=None, X_test=None, y_test=None):
         """
         Assess the accuracy of this Individual against the provided set.
         
@@ -227,6 +242,11 @@ class Individual(AbstractTree):
         :param test_set: a matrix with the class attribute in the last position (i.e, column).
         :return: The accuracy of this model when testing with test_set.
         """
+        
+        if test_set is None:
+            test_set = pd.DataFrame(
+                np.hstack((X_test, y_test[:, np.newaxis]))
+            )
         
         hit_count = test_set.apply(self.__validate_object__, axis=1).sum()
         acc = hit_count / float(test_set.shape[0])
@@ -245,7 +265,7 @@ class Individual(AbstractTree):
         return out
 
     def __set_numerical__(self, node_label, parent_label, subset, **kwargs):
-        # pd.options.mode.chained_assignment = None
+        pd.options.mode.chained_assignment = None
         
         def slide_filter(x):
             """
@@ -308,7 +328,7 @@ class Individual(AbstractTree):
                 'color': Individual._root_node_color if
                     kwargs['variable_name'] == Node.root else Individual._inner_node_color
             }
-            # pd.options.mode.chained_assignment = 'warn'
+            pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right

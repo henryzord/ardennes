@@ -1,4 +1,4 @@
-windy,outlook,temperature,humidity,play
+windy, outlook, temperature, humidity, "play tennis?"
 No,Sunny,Hot,High,False
 No,Sunny,Hot,High,True
 Yes,Overcast,Hot,High,False

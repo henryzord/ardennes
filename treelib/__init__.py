@@ -1,17 +1,56 @@
 # coding=utf-8
 
-from treelib.classes import AbstractEDA
 from treelib.graphical_models import *
 
 __author__ = 'Henry Cagnini'
 
 
-class Ardennes(AbstractEDA):
-    def fit_predict(self, verbose=True, **kwargs):
-        if 'sets' not in kwargs or not all(map(lambda x: x in kwargs['sets'], ['train', 'val'])):  # TODO optimize!
-            raise KeyError('You need to pass train and val sets to this method!')
+class Ardennes(AbstractTree):
+    gm = None
+    
+    def __init__(self, n_individuals=100, n_iterations=100, uncertainty=0.01, decile=0.9, **kwargs):
+        """
+        Default EDA class, with common code to all EDAs -- regardless
+        of the complexity of inner GMs or updating techniques.
+
+        :type n_individuals: int
+        :param n_individuals: Number of maximum individuals for a any population, throughout the evolutionary process.
+        :param n_iterations: First (and most likely to be reached) stopping criterion. Maximum number of generations
+            that this EDA is allowed to produce.
+        :param uncertainty: Second stopping criterion. If this EDA's GM presents an uncertainty lesser than this
+            parameter, then this EDA will likely stop before reaching the maximum number of iterations.
+        :param decile: A parameter for determining how much of the population must be used for updatign the GM, and also
+            how much of it must be resampled for the next generation. For example, if decile=0.9, then 10% of the
+            population will be used for GM updating and 90% will be resampled.
+        """
+        super(Ardennes, self).__init__(**kwargs)
+        
+        self.n_individuals = n_individuals
+        self.n_iterations = n_iterations
+        self.uncertainty = uncertainty
+        self.decile = decile
+
+    def fit_predict(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, **kwargs):
+        if sets is None or 'train' not in sets:
+            if all(map(lambda x: x is None, [X_train, y_train])):
+                raise KeyError('You need to pass at least a train set to this method!')
+            else:
+                sets = dict()
+                
+                sets['train'] = pd.DataFrame(
+                    np.hstack((X_train, y_train[:, np.newaxis]))
+                )
+                
+                if all(map(lambda x: x is None, [X_val, y_val])):
+                    sets['val'] = sets['train']
+                else:
+                    sets['val'] = pd.DataFrame(
+                        np.hstack((X_val, y_val[:, np.newaxis]))
+                    )
         else:
             sets = kwargs['sets']
+            if 'val' not in sets:
+                sets['val'] = sets['train']
         
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),

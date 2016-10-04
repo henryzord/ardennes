@@ -27,9 +27,6 @@ def get_dataset(path, n_folds=10, random_state=None):
 def run_fold(fold, df, arg_train, arg_test, **kwargs):
     fold_acc = 0.
     
-    # x_test = df.iloc[arg_test][df.columns[:-1]]
-    # y_test = df.iloc[arg_test][df.columns[-1]]
-    
     test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
     
     x_train, x_val, y_train, y_val = train_test_split(
@@ -72,16 +69,16 @@ def main():
     random_state = 1
     n_folds = 10
     n_runs = 1
-    dataset_path = 'datasets/segment.csv'
+    dataset_path = 'datasets/iris.csv'
     
     kwargs = {
-        'n_individuals': 50,
-        'decile': 0.9,
+        'n_individuals': 500,
+        'decile': 0.8,
         'uncertainty': 0.01,
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 11,
+        'initial_tree_size': 15,
         'random_state': random_state
     }
     
@@ -95,8 +92,6 @@ def main():
     
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(fold=i, df=df, arg_train=arg_train, arg_test=arg_test, **kwargs)
-        warnings.warn('WARNING: exiting after first fold!')
-        exit(0)
 
 if __name__ == '__main__':
     main()
