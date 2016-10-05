@@ -230,8 +230,19 @@ class Individual(AbstractTree):
         return obj.iloc[-1] == label
 
     def predict(self, samples):
-        df = pd.DataFrame(samples)
-        preds = df.apply(self.__predict_object__, axis=1).as_matrix()
+        """
+        Makes predictions for unseen samples.
+
+        :param samples: Either a pandas.DataFrame (for multiple samples)or pandas.Series (for a single object).
+        :rtype: numpy.ndarray
+        :return: The predicted class for each sample.
+        """
+        if isinstance(samples, pd.DataFrame):
+            preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
+        elif isinstance(samples, pd.Series):
+            preds = self.__predict_object__(samples)
+        else:
+            raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
         return preds
 
     def validate(self, test_set=None, X_test=None, y_test=None):
@@ -242,12 +253,12 @@ class Individual(AbstractTree):
         :param test_set: a matrix with the class attribute in the last position (i.e, column).
         :return: The accuracy of this model when testing with test_set.
         """
-        
+
         if test_set is None:
             test_set = pd.DataFrame(
                 np.hstack((X_test, y_test[:, np.newaxis]))
             )
-        
+
         hit_count = test_set.apply(self.__validate_object__, axis=1).sum()
         acc = hit_count / float(test_set.shape[0])
         return acc

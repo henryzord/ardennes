@@ -55,11 +55,11 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
             uncertainty=kwargs['uncertainty']
         )
         
-        fittest = inst.fit_predict(
+        fittest = inst.fit(
             sets=sets,
             initial_tree_size=kwargs['initial_tree_size'],
             verbose=kwargs['verbose'],
-            output_file=file_name
+            output_file=file_name if kwargs['save_metadata'] else None
         )
         
         test_acc = fittest.validate(sets['test'])
@@ -80,7 +80,7 @@ def main():
     dataset_path = 'datasets/iris.csv'
     
     kwargs = {
-        'n_individuals': 500,
+        'n_individuals': 50,
         'decile': 0.8,
         'uncertainty': 0.01,
         'verbose': True,
@@ -88,7 +88,9 @@ def main():
         'n_runs': n_runs,
         'initial_tree_size': 15,
         'random_state': random_state,
-        'metadata_path': 'metadata'
+        'ensemble': True,
+        'metadata_path': 'metadata',
+        'save_metadata': False
     }
     
     if random_state is not None:

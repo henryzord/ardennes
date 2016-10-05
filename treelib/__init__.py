@@ -1,6 +1,4 @@
 # coding=utf-8
-import os
-
 from treelib.graphical_models import *
 
 __author__ = 'Henry Cagnini'
@@ -31,7 +29,11 @@ class Ardennes(AbstractTree):
         self.uncertainty = uncertainty
         self.decile = decile
 
-    def fit_predict(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, **kwargs):
+        self.trained = False
+        self.ensemble = False
+        self.predictor = None
+
+    def fit(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, **kwargs):
         if sets is None or 'train' not in sets:
             if all(map(lambda x: x is None, [X_train, y_train])):
                 raise KeyError('You need to pass at least a train set to this method!')
@@ -52,17 +54,19 @@ class Ardennes(AbstractTree):
             if 'val' not in sets:
                 sets['val'] = sets['train']
 
-        if 'output_file' in kwargs:
-            output_file = kwargs['output_file']
-        else:
-            output_file = None
+        output_file = kwargs['output_file'] if 'output_file' in kwargs else None
+        self.ensemble = kwargs['ensemble'] if 'ensemble' in kwargs else False
 
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
             'target_attr': sets['train'].columns[-1],
             'class_labels': list(sets['train'][sets['train'].columns[-1]].unique())
         }
-        
+
+        self.pred_attr = class_values['pred_attr']
+        self.target_attr = class_values['target_attr']
+        self.class_labels = class_values['class_labels']
+
         if 'initial_tree_size' in kwargs:
             self.__check_tree_size__(kwargs['initial_tree_size'])
             initial_tree_size = kwargs['initial_tree_size']
@@ -84,7 +88,7 @@ class Ardennes(AbstractTree):
         
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
-            self.report(
+            self.__report__(
                 iteration=iteration,
                 fitness=fitness,
                 verbose=verbose,
@@ -95,28 +99,79 @@ class Ardennes(AbstractTree):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
             
             # picks fittest population
-            fittest_pop = self.pick_fittest_population(population, borderline)
+            fittest_pop = self.__pick_fittest_population__(population, borderline)
             gm.update(fittest_pop)
             
             n_replace = np.count_nonzero(fitness < borderline)
             replaced = self.sample_individuals(n_replace, gm, sets)
             population = fittest_pop + replaced
             
-            if self.early_stop(gm, self.uncertainty):
+            if self.__early_stop__(gm, self.uncertainty):
                 break
             
             fitness = np.array(map(lambda x: x.fitness, population))
             
             iteration += 1
-        
-        fittest_ind = population[np.argmax(fitness)]
-        
+
+        if self.ensemble:
+            self.predictor = population
+        else:
+            self.predictor = population[np.argmax(fitness)]
+
+        self.trained = True
         GraphicalModel.reset_globals()
-        
-        return fittest_ind
-    
+
+    def __predict_type_handler__(self, samples):
+        if isinstance(samples, np.ndarray) or isinstance(samples, list):
+            df = pd.DataFrame(samples)
+        elif isinstance(samples, pd.DataFrame):
+            df = samples
+        else:
+            raise TypeError('Invalid type for samples! Must be either a list-like or a pandas.DataFrame!')
+
+        return df
+
+    def predict_proba(self, samples):
+        df = self.__predict_type_handler__(samples)
+
+        if not self.ensemble:
+            # using predict_proba with a single tree has the same effect as simply using predict
+            all_preds = self.predictor.predict(df)
+        else:
+            labels = {label: i for i, label in enumerate(self.class_labels)}
+
+            def sample_prob(sample):
+                preds = np.empty(len(self.class_labels), dtype=np.float32)
+
+                sample_predictions = map(lambda x: x.predict(sample), self.predictor)
+                count = Counter(sample_predictions)
+                count_probs = {k: v / float(len(self.predictor)) for k, v in count.iteritems()}
+                for k, v in count_probs.items():
+                    preds[labels[k]] = v
+
+                return preds
+
+            all_preds = df.apply(sample_prob, axis=1).as_matrix()
+
+        return all_preds
+
+    def predict(self, samples):
+        df = self.__predict_type_handler__(samples)
+
+        if not self.ensemble:
+            all_preds = self.predictor.predict(df)
+        else:
+            def sample_pred(sample):
+                sample_predictions = map(lambda x: x.predict(sample), self.predictor)
+                most_common = Counter(sample_predictions).most_common()[0][0]
+                return most_common
+
+            all_preds = df.apply(sample_pred, axis=1).as_matrix()
+
+        return all_preds
+
     @staticmethod
-    def pick_fittest_population(population, borderline):
+    def __pick_fittest_population__(population, borderline):
         fittest_pop = []
         for ind in population:
             if ind.fitness >= borderline:
@@ -131,7 +186,7 @@ class Ardennes(AbstractTree):
         )
         return sample
     
-    def report(self, **kwargs):
+    def __report__(self, **kwargs):
         iteration = kwargs['iteration']  # type: int
 
         fitness = kwargs['fitness']  # type: np.ndarray
@@ -149,7 +204,7 @@ class Ardennes(AbstractTree):
                 np.savetxt(f, fitness[:, np.newaxis].T, delimiter=',')
     
     @staticmethod
-    def early_stop(gm, uncertainty=0.01):
+    def __early_stop__(gm, uncertainty=0.01):
         """
 
         :type gm: treelib.graphical_models.GraphicalModel
@@ -175,3 +230,21 @@ class Ardennes(AbstractTree):
     def __check_tree_size__(initial_tree_size):
         if (initial_tree_size - 1) % 2 != 0:
             raise ValueError('Invalid number of nodes! (initial_tree_size - 1) % 2 must be an integer!')
+
+    def validate(self, test_set=None, X_test=None, y_test=None):
+        """
+        Assess the accuracy of this instance against the provided set.
+
+        :type test_set: pandas.DataFrame
+        :param test_set: a matrix with the class attribute in the last position (i.e, column).
+        :rtype: float
+        :return: The accuracy of this model when testing with test_set.
+        """
+
+        if test_set is None:
+            test_set = pd.DataFrame(
+                np.hstack((X_test, y_test[:, np.newaxis]))
+            )
+
+        acc = self.predictor.validate(test_set=test_set)
+        return acc
