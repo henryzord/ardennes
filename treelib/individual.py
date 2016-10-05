@@ -114,7 +114,7 @@ class Individual(AbstractTree):
         sess = graphical_model.sample()
 
         self.tree = self.__set_thresholds__(sess, sets['train'])  # type: nx.DiGraph
-        self.val_acc = self.__validate__(self.sets['val'])
+        self.val_acc = self.validate(self.sets['val'])
 
     def __set_thresholds__(self, sess, train_set):
         """
@@ -231,10 +231,10 @@ class Individual(AbstractTree):
 
     def predict(self, samples):
         df = pd.DataFrame(samples)
-        preds = df.apply(self.__predict_object__, axis=1)  # TODO create func for pred!
+        preds = df.apply(self.__predict_object__, axis=1).as_matrix()
         return preds
 
-    def __validate__(self, test_set=None, X_test=None, y_test=None):
+    def validate(self, test_set=None, X_test=None, y_test=None):
         """
         Assess the accuracy of this Individual against the provided set.
         

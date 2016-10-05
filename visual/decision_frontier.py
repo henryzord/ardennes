@@ -9,14 +9,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import ListedColormap
-from sklearn.cross_validation import train_test_split
 from sklearn.datasets import make_moons, make_circles, make_classification
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import pandas as pd
 
 from treelib import Ardennes
-
-print(__doc__)
 
 h = .02  # step size in the mesh
 
@@ -68,16 +65,15 @@ for ds_cnt, ds in enumerate(datasets):
     ax = plt.subplot(len(datasets), 2, i)
     
     clf = Ardennes()
-    tree = clf.fit_predict(X_train=X_train, y_train=y_train, verbose=False)
-    
-    score = tree.__validate__(X_test=X_test, y_test=y_test)
+    tree = clf.fit_predict(X_train=X_train, y_train=y_train, initial_tree_size=31, verbose=True)
+    score = tree.validate(X_test=X_test, y_test=y_test)
     
     # Plot the decision boundary. For that, we will assign a color to each
     # point in the mesh [x_min, x_max]x[y_min, y_max].
     if hasattr(clf, "decision_function"):
         Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
     else:
-        Z = tree.predict(np.c_[xx.ravel(), yy.ravel()])[:, 1]
+        Z = tree.predict(np.c_[xx.ravel(), yy.ravel()])
     
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
@@ -94,7 +90,7 @@ for ds_cnt, ds in enumerate(datasets):
     ax.set_xticks(())
     ax.set_yticks(())
     if ds_cnt == 0:
-        ax.set_title(name)
+        ax.set_title('ardennes')
     ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'),
             size=15, horizontalalignment='right')
     i += 1

@@ -1,8 +1,8 @@
 # coding=utf-8
-
+from datetime import datetime
 import numpy as np
 import pandas as pd
-from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import train_test_split
 
 from treelib import Ardennes
 
@@ -11,7 +11,7 @@ __author__ = 'Henry Cagnini'
 
 def get_folds(df, n_folds=10, random_state=None):
     from sklearn.cross_validation import StratifiedKFold
-    
+
     Y = df[df.columns[-1]]
     
     folds = StratifiedKFold(Y, n_folds=n_folds, shuffle=True, random_state=random_state)
@@ -28,7 +28,12 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
     fold_acc = 0.
     
     test_set = df.iloc[arg_test]  # test set contains both x_test and y_test
-    
+
+    cur_date = datetime.now()
+    str_date = '%02.d:%02.d %02.d-%02.d-%04.d' % (
+        cur_date.hour, cur_date.minute, cur_date.day, cur_date.month, cur_date.year
+    )
+
     x_train, x_val, y_train, y_val = train_test_split(
         df.iloc[arg_train][df.columns[:-1]],
         df.iloc[arg_train][df.columns[-1]],
@@ -42,19 +47,22 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
     sets = {'train': train_set, 'val': val_set, 'test': test_set}
     
     for j in xrange(kwargs['n_runs']):  # run the evolutionary process several times
+        file_name = 'fold=%02.d run=%02.d' % (fold, j) + ' ' + str_date + '.csv'
+
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
-            uncertainty=kwargs['uncertainty'],
+            uncertainty=kwargs['uncertainty']
         )
         
         fittest = inst.fit_predict(
             sets=sets,
             initial_tree_size=kwargs['initial_tree_size'],
             verbose=kwargs['verbose'],
+            output_file=file_name
         )
         
-        test_acc = fittest.__validate__(sets['test'])
+        test_acc = fittest.validate(sets['test'])
         print 'fold: %02.d run: %02.d accuracy: %0.2f' % (fold, j, test_acc)
         
         fold_acc += test_acc
@@ -79,7 +87,8 @@ def main():
         'n_folds': n_folds,
         'n_runs': n_runs,
         'initial_tree_size': 15,
-        'random_state': random_state
+        'random_state': random_state,
+        'metadata_path': 'metadata'
     }
     
     if random_state is not None:
@@ -92,6 +101,8 @@ def main():
     
     for i, (arg_train, arg_test) in enumerate(folds):
         run_fold(fold=i, df=df, arg_train=arg_train, arg_test=arg_test, **kwargs)
+        warnings.warn('WARNING: exiting after first fold!')
+        exit(1)
 
 if __name__ == '__main__':
     main()

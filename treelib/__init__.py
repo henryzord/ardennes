@@ -1,4 +1,5 @@
 # coding=utf-8
+import os
 
 from treelib.graphical_models import *
 
@@ -48,10 +49,14 @@ class Ardennes(AbstractTree):
                         np.hstack((X_val, y_val[:, np.newaxis]))
                     )
         else:
-            sets = kwargs['sets']
             if 'val' not in sets:
                 sets['val'] = sets['train']
-        
+
+        if 'output_file' in kwargs:
+            output_file = kwargs['output_file']
+        else:
+            output_file = None
+
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
             'target_attr': sets['train'].columns[-1],
@@ -79,20 +84,15 @@ class Ardennes(AbstractTree):
         
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
-            mean = np.mean(fitness)  # type: float
-            median = np.median(fitness)  # type: float
-            max_fitness = np.max(fitness)  # type: float
-            
-            self.verbose(
+            self.report(
                 iteration=iteration,
-                mean=mean,
-                median=median,
-                max_fitness=max_fitness,
-                verbose=verbose
+                fitness=fitness,
+                verbose=verbose,
+                output_file=output_file
             )
-            
-            borderline = np.partition(fitness, integer_threshold)[
-                integer_threshold]  # TODO slow. test other implementation!
+
+            # TODO slow. test other implementation!
+            borderline = np.partition(fitness, integer_threshold)[integer_threshold]
             
             # picks fittest population
             fittest_pop = self.pick_fittest_population(population, borderline)
@@ -131,14 +131,22 @@ class Ardennes(AbstractTree):
         )
         return sample
     
-    def verbose(self, **kwargs):
-        iteration = kwargs['iteration']
-        mean = kwargs['mean']
-        median = kwargs['median']
-        max_fitness = kwargs['max_fitness']
-        
+    def report(self, **kwargs):
+        iteration = kwargs['iteration']  # type: int
+
+        fitness = kwargs['fitness']  # type: np.ndarray
+
         if kwargs['verbose']:
+            mean = np.mean(fitness)  # type: float
+            median = np.median(fitness)  # type: float
+            max_fitness = np.max(fitness)  # type: float
+
             print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (iteration, mean, median, max_fitness)
+
+        if kwargs['output_file']:
+            output_file = kwargs['output_file']  # type: str
+            with open(output_file, 'a') as f:
+                np.savetxt(f, fitness[:, np.newaxis].T, delimiter=',')
     
     @staticmethod
     def early_stop(gm, uncertainty=0.01):
