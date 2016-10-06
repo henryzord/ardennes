@@ -26,16 +26,17 @@ rng = np.random.RandomState(2)
 X += 2 * rng.uniform(size=X.shape)
 linearly_separable = (X, y)
 
-warnings.warn('WARNING: testing with only one dataset!')
-
 datasets = [
     make_moons(noise=0.3, random_state=0),
     # make_circles(noise=0.2, factor=0.5, random_state=1),
     # linearly_separable
 ]
 
-figure = plt.figure(figsize=(27, 9))
+figure = plt.figure(figsize=(14, 9))
 i = 1
+
+# classifiers = [('best individual', False), ('last population', True)]
+classifiers = [('best individual', False)]
 
 # iterate over datasets
 for ds_cnt, ds in enumerate(datasets):
@@ -46,60 +47,49 @@ for ds_cnt, ds in enumerate(datasets):
     
     x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
     y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                         np.arange(y_min, y_max, h))
-    
-    # just plot the dataset first
-    cm = plt.cm.RdBu
-    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
-    ax = plt.subplot(len(datasets), 2, i)
-    if ds_cnt == 0:
-        ax.set_title("Input data")
-    # Plot the training points
-    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright)
-    # and testing points
-    ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6)
-    ax.set_xlim(xx.min(), xx.max())
-    ax.set_ylim(yy.min(), yy.max())
-    ax.set_xticks(())
-    ax.set_yticks(())
-    i += 1
-    
-    # # classifies
-    ax = plt.subplot(len(datasets), 2, i)
-    
+    xx, yy = np.meshgrid(
+        np.arange(x_min, x_max, h),
+        np.arange(y_min, y_max, h)
+    )
+
     clf = Ardennes()
-    clf.fit(X_train=X_train, y_train=y_train, initial_tree_size=7, verbose=True, ensemble=True)
-    # warnings.warn('WARNING: omitting scores!')
-    # score = 0
-    score = clf.validate(X_test=X_test, y_test=y_test)
-    
-    # Plot the decision boundary. For that, we will assign a color to each
-    # point in the mesh [x_min, x_max]x[y_min, y_max].
-    if clf.ensemble:
-        proba = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])
-        print type(proba)
-        Z = proba[:, 1]
-    else:
-        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
-    
-    # Put the result into a color plot
-    Z = Z.reshape(xx.shape)
-    ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
-    
-    # Plot also the training points
-    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright)
-    # and testing points
-    ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6)
-    
-    ax.set_xlim(xx.min(), xx.max())
-    ax.set_ylim(yy.min(), yy.max())
-    ax.set_xticks(())
-    ax.set_yticks(())
-    if ds_cnt == 0:
-        ax.set_title('ardennes')
-    ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'), size=15, horizontalalignment='right')
-    i += 1
+    clf.fit(X_train=X_train, y_train=y_train, initial_tree_size=101, verbose=True)
+
+    # iterate over classifiers
+    for name, ensemble in classifiers:
+        cm = plt.cm.RdBu
+        cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+        ax = plt.subplot(len(datasets), len(classifiers), i)
+
+        score = clf.validate(X_test=X_test, y_test=y_test, ensemble=ensemble)
+
+        # Plot the decision boundary. For that, we will assign a color to each
+        # point in the mesh [x_min, x_max]x[y_min, y_max].
+        if not ensemble:
+            Z = clf.predict(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)
+        else:
+            Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)[:, 1]
+
+        # Put the result into a color plot
+        Z = Z.reshape(xx.shape)
+        ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
+
+        # Plot also the training points
+        ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright, s=45, linewidth=0., label='train')
+        # and testing points
+        ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6, s=45, linewidth=1., label='test')
+
+        ax.set_xlim(xx.min(), xx.max())
+        ax.set_ylim(yy.min(), yy.max())
+        ax.set_xticks(())
+        ax.set_yticks(())
+        if ds_cnt == 0:
+            ax.set_title(name)
+        ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'), size=15, horizontalalignment='right')
+
+        ax.legend(loc=3)
+
+        i += 1
 
 plt.tight_layout()
 plt.show()

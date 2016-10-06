@@ -30,8 +30,8 @@ class Ardennes(AbstractTree):
         self.decile = decile
 
         self.trained = False
-        self.ensemble = False
-        self.predictor = None
+        self.best_individual = None
+        self.last_population = None
 
     def fit(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, **kwargs):
         if sets is None or 'train' not in sets:
@@ -55,7 +55,6 @@ class Ardennes(AbstractTree):
                 sets['val'] = sets['train']
 
         output_file = kwargs['output_file'] if 'output_file' in kwargs else None
-        self.ensemble = kwargs['ensemble'] if 'ensemble' in kwargs else False
 
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
@@ -73,7 +72,12 @@ class Ardennes(AbstractTree):
         else:
             initial_tree_size = 3
         
-        gm = GraphicalModel(initial_tree_size=initial_tree_size, **class_values)
+        gm = GraphicalModel(
+            initial_tree_size=initial_tree_size,
+            distribution=kwargs['distribution'] if 'distribution' in kwargs else 'multivariate',
+            class_probability=kwargs['class_probability'] if 'class_probability' in kwargs else None,
+            **class_values
+        )
         
         population = self.sample_individuals(
             n_sample=self.n_individuals,
@@ -95,7 +99,6 @@ class Ardennes(AbstractTree):
                 output_file=output_file
             )
 
-            # TODO slow. test other implementation!
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
             
             # picks fittest population
@@ -113,39 +116,29 @@ class Ardennes(AbstractTree):
             
             iteration += 1
 
-        if self.ensemble:
-            self.predictor = population
-        else:
-            self.predictor = population[np.argmax(fitness)]
-
+        self.best_individual = np.argmax(fitness)
+        self.last_population = population
         self.trained = True
         GraphicalModel.reset_globals()
 
-    def __predict_type_handler__(self, samples):
-        if isinstance(samples, np.ndarray) or isinstance(samples, list):
-            df = pd.DataFrame(samples)
-        elif isinstance(samples, pd.DataFrame):
-            df = samples
-        else:
-            raise TypeError('Invalid type for samples! Must be either a list-like or a pandas.DataFrame!')
+    def predict_proba(self, samples, ensemble=False):
+        df = self.__to_dataframe__(samples)
 
-        return df
-
-    def predict_proba(self, samples):
-        df = self.__predict_type_handler__(samples)
-
-        if not self.ensemble:
+        if not ensemble:
             # using predict_proba with a single tree has the same effect as simply using predict
-            all_preds = self.predictor.predict(df)
+            predictor = self.last_population[self.best_individual]
+            all_preds = predictor.predict(df)
         else:
+            predictor = self.last_population
+
             labels = {label: i for i, label in enumerate(self.class_labels)}
 
             def sample_prob(sample):
                 preds = np.empty(len(self.class_labels), dtype=np.float32)
 
-                sample_predictions = map(lambda x: x.predict(sample), self.predictor)
+                sample_predictions = map(lambda x: x.predict(sample), predictor)
                 count = Counter(sample_predictions)
-                count_probs = {k: v / float(len(self.predictor)) for k, v in count.iteritems()}
+                count_probs = {k: v / float(len(predictor)) for k, v in count.iteritems()}
                 for k, v in count_probs.items():
                     preds[labels[k]] = v
 
@@ -155,14 +148,17 @@ class Ardennes(AbstractTree):
 
         return all_preds
 
-    def predict(self, samples):
-        df = self.__predict_type_handler__(samples)
+    def predict(self, samples, ensemble=False):
+        df = self.__to_dataframe__(samples)
 
-        if not self.ensemble:
-            all_preds = self.predictor.predict(df)
+        if not ensemble:
+            predictor = self.last_population[self.best_individual]
+            all_preds = predictor.predict(df)
         else:
+            predictor = self.last_population
+
             def sample_pred(sample):
-                sample_predictions = map(lambda x: x.predict(sample), self.predictor)
+                sample_predictions = map(lambda x: x.predict(sample), predictor)
                 most_common = Counter(sample_predictions).most_common()[0][0]
                 return most_common
 
@@ -170,12 +166,46 @@ class Ardennes(AbstractTree):
 
         return all_preds
 
+    def validate(self, test_set=None, X_test=None, y_test=None, ensemble=False):
+        """
+        Assess the accuracy of this instance against the provided set.
+
+        :type test_set: pandas.DataFrame
+        :param test_set: a matrix with the class attribute in the last position (i.e, column).
+        :rtype: float
+        :return: The accuracy of this model when testing with test_set.
+        """
+
+        if test_set is None:
+            test_set = pd.DataFrame(
+                np.hstack((X_test, y_test[:, np.newaxis]))
+            )
+
+        predictions = self.predict(test_set, ensemble=ensemble)
+        acc = (test_set[test_set.columns[-1]] == predictions).sum() / float(test_set.shape[0])
+        return acc
+
+    def plot(self):
+        raise NotImplementedError('not implemented yet!')
+
+    @staticmethod
+    def __to_dataframe__(samples):
+        if isinstance(samples, np.ndarray) or isinstance(samples, list):
+            df = pd.DataFrame(samples)
+        elif isinstance(samples, pd.DataFrame):
+            df = samples
+        else:
+            raise TypeError('Invalid type for samples! Must be either a list-like or a pandas.DataFrame!')
+
+        return df
+
     @staticmethod
     def __pick_fittest_population__(population, borderline):
         fittest_pop = []
         for ind in population:
             if ind.fitness >= borderline:
                 fittest_pop += [ind]
+
         return fittest_pop
     
     @staticmethod
@@ -186,7 +216,8 @@ class Ardennes(AbstractTree):
         )
         return sample
     
-    def __report__(self, **kwargs):
+    @staticmethod
+    def __report__(**kwargs):
         iteration = kwargs['iteration']  # type: int
 
         fitness = kwargs['fitness']  # type: np.ndarray
@@ -230,21 +261,3 @@ class Ardennes(AbstractTree):
     def __check_tree_size__(initial_tree_size):
         if (initial_tree_size - 1) % 2 != 0:
             raise ValueError('Invalid number of nodes! (initial_tree_size - 1) % 2 must be an integer!')
-
-    def validate(self, test_set=None, X_test=None, y_test=None):
-        """
-        Assess the accuracy of this instance against the provided set.
-
-        :type test_set: pandas.DataFrame
-        :param test_set: a matrix with the class attribute in the last position (i.e, column).
-        :rtype: float
-        :return: The accuracy of this model when testing with test_set.
-        """
-
-        if test_set is None:
-            test_set = pd.DataFrame(
-                np.hstack((X_test, y_test[:, np.newaxis]))
-            )
-
-        acc = self.predictor.validate(test_set=test_set)
-        return acc

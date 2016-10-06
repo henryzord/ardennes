@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from treelib.classes import AbstractTree
-from treelib.node import Node
+from treelib import node
 
 from matplotlib import pyplot as plt
 
@@ -166,7 +166,7 @@ class Individual(AbstractTree):
                 sess=sess
             )
 
-        id_left, id_right = (Node.get_left_child(variable_name), Node.get_right_child(variable_name))
+        id_left, id_right = (node.get_left_child(variable_name), node.get_right_child(variable_name))
         if id_left in sess and id_right in sess:
             for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
                 tree = self.__set_node_threshold__(
@@ -337,7 +337,7 @@ class Individual(AbstractTree):
                 'threshold': best_threshold,
                 'terminal': False,
                 'color': Individual._root_node_color if
-                    kwargs['variable_name'] == Node.root else Individual._inner_node_color
+                    kwargs['variable_name'] == node.root else Individual._inner_node_color
             }
             pd.options.mode.chained_assignment = 'warn'
 
@@ -372,7 +372,7 @@ class Individual(AbstractTree):
 
     @staticmethod
     def __set_error__(self, node_label, parent_label, subset, **kwargs):
-        raise TypeError('Unsupported data type for column %s!' % attr_name)
+        raise TypeError('Unsupported data type for column %s!' % node_label)
 
     attr_handler_dict = {
         'object': __set_categorical__,

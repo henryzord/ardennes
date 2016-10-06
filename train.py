@@ -52,14 +52,17 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
-            uncertainty=kwargs['uncertainty']
+            uncertainty=kwargs['uncertainty'],
         )
         
         fittest = inst.fit(
             sets=sets,
             initial_tree_size=kwargs['initial_tree_size'],
             verbose=kwargs['verbose'],
-            output_file=file_name if kwargs['save_metadata'] else None
+            output_file=file_name if kwargs['save_metadata'] else None,
+            ensemble=kwargs['ensemble'],
+            distribution=kwargs['distribution'],
+            class_probability=kwargs['class_probability']
         )
         
         test_acc = fittest.validate(sets['test'])
@@ -86,11 +89,13 @@ def main():
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 15,
+        'initial_tree_size': 3,
         'random_state': random_state,
-        'ensemble': True,
+        'ensemble': False,
         'metadata_path': 'metadata',
-        'save_metadata': False
+        'save_metadata': False,
+        'distribution': 'univariate',
+        'class_probability': None
     }
     
     if random_state is not None:

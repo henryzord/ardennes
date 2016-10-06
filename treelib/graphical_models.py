@@ -8,7 +8,7 @@ import pandas as pd
 
 from treelib.classes import SetterClass, Session, AbstractTree
 from treelib.individual import Individual
-from treelib.node import Node
+from treelib import node
 
 __author__ = 'Henry Cagnini'
 
@@ -52,7 +52,7 @@ class Tensor(SetterClass):
                 data=combs,
                 columns=columns
             )
-            df['probability'] = 1. / df.shape[0]  # TODO maybe is wrong! must be conditional to the parent!
+            df['probability'] = 1. / df.shape[0]
             return df
         elif isinstance(probability, list):
             if len(probability) != len(values):
@@ -81,7 +81,10 @@ class Tensor(SetterClass):
             a = grouped[self.name]
             p = grouped['probability']
         
-        value = np.random.choice(a=a, p=p)  # weights has the same order than values
+        try:
+            value = np.random.choice(a=a, p=p)  # weights has the same order than values
+        except ValueError as ve:
+            raise ve
         session[self.name] = value
         return value
 
@@ -93,28 +96,35 @@ class GraphicalModel(AbstractTree):
     
     tensors = None  # tensor is a dependency graph
     
-    def __init__(self, gm_id=0, initial_tree_size=3, **kwargs):
+    def __init__(self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability=None, **kwargs):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
-        self.tensors = self.__init_tensor__(initial_tree_size)
+        self.tensors = self.__init_tensor__(initial_tree_size, distribution, class_probability)
     
-    def __init_tensor__(self, initial_tree_size):
+    def __init_tensor__(self, initial_tree_size, distribution, class_probability):
         # TODO enhance to perform any kind of initialization!
-        
         # TODO must be able to automatically perform this kind of initialization!
-        def get_parents(id):
-            parent = Node.get_parent(id)
-            val = parent
-            parents = []
-            while val is not None:
-                parents += [parent]
-                parent = Node.get_parent(val)
+
+        def get_parents(id, distribution):
+            if distribution == 'multivariate':
+                parent = node.get_parent(id)
                 val = parent
+                parents = []
+                while val is not None:
+                    parents += [parent]
+                    parent = node.get_parent(val)
+                    val = parent
+            elif distribution == 'bivariate':
+                parents = [node.get_parent(id)]
+            elif distribution == 'univariate':
+                parents = []
+            else:
+                raise ValueError('Distribution must be either multivariate, bivariate or univariate!')
             return parents
 
         def is_terminal(id):
-            return Node.get_right_child(id) >= initial_tree_size
+            return node.get_right_child(id) >= initial_tree_size
         
         inner_values = self.pred_attr + [self.target_attr]
         outer_values = [self.target_attr]
@@ -122,7 +132,7 @@ class GraphicalModel(AbstractTree):
         tensors = map(
             lambda i: Tensor(
                 i,
-                parents=get_parents(i),
+                parents=get_parents(i, distribution),
                 values=inner_values if not is_terminal(i) else outer_values,
                 gm_id=self.gm_id
             ),
@@ -162,7 +172,8 @@ class GraphicalModel(AbstractTree):
             for comb, n_occur in count.iteritems():
                 click = it.izip(order, comb)
                 _slice = weights  # type: pd.DataFrame
-                for var_name, value in click:
+                for var_name, value in click:  # TODO error! value has class_labels for terminal nodes, but not for inner nodes!!!
+                    raise ValueError('VALUE ERROR HERE!')
                     _slice = weights.loc[weights[var_name] == value]
                 
                 _slice['probability'] = n_occur
