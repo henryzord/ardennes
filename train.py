@@ -55,17 +55,16 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
             uncertainty=kwargs['uncertainty'],
         )
         
-        fittest = inst.fit(
+        inst.fit(
             sets=sets,
             initial_tree_size=kwargs['initial_tree_size'],
             verbose=kwargs['verbose'],
             output_file=file_name if kwargs['save_metadata'] else None,
-            ensemble=kwargs['ensemble'],
             distribution=kwargs['distribution'],
             class_probability=kwargs['class_probability']
         )
         
-        test_acc = fittest.validate(sets['test'])
+        test_acc = inst.validate(sets['test'], ensemble=kwargs['ensemble'])
         print 'fold: %02.d run: %02.d accuracy: %0.2f' % (fold, j, test_acc)
         
         fold_acc += test_acc

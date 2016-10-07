@@ -113,10 +113,10 @@ class Individual(AbstractTree):
     def sample(self, graphical_model, sets):
         sess = graphical_model.sample()
 
-        self.tree = self.__set_thresholds__(sess, sets['train'])  # type: nx.DiGraph
+        self.tree = self.__set_tree__(sess, sets['train'])  # type: nx.DiGraph
         self.val_acc = self.validate(self.sets['val'])
 
-    def __set_thresholds__(self, sess, train_set):
+    def __set_tree__(self, sess, train_set):
         """
         
         :type sess: dict of float
@@ -131,7 +131,7 @@ class Individual(AbstractTree):
     
         subset = train_set
     
-        tree = self.__set_node_threshold__(
+        tree = self.__set_node__(
             sess=sess,
             tree=tree,
             subset=subset,
@@ -140,7 +140,7 @@ class Individual(AbstractTree):
         )
         return tree
 
-    def __set_node_threshold__(self, sess, tree, subset, variable_name, parent_label):
+    def __set_node__(self, sess, tree, subset, variable_name, parent_label):
         """
         
         :param sess:
@@ -169,7 +169,7 @@ class Individual(AbstractTree):
         id_left, id_right = (node.get_left_child(variable_name), node.get_right_child(variable_name))
         if id_left in sess and id_right in sess:
             for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
-                tree = self.__set_node_threshold__(
+                tree = self.__set_node__(
                     sess=sess,
                     tree=tree,
                     subset=child_subset,

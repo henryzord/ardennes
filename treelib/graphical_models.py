@@ -152,7 +152,7 @@ class GraphicalModel(AbstractTree):
         pd.options.mode.chained_assignment = None
         
         n_fittest = float(len(fittest))
-        
+
         for i, tensor in enumerate(self.tensors):
             parents = tensor.parents
             order = [tensor.name] + parents
@@ -160,7 +160,7 @@ class GraphicalModel(AbstractTree):
             all_vec = []
             for fit in fittest:
                 vec = map(
-                    lambda x: fit.tree.node[x]['label'],
+                    lambda x: fit.tree.node[x]['label'] if not fit.tree.node[x]['terminal'] else self.target_attr,
                     order
                 )
                 all_vec += [tuple(vec)]
@@ -172,8 +172,7 @@ class GraphicalModel(AbstractTree):
             for comb, n_occur in count.iteritems():
                 click = it.izip(order, comb)
                 _slice = weights  # type: pd.DataFrame
-                for var_name, value in click:  # TODO error! value has class_labels for terminal nodes, but not for inner nodes!!!
-                    raise ValueError('VALUE ERROR HERE!')
+                for var_name, value in click:
                     _slice = weights.loc[weights[var_name] == value]
                 
                 _slice['probability'] = n_occur

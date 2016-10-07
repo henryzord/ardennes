@@ -28,15 +28,15 @@ linearly_separable = (X, y)
 
 datasets = [
     make_moons(noise=0.3, random_state=0),
-    # make_circles(noise=0.2, factor=0.5, random_state=1),
-    # linearly_separable
+    make_circles(noise=0.2, factor=0.5, random_state=1),
+    linearly_separable
 ]
 
 figure = plt.figure(figsize=(14, 9))
 i = 1
 
-# classifiers = [('best individual', False), ('last population', True)]
-classifiers = [('best individual', False)]
+classifiers = [('best individual', False), ('last population', True)]
+# classifiers = [('best individual', False)]
 
 # iterate over datasets
 for ds_cnt, ds in enumerate(datasets):
@@ -53,7 +53,7 @@ for ds_cnt, ds in enumerate(datasets):
     )
 
     clf = Ardennes()
-    clf.fit(X_train=X_train, y_train=y_train, initial_tree_size=101, verbose=True)
+    clf.fit(X_train=X_train, y_train=y_train, initial_tree_size=15, verbose=True)
 
     # iterate over classifiers
     for name, ensemble in classifiers:
