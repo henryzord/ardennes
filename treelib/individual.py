@@ -25,7 +25,7 @@ class Individual(AbstractTree):
     val_acc = None  # type: float
     id = None
     
-    def __init__(self, graphical_model, sets, **kwargs):
+    def __init__(self, sess, sets, **kwargs):
         """
         
         :type graphical_model: treelib.graphical_models.GraphicalModel
@@ -48,7 +48,7 @@ class Individual(AbstractTree):
         self.column_types = Individual.column_types
         
         self.sets = sets
-        self.sample(graphical_model, sets)
+        self.sample(sess, sets)
 
     def __str__(self):
         return 'fitness: %0.2f' % self.val_acc
@@ -110,9 +110,7 @@ class Individual(AbstractTree):
     # sampling and related methods #
     # ############################ #
 
-    def sample(self, graphical_model, sets):
-        sess = graphical_model.sample()
-
+    def sample(self, sess, sets):
         self.tree = self.__set_tree__(sess, sets['train'])  # type: nx.DiGraph
         self.val_acc = self.validate(self.sets['val'])
 

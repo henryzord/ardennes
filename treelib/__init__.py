@@ -189,6 +189,16 @@ class Ardennes(AbstractTree):
         raise NotImplementedError('not implemented yet!')
 
     @staticmethod
+    def sample_individuals(n_sample, graphical_model, sets):
+        sessions = graphical_model.sample(n_sample=n_sample)
+
+        sample = map(
+            lambda i: Individual(id=i, sess=sessions[i], sets=sets),
+            xrange(n_sample)
+        )
+        return sample
+
+    @staticmethod
     def __to_dataframe__(samples):
         if isinstance(samples, np.ndarray) or isinstance(samples, list):
             df = pd.DataFrame(samples)
@@ -207,15 +217,7 @@ class Ardennes(AbstractTree):
                 fittest_pop += [ind]
 
         return fittest_pop
-    
-    @staticmethod
-    def sample_individuals(n_sample, graphical_model, sets):
-        sample = map(
-            lambda i: Individual(id=i, graphical_model=graphical_model, sets=sets),
-            xrange(n_sample)
-        )
-        return sample
-    
+
     @staticmethod
     def __report__(**kwargs):
         iteration = kwargs['iteration']  # type: int

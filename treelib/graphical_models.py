@@ -63,9 +63,10 @@ class Tensor(SetterClass):
         else:
             raise TypeError('probability must be either a string or a list!')
     
-    def sample(self, session):
-        if self.name in session:
-            raise KeyError('value already sampled in this session!')
+    def sample(self, sessions):
+        if isinstance(sessions, Session):
+            sessions = [sessions]
+
         if len(self.parents) == 0:  # TODO now must calculate conditional probabilities!
             p = self.weights['probability']
             a = self.weights[self.name]
@@ -73,20 +74,23 @@ class Tensor(SetterClass):
             grouped = self.weights.copy()  # type: pd.DataFrame
             for p in self.parents:
                 grouped = grouped.loc[grouped[p] == session[p]]
-            
+
             _sum = grouped['probability'].sum()
-            
+
             grouped['probability'] = grouped['probability'].apply(lambda x: x / _sum)
 
             a = grouped[self.name]
             p = grouped['probability']
-        
-        try:
-            value = np.random.choice(a=a, p=p)  # weights has the same order than values
-        except ValueError as ve:
-            raise ve
-        session[self.name] = value
-        return value
+
+        vals = np.random.choice(a=a, p=p, replace=True, size=len(sessions))  # weights has the same order than values
+
+        for session, val in it.izip(sessions, vals):
+            if self.name in session:
+                raise KeyError('value already sampled in this session!')
+
+            session[self.name] = val
+
+        return sessions
 
 
 class GraphicalModel(AbstractTree):
@@ -185,13 +189,13 @@ class GraphicalModel(AbstractTree):
 
         pd.options.mode.chained_assignment = 'warn'
     
-    def sample(self):
-        sess = Session()
-        
+    def sample(self, n_sample=1):
+        sunset_sessions = [Session() for i in xrange(n_sample)]
+
         for tensor in self.tensors:
-            tensor.sample(sess)
-        
-        return sess
+            tensor.sample(sessions=sunset_sessions)
+
+        return sunset_sessions
 
     @classmethod
     def reset_globals(cls):

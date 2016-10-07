@@ -82,7 +82,7 @@ def main():
     dataset_path = 'datasets/iris.csv'
     
     kwargs = {
-        'n_individuals': 50,
+        'n_individuals': 10,
         'decile': 0.8,
         'uncertainty': 0.01,
         'verbose': True,
