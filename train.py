@@ -88,12 +88,12 @@ def main():
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 3,
+        'initial_tree_size': 7,
         'random_state': random_state,
         'ensemble': False,
         'metadata_path': 'metadata',
         'save_metadata': False,
-        'distribution': 'univariate',
+        'distribution': 'multivariate',
         'class_probability': None
     }
     

@@ -3,10 +3,6 @@
 __author__ = 'Henry Cagnini'
 
 
-class Session(dict):
-    pass
-
-
 class SetterClass(object):
     def __init__(self, **kwargs):
         for k, v in kwargs.iteritems():

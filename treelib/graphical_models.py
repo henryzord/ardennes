@@ -6,7 +6,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from treelib.classes import SetterClass, Session, AbstractTree
+from treelib.classes import SetterClass, AbstractTree
 from treelib.individual import Individual
 from treelib import node
 
@@ -67,22 +67,35 @@ class Tensor(SetterClass):
         if isinstance(sessions, Session):
             sessions = [sessions]
 
-        if len(self.parents) == 0:  # TODO now must calculate conditional probabilities!
+        if len(self.parents) == 0:
             p = self.weights['probability']
             a = self.weights[self.name]
+
+            vals = np.random.choice(a=a, p=p, replace=True, size=len(sessions))
         else:
-            grouped = self.weights.copy()  # type: pd.DataFrame
-            for p in self.parents:
-                grouped = grouped.loc[grouped[p] == session[p]]
+            # TODO group session values!!!
+            tuples = [tuple([sess[p] for p in self.parents]) for sess in sessions]
+            parent_sets = Counter(tuples)
 
-            _sum = grouped['probability'].sum()
+            for parent_set, count_set in parent_sets.iteritems():
+                df = self.weights.copy()  # type: pd.DataFrame
+                for i, p in enumerate(self.parents):
+                    df = df.loc[df[p] == parent_set[i]]  # must not come from session; instead from parent_sets!
 
-            grouped['probability'] = grouped['probability'].apply(lambda x: x / _sum)
+                _sum = df['probability'].sum()
 
-            a = grouped[self.name]
-            p = grouped['probability']
+                df['probability'] = df['probability'].apply(lambda x: x / _sum)
 
-        vals = np.random.choice(a=a, p=p, replace=True, size=len(sessions))  # weights has the same order than values
+                a = df[self.name]
+                p = df['probability']
+
+                vals = np.random.choice(a=a, p=p, replace=True, size=count_set)
+
+                # TODO must insert children in the correct order now!
+                # TODO must insert children in the correct order now!
+                # TODO must insert children in the correct order now!
+
+        # ----------------------- #
 
         for session, val in it.izip(sessions, vals):
             if self.name in session:
@@ -90,6 +103,7 @@ class Tensor(SetterClass):
 
             session[self.name] = val
 
+        raise NotImplementedError('not implemented yet!')
         return sessions
 
 
@@ -190,6 +204,8 @@ class GraphicalModel(AbstractTree):
         pd.options.mode.chained_assignment = 'warn'
     
     def sample(self, n_sample=1):
+        raise NotImplementedError('sunset_sessions must be a pandas.dataframe with size n_individuals, n_variables!')
+
         sunset_sessions = [Session() for i in xrange(n_sample)]
 
         for tensor in self.tensors:
