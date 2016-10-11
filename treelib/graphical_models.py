@@ -77,18 +77,13 @@ class Tensor(SetterClass):
             values = np.random.choice(a=a, p=p, replace=True, size=samples.shape[0])
             samples[self.name] = values
         else:
-            # TODO treat for more than one parent!!!!
-            if len(self.parents) > 1:
-                z = 0
-                raise NotImplementedError('not implemented yet!')
-
             # print samples
             grouped = samples.groupby(by=self.parents, axis=0)
             groups = grouped.groups
 
             # iterates over values
             for group_name, group_index in groups.iteritems():
-                if not isinstance(group_name, list):
+                if isinstance(group_name, str):
                     group_name = [group_name]
 
                 group_size = group_index.shape[0]

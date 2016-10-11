@@ -88,7 +88,7 @@ def main():
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 3,
+        'initial_tree_size': 5,
         'random_state': random_state,
         'ensemble': False,
         'metadata_path': 'metadata',
