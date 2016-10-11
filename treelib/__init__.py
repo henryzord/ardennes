@@ -71,7 +71,12 @@ class Ardennes(AbstractTree):
             initial_tree_size = kwargs['initial_tree_size']
         else:
             initial_tree_size = 3
-        
+
+        # threshold where individuals will be picked for PMF updating/replacing
+        integer_threshold = int(self.decile * self.n_individuals)
+
+        df_replace = pd.DataFrame(np.empty((self.n_individuals - integer_threshold, initial_tree_size), dtype=np.object))
+
         gm = GraphicalModel(
             initial_tree_size=initial_tree_size,
             distribution=kwargs['distribution'] if 'distribution' in kwargs else 'multivariate',
@@ -80,16 +85,15 @@ class Ardennes(AbstractTree):
         )
         
         population = self.sample_individuals(
-            n_sample=self.n_individuals,
+            df=df_replace.append(  # TODO error here!
+                pd.DataFrame(np.empty((integer_threshold, initial_tree_size), dtype=np.object))
+            ),
             graphical_model=gm,
             sets=sets
         )
         
         fitness = np.array(map(lambda x: x.fitness, population))
-        
-        # threshold where individuals will be picked for PMF updating/replacing
-        integer_threshold = int(self.decile * self.n_individuals)
-        
+
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
             self.__report__(
@@ -189,11 +193,14 @@ class Ardennes(AbstractTree):
         raise NotImplementedError('not implemented yet!')
 
     @staticmethod
-    def sample_individuals(n_sample, graphical_model, sets):
-        sessions = graphical_model.sample(n_sample=n_sample)
+    def sample_individuals(df, graphical_model, sets):
+        df.reset_index(drop=True, inplace=True)
+        df = graphical_model.sample(df)
+
+        raise NotImplementedError('implement with apply!')
 
         sample = map(
-            lambda i: Individual(id=i, sess=sessions[i], sets=sets),
+            lambda i: Individual(id=i, sess=df.iloc[i], sets=sets),
             xrange(n_sample)
         )
         return sample

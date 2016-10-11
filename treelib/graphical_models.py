@@ -63,48 +63,53 @@ class Tensor(SetterClass):
         else:
             raise TypeError('probability must be either a string or a list!')
     
-    def sample(self, sessions):
-        if isinstance(sessions, Session):
-            sessions = [sessions]
+    def get_value(self, samples):
+        """
+
+        :type samples: pandas.DataFrame
+        :param samples:
+        :return:
+        """
 
         if len(self.parents) == 0:
-            p = self.weights['probability']
-            a = self.weights[self.name]
+            a, p = (self.weights[self.name], self.weights['probability'])
 
-            vals = np.random.choice(a=a, p=p, replace=True, size=len(sessions))
+            values = np.random.choice(a=a, p=p, replace=True, size=samples.shape[0])
+            samples[self.name] = values
         else:
-            # TODO group session values!!!
-            tuples = [tuple([sess[p] for p in self.parents]) for sess in sessions]
-            parent_sets = Counter(tuples)
+            # TODO treat for more than one parent!!!!
+            if len(self.parents) > 1:
+                z = 0
+                raise NotImplementedError('not implemented yet!')
 
-            for parent_set, count_set in parent_sets.iteritems():
+            # print samples
+            grouped = samples.groupby(by=self.parents, axis=0)
+            groups = grouped.groups
+
+            # iterates over values
+            for group_name, group_index in groups.iteritems():
+                if not isinstance(group_name, list):
+                    group_name = [group_name]
+
+                group_size = group_index.shape[0]
+
+                # localize probabilities accordingly to parent values
                 df = self.weights.copy()  # type: pd.DataFrame
-                for i, p in enumerate(self.parents):
-                    df = df.loc[df[p] == parent_set[i]]  # must not come from session; instead from parent_sets!
+                for i_p, p in it.izip(self.parents, group_name):
+                    df = df.loc[df[i_p] == p]
 
+                # update probabilities
                 _sum = df['probability'].sum()
-
                 df['probability'] = df['probability'].apply(lambda x: x / _sum)
+                a, p = (df[self.name], df['probability'])
 
-                a = df[self.name]
-                p = df['probability']
+                # proper sample
+                values = np.random.choice(a=a, p=p, replace=True, size=group_size)
 
-                vals = np.random.choice(a=a, p=p, replace=True, size=count_set)
-
-                # TODO must insert children in the correct order now!
-                # TODO must insert children in the correct order now!
-                # TODO must insert children in the correct order now!
+                samples.loc[group_index, self.name] = values
 
         # ----------------------- #
-
-        for session, val in it.izip(sessions, vals):
-            if self.name in session:
-                raise KeyError('value already sampled in this session!')
-
-            session[self.name] = val
-
-        raise NotImplementedError('not implemented yet!')
-        return sessions
+        return samples
 
 
 class GraphicalModel(AbstractTree):
@@ -203,15 +208,12 @@ class GraphicalModel(AbstractTree):
 
         pd.options.mode.chained_assignment = 'warn'
     
-    def sample(self, n_sample=1):
-        raise NotImplementedError('sunset_sessions must be a pandas.dataframe with size n_individuals, n_variables!')
-
-        sunset_sessions = [Session() for i in xrange(n_sample)]
-
+    def sample(self, df):
         for tensor in self.tensors:
-            tensor.sample(sessions=sunset_sessions)
+            df = tensor.get_value(df)
 
-        return sunset_sessions
+        raise NotImplementedError('df must be a pandas.dataframe with size n_individuals, n_variables!')
+        return df
 
     @classmethod
     def reset_globals(cls):
