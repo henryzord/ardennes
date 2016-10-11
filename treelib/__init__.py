@@ -1,4 +1,6 @@
 # coding=utf-8
+from datetime import datetime as dt
+
 from treelib.graphical_models import *
 
 __author__ = 'Henry Cagnini'
@@ -7,7 +9,11 @@ __author__ = 'Henry Cagnini'
 class Ardennes(AbstractTree):
     gm = None
     
-    def __init__(self, n_individuals=100, n_iterations=100, uncertainty=0.01, decile=0.9, **kwargs):
+    def __init__(self,
+                 n_individuals=100, n_iterations=100, uncertainty=0.01,
+                 decile=0.9, initial_tree_size=3, distribution='multivariate',
+                 class_probability='decreased', **kwargs
+                 ):
         """
         Default EDA class, with common code to all EDAs -- regardless
         of the complexity of inner GMs or updating techniques.
@@ -32,8 +38,11 @@ class Ardennes(AbstractTree):
         self.trained = False
         self.best_individual = None
         self.last_population = None
+        self.initial_tree_size = initial_tree_size
+        self.distribution = distribution
+        self.class_probability = class_probability
 
-    def fit(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, **kwargs):
+    def fit(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, output_file=None):
         if sets is None or 'train' not in sets:
             if all(map(lambda x: x is None, [X_train, y_train])):
                 raise KeyError('You need to pass at least a train set to this method!')
@@ -54,8 +63,6 @@ class Ardennes(AbstractTree):
             if 'val' not in sets:
                 sets['val'] = sets['train']
 
-        output_file = kwargs['output_file'] if 'output_file' in kwargs else None
-
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
             'target_attr': sets['train'].columns[-1],
@@ -66,21 +73,17 @@ class Ardennes(AbstractTree):
         self.target_attr = class_values['target_attr']
         self.class_labels = class_values['class_labels']
 
-        if 'initial_tree_size' in kwargs:
-            self.__check_tree_size__(kwargs['initial_tree_size'])
-            initial_tree_size = kwargs['initial_tree_size']
-        else:
-            initial_tree_size = 3
-
         # threshold where individuals will be picked for PMF updating/replacing
         integer_threshold = int(self.decile * self.n_individuals)
 
-        df_replace = pd.DataFrame(np.empty((self.n_individuals, initial_tree_size), dtype=np.object))
+        t1 = dt.now()
+
+        df_replace = pd.DataFrame(np.empty((self.n_individuals, self.initial_tree_size), dtype=np.object))
 
         gm = GraphicalModel(
-            initial_tree_size=initial_tree_size,
-            distribution=kwargs['distribution'] if 'distribution' in kwargs else 'multivariate',
-            class_probability=kwargs['class_probability'] if 'class_probability' in kwargs else None,
+            initial_tree_size=self.initial_tree_size,
+            distribution=self.distribution,
+            class_probability=self.class_probability,
             **class_values
         )
         
@@ -90,12 +93,16 @@ class Ardennes(AbstractTree):
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
+            t2 = dt.now()
+
             self.__report__(
                 iteration=iteration,
                 fitness=fitness,
                 verbose=verbose,
-                output_file=output_file
+                output_file=output_file,
+                elapsed_time=(t2-t1).total_seconds()
             )
+            t1 = t2
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
             
@@ -242,8 +249,9 @@ class Ardennes(AbstractTree):
             mean = np.mean(fitness)  # type: float
             median = np.median(fitness)  # type: float
             max_fitness = np.max(fitness)  # type: float
+            elapsed_time = kwargs['elapsed_time']
 
-            print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f' % (iteration, mean, median, max_fitness)
+            print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f\tET: %+0.2f' % (iteration, mean, median, max_fitness, elapsed_time)
 
         if kwargs['output_file']:
             output_file = kwargs['output_file']  # type: str

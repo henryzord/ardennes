@@ -1,5 +1,4 @@
 # coding=utf-8
-# coding=utf-8
 
 # Code source: Gaël Varoquaux
 #              Andreas Müller
@@ -35,8 +34,8 @@ datasets = [
 figure = plt.figure(figsize=(14, 9))
 i = 1
 
-classifiers = [('best individual', False), ('last population', True)]
-# classifiers = [('best individual', False)]
+# classifiers = [('best individual', False), ('last population', True)]
+classifiers = [('best individual', False)]
 
 # iterate over datasets
 for ds_cnt, ds in enumerate(datasets):
@@ -52,8 +51,8 @@ for ds_cnt, ds in enumerate(datasets):
         np.arange(y_min, y_max, h)
     )
 
-    clf = Ardennes()
-    clf.fit(X_train=X_train, y_train=y_train, initial_tree_size=15, verbose=True)
+    clf = Ardennes(n_individuals=20, initial_tree_size=51, distribution='multivariate', class_probability='decreased')
+    clf.fit(X_train=X_train, y_train=y_train, verbose=True)
 
     # iterate over classifiers
     for name, ensemble in classifiers:

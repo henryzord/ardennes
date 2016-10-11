@@ -15,7 +15,8 @@ __author__ = 'Henry Cagnini'
 
 class Tensor(SetterClass):
     global_gms = dict()
-    
+    target_attr = None
+
     def __init__(self, name, values, parents=None, class_probability='same', probability='uniform', gm_id=0, **kwargs):
         super(Tensor, self).__init__(**kwargs)
         
@@ -61,7 +62,7 @@ class Tensor(SetterClass):
             if class_probability == 'same':
                 df['probability'] = 1. / df.shape[0]
             elif class_probability == 'decreased':
-                _slice = df.loc[df[self.name] == 'class']
+                _slice = df.loc[df[self.name] == self.target_attr]
                 df['probability'] = 1. / (df.shape[0] - _slice.shape[0])
                 df.loc[_slice.index, 'probability'] = 0.
             else:
@@ -99,7 +100,9 @@ class Tensor(SetterClass):
 
             # iterates over values
             for group_name, group_index in groups.iteritems():
-                if isinstance(group_name, str):
+                try:
+                    group_name = iter(group_name)
+                except TypeError, te:
                     group_name = [group_name]
 
                 group_size = group_index.shape[0]
@@ -131,14 +134,14 @@ class GraphicalModel(AbstractTree):
     tensors = None  # tensor is a dependency graph
     
     def __init__(
-            self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='uniform', **kwargs
+            self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='decreased', **kwargs
     ):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
         self.tensors = self.__init_tensor__(initial_tree_size, distribution, class_probability)
     
-    def __init_tensor__(self, initial_tree_size, distribution, class_probability):
+    def __init_tensor__(self, initial_tree_size, distribution='uniform', class_probability='decreased'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
                 parent = node.get_parent(_id)
@@ -168,7 +171,8 @@ class GraphicalModel(AbstractTree):
                 parents=get_parents(i, distribution),
                 values=inner_values if not is_terminal(i) else outer_values,
                 class_probability=class_probability,
-                gm_id=self.gm_id
+                gm_id=self.gm_id,
+                target_attr=self.target_attr
             ),
             xrange(initial_tree_size)
         )

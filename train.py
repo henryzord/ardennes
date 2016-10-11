@@ -53,15 +53,15 @@ def run_fold(fold, df, arg_train, arg_test, **kwargs):
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
             uncertainty=kwargs['uncertainty'],
+            initial_tree_size=kwargs['initial_tree_size'],
+            distribution=kwargs['distribution'],
+            class_probability=kwargs['class_probability']
         )
         
         inst.fit(
             sets=sets,
-            initial_tree_size=kwargs['initial_tree_size'],
             verbose=kwargs['verbose'],
-            output_file=file_name if kwargs['save_metadata'] else None,
-            distribution=kwargs['distribution'],
-            class_probability=kwargs['class_probability']
+            output_file=file_name if kwargs['save_metadata'] else None
         )
         
         test_acc = inst.validate(sets['test'], ensemble=kwargs['ensemble'])
@@ -82,18 +82,18 @@ def main():
     dataset_path = 'datasets/iris.csv'
     
     kwargs = {
-        'n_individuals': 500,
+        'n_individuals': 100,
         'decile': 0.8,
         'uncertainty': 0.01,
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 101,
+        'initial_tree_size': 31,
         'random_state': random_state,
         'ensemble': False,
         'metadata_path': 'metadata',
         'save_metadata': False,
-        'distribution': 'multivariate',
+        'distribution': 'univariate',
         'class_probability': 'decreased'
     }
     
