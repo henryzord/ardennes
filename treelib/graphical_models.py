@@ -16,7 +16,7 @@ __author__ = 'Henry Cagnini'
 class Tensor(SetterClass):
     global_gms = dict()
     
-    def __init__(self, name, values, parents=None, probability='uniform', gm_id=0, **kwargs):
+    def __init__(self, name, values, parents=None, class_probability='same', probability='uniform', gm_id=0, **kwargs):
         super(Tensor, self).__init__(**kwargs)
         
         if gm_id not in self.__class__.global_gms:
@@ -29,7 +29,12 @@ class Tensor(SetterClass):
         self.name = name  # type: int
         self.values = values  # type: list of str
         self.parents = parents if (len(parents) > 0 or parents is not None) else []  # type: list of int
-        self.weights = self.__init_probabilities__(values, probability)  # type: pd.DataFrame
+
+        self.weights = self.__init_probabilities__(
+            values,
+            probability,
+            class_probability if len(self.values) > 1 else 'same'
+        )  # type: pd.DataFrame
         
         self.__class__.global_gms[gm_id][name] = self
     
@@ -41,7 +46,7 @@ class Tensor(SetterClass):
     def n_values(self):
         return len(self.values)
     
-    def __init_probabilities__(self, values, probability='uniform'):
+    def __init_probabilities__(self, values, probability='uniform', class_probability='same'):
         if probability == 'uniform':
             vec_vals = [self.values] + [self.global_gms[self.gm_id][p].values for p in self.parents]
             
@@ -52,7 +57,16 @@ class Tensor(SetterClass):
                 data=combs,
                 columns=columns
             )
-            df['probability'] = 1. / df.shape[0]
+
+            if class_probability == 'same':
+                df['probability'] = 1. / df.shape[0]
+            elif class_probability == 'decreased':
+                _slice = df.loc[df[self.name] == 'class']
+                df['probability'] = 1. / (df.shape[0] - _slice.shape[0])
+                df.loc[_slice.index, 'probability'] = 0.
+            else:
+                raise ValueError('class probability must be either \'same\' or \'decreased\'!')
+
             return df
         elif isinstance(probability, list):
             if len(probability) != len(values):
@@ -70,8 +84,10 @@ class Tensor(SetterClass):
         :param samples:
         :return:
         """
+        if len(self.values) == 1:
+            samples[self.name] = self.values[0]
 
-        if len(self.parents) == 0:
+        elif len(self.parents) == 0:
             a, p = (self.weights[self.name], self.weights['probability'])
 
             values = np.random.choice(a=a, p=p, replace=True, size=samples.shape[0])
@@ -114,7 +130,7 @@ class GraphicalModel(AbstractTree):
     
     tensors = None  # tensor is a dependency graph
     
-    def __init__(self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability=None, **kwargs):
+    def __init__(self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='uniform', **kwargs):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
@@ -124,25 +140,25 @@ class GraphicalModel(AbstractTree):
         # TODO enhance to perform any kind of initialization!
         # TODO must be able to automatically perform this kind of initialization!
 
-        def get_parents(id, distribution):
-            if distribution == 'multivariate':
-                parent = node.get_parent(id)
+        def get_parents(_id, _distribution):
+            if _distribution == 'multivariate':
+                parent = node.get_parent(_id)
                 val = parent
                 parents = []
                 while val is not None:
                     parents += [parent]
                     parent = node.get_parent(val)
                     val = parent
-            elif distribution == 'bivariate':
-                parents = [node.get_parent(id)]
-            elif distribution == 'univariate':
+            elif _distribution == 'bivariate':
+                parents = [node.get_parent(_id)]
+            elif _distribution == 'univariate':
                 parents = []
             else:
                 raise ValueError('Distribution must be either multivariate, bivariate or univariate!')
             return parents
 
-        def is_terminal(id):
-            return node.get_right_child(id) >= initial_tree_size
+        def is_terminal(_id):
+            return node.get_right_child(_id) >= initial_tree_size
         
         inner_values = self.pred_attr + [self.target_attr]
         outer_values = [self.target_attr]
@@ -152,6 +168,7 @@ class GraphicalModel(AbstractTree):
                 i,
                 parents=get_parents(i, distribution),
                 values=inner_values if not is_terminal(i) else outer_values,
+                class_probability=class_probability,
                 gm_id=self.gm_id
             ),
             xrange(initial_tree_size)

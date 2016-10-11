@@ -94,7 +94,7 @@ def main():
         'metadata_path': 'metadata',
         'save_metadata': False,
         'distribution': 'multivariate',
-        'class_probability': None
+        'class_probability': 'decreased'
     }
     
     if random_state is not None:
