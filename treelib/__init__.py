@@ -75,7 +75,7 @@ class Ardennes(AbstractTree):
         # threshold where individuals will be picked for PMF updating/replacing
         integer_threshold = int(self.decile * self.n_individuals)
 
-        df_replace = pd.DataFrame(np.empty((self.n_individuals - integer_threshold, initial_tree_size), dtype=np.object))
+        df_replace = pd.DataFrame(np.empty((self.n_individuals, initial_tree_size), dtype=np.object))
 
         gm = GraphicalModel(
             initial_tree_size=initial_tree_size,
@@ -84,15 +84,9 @@ class Ardennes(AbstractTree):
             **class_values
         )
         
-        population = self.sample_individuals(
-            df=df_replace.append(  # TODO error here!
-                pd.DataFrame(np.empty((integer_threshold, initial_tree_size), dtype=np.object))
-            ),
-            graphical_model=gm,
-            sets=sets
-        )
-        
-        fitness = np.array(map(lambda x: x.fitness, population))
+        population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
+
+        fitness = np.array([x.fitness for x in population])
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
@@ -106,17 +100,23 @@ class Ardennes(AbstractTree):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
             
             # picks fittest population
-            fittest_pop = self.__pick_fittest_population__(population, borderline)
+            fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: list of Individual
             gm.update(fittest_pop)
-            
-            n_replace = np.count_nonzero(fitness < borderline)
-            replaced = self.sample_individuals(n_replace, gm, sets)
-            population = fittest_pop + replaced
+
+            # df_replace = pd.DataFrame(
+            #     np.empty(
+            #         shape=(self.n_individuals - len(fittest_pop), initial_tree_size),
+            #         dtype=np.object
+            #     )
+            # )
+
+            population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
+            # population = fittest_pop + replaced
             
             if self.__early_stop__(gm, self.uncertainty):
                 break
-            
-            fitness = np.array(map(lambda x: x.fitness, population))
+
+            fitness = np.array([x.fitness for x in population])
             
             iteration += 1
 
@@ -197,13 +197,13 @@ class Ardennes(AbstractTree):
         df.reset_index(drop=True, inplace=True)
         df = graphical_model.sample(df)
 
-        raise NotImplementedError('implement with apply!')
+        def create_individual(row):
+            ind = Individual(id=row.index, sess=row, sets=sets)
+            return ind
 
-        sample = map(
-            lambda i: Individual(id=i, sess=df.iloc[i], sets=sets),
-            xrange(n_sample)
-        )
-        return sample
+        population = df.apply(create_individual, axis=1)
+
+        return population
 
     @staticmethod
     def __to_dataframe__(samples):
@@ -218,12 +218,19 @@ class Ardennes(AbstractTree):
 
     @staticmethod
     def __pick_fittest_population__(population, borderline):
-        fittest_pop = []
-        for ind in population:
-            if ind.fitness >= borderline:
-                fittest_pop += [ind]
+        def fit(x):
+            return x.fitness >= borderline
 
-        return fittest_pop
+        fittest_bool = population.apply(fit)
+        fittest = population.loc[fittest_bool]
+
+        return fittest
+        # fittest_pop = []
+        # for ind in population:
+        #     if ind.fitness >= borderline:
+        #         fittest_pop += [ind]
+        #
+        # return fittest_pop
 
     @staticmethod
     def __report__(**kwargs):

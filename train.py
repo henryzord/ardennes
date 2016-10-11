@@ -82,13 +82,13 @@ def main():
     dataset_path = 'datasets/iris.csv'
     
     kwargs = {
-        'n_individuals': 10,
+        'n_individuals': 500,
         'decile': 0.8,
         'uncertainty': 0.01,
         'verbose': True,
         'n_folds': n_folds,
         'n_runs': n_runs,
-        'initial_tree_size': 5,
+        'initial_tree_size': 101,
         'random_state': random_state,
         'ensemble': False,
         'metadata_path': 'metadata',

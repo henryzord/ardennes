@@ -72,7 +72,6 @@ class Tensor(SetterClass):
             if len(probability) != len(values):
                 raise IndexError('number of weights must be the same as the number of values!')
             else:
-                # TODO guarantee that weights have the same order than values!
                 raise NotImplementedError('not implemented yet!')
         else:
             raise TypeError('probability must be either a string or a list!')
@@ -82,6 +81,7 @@ class Tensor(SetterClass):
 
         :type samples: pandas.DataFrame
         :param samples:
+        :rtype: pandas.DataFrame
         :return:
         """
         if len(self.values) == 1:
@@ -130,16 +130,15 @@ class GraphicalModel(AbstractTree):
     
     tensors = None  # tensor is a dependency graph
     
-    def __init__(self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='uniform', **kwargs):
+    def __init__(
+            self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='uniform', **kwargs
+    ):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
         self.tensors = self.__init_tensor__(initial_tree_size, distribution, class_probability)
     
     def __init_tensor__(self, initial_tree_size, distribution, class_probability):
-        # TODO enhance to perform any kind of initialization!
-        # TODO must be able to automatically perform this kind of initialization!
-
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
                 parent = node.get_parent(_id)
@@ -211,7 +210,7 @@ class GraphicalModel(AbstractTree):
                     _slice = weights.loc[weights[var_name] == value]
                 
                 _slice['probability'] = n_occur
-                weights['probability'][_slice.index] = _slice['probability']  # TODO not assigning correctly!
+                weights['probability'][_slice.index] = _slice['probability']
 
             weights['probability'] = weights['probability'].apply(lambda x: x / n_fittest)
             
@@ -224,7 +223,6 @@ class GraphicalModel(AbstractTree):
         for tensor in self.tensors:
             df = tensor.get_value(df)
 
-        raise NotImplementedError('df must be a pandas.dataframe with size n_individuals, n_variables!')
         return df
 
     @classmethod
