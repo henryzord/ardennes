@@ -182,7 +182,7 @@ class GraphicalModel(AbstractTree):
     def update(self, fittest):
         """
         
-        :type fittest: list of Individual
+        :type fittest: pandas.Series
         :param fittest:
         :return:
         """

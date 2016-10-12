@@ -92,8 +92,6 @@ class Ardennes(AbstractTree):
 
         t1 = dt.now()  # starts measuring time
 
-        raise NotImplementedError('SAVE FITTEST INDIVIDUALS!')
-
         df_replace = pd.DataFrame(np.empty((self.n_individuals, self.initial_tree_size), dtype=np.object))
 
         gm = GraphicalModel(
@@ -123,10 +121,23 @@ class Ardennes(AbstractTree):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
             # picks fittest population
-            fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: list of Individual
+            fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: pd.Series
             gm.update(fittest_pop)
 
-            population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
+            to_replace_integer = self.n_individuals - fittest_pop.shape[0]
+            if to_replace_integer <= 0:
+                to_replace_integer = self.n_individuals
+
+            df_replace = pd.DataFrame(
+                np.empty((to_replace_integer, self.initial_tree_size), dtype=np.object)
+            )
+
+            replaced = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)  # type: pd.DataFrame
+            if to_replace_integer == self.n_individuals:
+                population = replaced
+            else:
+                population = replaced.append(fittest_pop, ignore_index=True)
+                population.reset_index(inplace=True, drop=True)
 
             if self.__early_stop__(gm, self.uncertainty):
                 break
