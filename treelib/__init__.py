@@ -57,7 +57,7 @@ class Ardennes(AbstractTree):
             _sets = dict()
 
             if isinstance(_train, tuple):
-                _sets['train'] = pd.DataFrame(np.hstack(_train))
+                _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])))
             elif isinstance(_train, pd.DataFrame):
                 _sets['train'] = _train
 
@@ -65,7 +65,7 @@ class Ardennes(AbstractTree):
                 type_check(_val, [pd.DataFrame, tuple])
 
                 if isinstance(val, tuple):
-                    _sets['val'] = pd.DataFrame(np.hstack(_val))
+                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _train[1][:, np.newaxis])))
                 else:
                     _sets['val'] = _val
             else:
@@ -264,7 +264,7 @@ class Ardennes(AbstractTree):
             max_fitness = np.max(fitness)  # type: float
             elapsed_time = kwargs['elapsed_time']
 
-            print 'iter: %03.d\tmean: %+0.6f\tmedian: %+0.6f\tmax: %+0.6f\tET: %+0.2f' % (iteration, mean, median, max_fitness, elapsed_time)
+            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %0.2fsec' % (iteration, mean, median, max_fitness, elapsed_time)
 
         if kwargs['output_file']:
             output_file = kwargs['output_file']  # type: str
