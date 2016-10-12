@@ -1,14 +1,22 @@
 # coding=utf-8
+
+from graphical_models import *
+from classes import AbstractTree, type_check, value_check
+from individual import Individual
+
+from collections import Counter
 from datetime import datetime as dt
 
-from treelib.graphical_models import *
+import numpy as np
+import pandas
+
 
 __author__ = 'Henry Cagnini'
 
 
 class Ardennes(AbstractTree):
     gm = None
-    
+
     def __init__(self,
                  n_individuals=100, n_iterations=100, uncertainty=0.01,
                  decile=0.9, initial_tree_size=3, distribution='multivariate',
@@ -29,7 +37,7 @@ class Ardennes(AbstractTree):
             population will be used for GM updating and 90% will be resampled.
         """
         super(Ardennes, self).__init__(**kwargs)
-        
+
         self.n_individuals = n_individuals
         self.n_iterations = n_iterations
         self.uncertainty = uncertainty
@@ -42,26 +50,32 @@ class Ardennes(AbstractTree):
         self.distribution = distribution
         self.class_probability = class_probability
 
-    def fit(self, sets=None, X_train=None, y_train=None, X_val=None, y_val=None, verbose=True, output_file=None):
-        if sets is None or 'train' not in sets:
-            if all(map(lambda x: x is None, [X_train, y_train])):
-                raise KeyError('You need to pass at least a train set to this method!')
-            else:
-                sets = dict()
-                
-                sets['train'] = pd.DataFrame(
-                    np.hstack((X_train, y_train[:, np.newaxis]))
-                )
-                
-                if all(map(lambda x: x is None, [X_val, y_val])):
-                    sets['val'] = sets['train']
+    def fit(self, train, val=None, verbose=True, output_file=None):
+        def __treat__(_train, _val):
+            type_check(_train, [pd.DataFrame, tuple])
+
+            _sets = dict()
+
+            if isinstance(_train, tuple):
+                _sets['train'] = pd.DataFrame(np.hstack(_train))
+            elif isinstance(_train, pd.DataFrame):
+                _sets['train'] = _train
+
+            if val is not None:
+                type_check(_val, [pd.DataFrame, tuple])
+
+                if isinstance(val, tuple):
+                    _sets['val'] = pd.DataFrame(np.hstack(_val))
                 else:
-                    sets['val'] = pd.DataFrame(
-                        np.hstack((X_val, y_val[:, np.newaxis]))
-                    )
-        else:
-            if 'val' not in sets:
-                sets['val'] = sets['train']
+                    _sets['val'] = _val
+            else:
+                _sets['val'] = _sets['train']
+
+            return _sets
+
+        sets = __treat__(train, val)
+
+        # from now on, considers only a dictionary 'sets' with train and val subsets
 
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
@@ -76,7 +90,9 @@ class Ardennes(AbstractTree):
         # threshold where individuals will be picked for PMF updating/replacing
         integer_threshold = int(self.decile * self.n_individuals)
 
-        t1 = dt.now()
+        t1 = dt.now()  # starts measuring time
+
+        raise NotImplementedError('SAVE FITTEST INDIVIDUALS!')
 
         df_replace = pd.DataFrame(np.empty((self.n_individuals, self.initial_tree_size), dtype=np.object))
 
@@ -86,7 +102,7 @@ class Ardennes(AbstractTree):
             class_probability=self.class_probability,
             **class_values
         )
-        
+
         population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
 
         fitness = np.array([x.fitness for x in population])
@@ -105,26 +121,18 @@ class Ardennes(AbstractTree):
             t1 = t2
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
-            
+
             # picks fittest population
             fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: list of Individual
             gm.update(fittest_pop)
 
-            # df_replace = pd.DataFrame(
-            #     np.empty(
-            #         shape=(self.n_individuals - len(fittest_pop), initial_tree_size),
-            #         dtype=np.object
-            #     )
-            # )
-
             population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
-            # population = fittest_pop + replaced
-            
+
             if self.__early_stop__(gm, self.uncertainty):
                 break
 
             fitness = np.array([x.fitness for x in population])
-            
+
             iteration += 1
 
         self.best_individual = np.argmax(fitness)
@@ -232,12 +240,6 @@ class Ardennes(AbstractTree):
         fittest = population.loc[fittest_bool]
 
         return fittest
-        # fittest_pop = []
-        # for ind in population:
-        #     if ind.fitness >= borderline:
-        #         fittest_pop += [ind]
-        #
-        # return fittest_pop
 
     @staticmethod
     def __report__(**kwargs):
@@ -257,7 +259,7 @@ class Ardennes(AbstractTree):
             output_file = kwargs['output_file']  # type: str
             with open(output_file, 'a') as f:
                 np.savetxt(f, fitness[:, np.newaxis].T, delimiter=',')
-    
+
     @staticmethod
     def __early_stop__(gm, uncertainty=0.01):
         """
@@ -268,13 +270,13 @@ class Ardennes(AbstractTree):
         :param uncertainty: Maximum allowed uncertainty for each probability, for each node.
         :return:
         """
-        
+
         should_stop = True
         for tensor in gm.tensors:
             weights = tensor.weights
             upper = abs(1. - weights['probability'].max())
             lower = weights['probability'].min()
-            
+
             if upper > uncertainty or lower > uncertainty:
                 should_stop = False
                 break

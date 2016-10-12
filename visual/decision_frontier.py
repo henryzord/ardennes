@@ -13,7 +13,7 @@ from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-from treelib import Ardennes
+from treelib.eda import Ardennes
 
 h = .02  # step size in the mesh
 
@@ -51,8 +51,8 @@ for ds_cnt, ds in enumerate(datasets):
         np.arange(y_min, y_max, h)
     )
 
-    clf = Ardennes(n_individuals=20, initial_tree_size=51, distribution='multivariate', class_probability='decreased')
-    clf.fit(X_train=X_train, y_train=y_train, verbose=True)
+    clf = Ardennes(n_individuals=100, initial_tree_size=51, distribution='univariate', class_probability='decreased')
+    clf.fit(x_train=X_train, y_train=y_train, verbose=True)
 
     # iterate over classifiers
     for name, ensemble in classifiers:

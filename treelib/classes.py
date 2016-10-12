@@ -30,3 +30,19 @@ class AbstractTree(object):
 
     def plot(self):
         pass
+
+
+def type_check(var, val):
+    """
+    Checks the type of var (i.e, checks if var is in val). Raises an exception otherwise.
+    """
+    if type(var) not in val:
+        raise TypeError('Variable %s must have one of the following types: %s' % (var, str(val)))
+
+
+def value_check(var, val):
+    """
+    Checks the value of var (i.e, checks if var is in val). Raises an exception otherwise.
+    """
+    if var not in val:
+        raise ValueError('Variable %s must have one of the following values: %s' % (var, str(val)))
