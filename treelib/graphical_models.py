@@ -6,9 +6,8 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from treelib.classes import SetterClass, AbstractTree
-from treelib.individual import Individual
 from treelib import node
+from treelib.classes import SetterClass, AbstractTree
 
 __author__ = 'Henry Cagnini'
 
@@ -219,6 +218,7 @@ class GraphicalModel(AbstractTree):
             weights['probability'] = weights['probability'].apply(lambda x: x / n_fittest)
             
             tensor.weights = weights
+
             self.tensors[i].weights = weights
 
         pd.options.mode.chained_assignment = 'warn'

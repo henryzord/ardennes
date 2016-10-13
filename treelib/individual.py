@@ -290,7 +290,7 @@ class Individual(AbstractTree):
             second = x.name
             column = Individual.target_attr
             
-            return ss[column].iloc[first] == ss[column].iloc[second]
+            return ss[column].iloc[first] != ss[column].iloc[second]
 
         def get_entropy(threshold):
             """
@@ -312,19 +312,27 @@ class Individual(AbstractTree):
             return entropy
 
         ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
-        ss = ss.sort_values(by=node_label).reset_index()
+        ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
 
         ss['change'] = ss.apply(slide_filter, axis=1)
-        unique_vals = ss.loc[ss['change'] == False]
+        unique_vals = ss.loc[ss['change'] == True]
         
         if unique_vals.empty:
             meta, best_subset_left, best_subset_right = self.__set_terminal__(
                 node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
             )
         else:
+            _max = unique_vals[node_label].max()
+            _min = unique_vals[node_label].min()
+
+            unique_vals = pd.DataFrame(np.linspace(_min, _max), columns=[node_label])
+
+            unique_vals.drop(unique_vals.index[0], inplace=True)
+            unique_vals.drop(unique_vals.index[-1], inplace=True)
+
             unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
             best_entropy = unique_vals['entropy'].min()
-            
+
             best_threshold = (unique_vals[unique_vals['entropy'] == best_entropy])[node_label].values[0]
             
             best_subset_left = subset.loc[subset[node_label] < best_threshold]

@@ -65,7 +65,7 @@ class Ardennes(AbstractTree):
                 type_check(_val, [pd.DataFrame, tuple])
 
                 if isinstance(val, tuple):
-                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _train[1][:, np.newaxis])))
+                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])))
                 else:
                     _sets['val'] = _val
             else:
@@ -80,7 +80,7 @@ class Ardennes(AbstractTree):
         class_values = {
             'pred_attr': list(sets['train'].columns[:-1]),
             'target_attr': sets['train'].columns[-1],
-            'class_labels': list(sets['train'][sets['train'].columns[-1]].unique())
+            'class_labels': np.sort(sets['train'][sets['train'].columns[-1]].unique()).tolist()
         }
 
         self.pred_attr = class_values['pred_attr']
@@ -169,7 +169,7 @@ class Ardennes(AbstractTree):
                 sample_predictions = map(lambda x: x.predict(sample), predictor)
                 count = Counter(sample_predictions)
                 count_probs = {k: v / float(len(predictor)) for k, v in count.iteritems()}
-                for k, v in count_probs.items():
+                for k, v in count_probs.items():  # TODO wrong!
                     preds[labels[k]] = v
 
                 return preds
