@@ -24,7 +24,9 @@ class Individual(AbstractTree):
     tree = None  # type: nx.DiGraph
     val_acc = None  # type: float
     id = None
-    
+
+    thresholds = dict()
+
     def __init__(self, sess, sets, **kwargs):
         """
         
@@ -273,6 +275,28 @@ class Individual(AbstractTree):
         )
         return out
 
+    def __store_threshold__(self, node_label, subset, threshold):
+        _mean = subset[node_label].mean()
+        _std = subset[node_label].std()
+
+        key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
+        self.__class__.thresholds[key] = threshold
+
+    def __retrieve_threshold__(self, node_label, subset):
+        """
+
+        :param node_label:
+        :type subset: pandas.DataFrame
+        :param subset:
+        :return:
+        """
+
+        _mean = subset[node_label].mean()
+        _std = subset[node_label].std()
+
+        key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
+        return self.__class__.thresholds[key]
+
     def __set_numerical__(self, node_label, parent_label, subset, **kwargs):
         pd.options.mode.chained_assignment = None
         
@@ -311,41 +335,55 @@ class Individual(AbstractTree):
 
             return entropy
 
-        ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
-        ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
+        def __subsets_and_meta__(_best_threshold):
+            _best_subset_left = subset.loc[subset[node_label] < _best_threshold]
+            _best_subset_right = subset.loc[subset[node_label] >= _best_threshold]
 
-        ss['change'] = ss.apply(slide_filter, axis=1)
-        unique_vals = ss.loc[ss['change'] == True]
-        
-        if unique_vals.empty:
-            meta, best_subset_left, best_subset_right = self.__set_terminal__(
-                node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
-            )
-        else:
-            _max = unique_vals[node_label].max()
-            _min = unique_vals[node_label].min()
-
-            unique_vals = pd.DataFrame(np.linspace(_min, _max), columns=[node_label])
-
-            unique_vals.drop(unique_vals.index[0], inplace=True)
-            unique_vals.drop(unique_vals.index[-1], inplace=True)
-
-            unique_vals['entropy'] = unique_vals[node_label].apply(get_entropy)
-            best_entropy = unique_vals['entropy'].min()
-
-            best_threshold = (unique_vals[unique_vals['entropy'] == best_entropy])[node_label].values[0]
-            
-            best_subset_left = subset.loc[subset[node_label] < best_threshold]
-            best_subset_right = subset.loc[subset[node_label] >= best_threshold]
-
-            meta = {
+            _meta = {
                 'label': node_label,
-                'threshold': best_threshold,
+                'threshold': _best_threshold,
                 'terminal': False,
                 'color': Individual._root_node_color if
-                    kwargs['variable_name'] == node.root else Individual._inner_node_color
+                kwargs['variable_name'] == node.root else Individual._inner_node_color
             }
-            pd.options.mode.chained_assignment = 'warn'
+
+            return _meta, _best_subset_left, _best_subset_right
+
+        try:
+            best_threshold = self.__retrieve_threshold__(node_label, subset)
+            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
+        except KeyError:
+            ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
+            ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
+
+            ss['change'] = ss.apply(slide_filter, axis=1)
+            border_vals = ss.loc[ss['change'] == True]
+
+            if border_vals.empty:
+                meta, best_subset_left, best_subset_right = self.__set_terminal__(
+                    node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
+                )
+            else:
+                # this only clips the range of values to pick; it doesn't prevent picking a not promising value.
+
+                _max = border_vals[node_label].max()
+                _min = border_vals[node_label].min()
+
+                border_vals = pd.DataFrame(np.linspace(_min, _max, num=10), columns=[node_label])
+
+                border_vals.drop(border_vals.index[0], inplace=True)
+                border_vals.drop(border_vals.index[-1], inplace=True)
+
+                border_vals['entropy'] = border_vals[node_label].apply(get_entropy)
+                best_entropy = border_vals['entropy'].min()
+
+                best_threshold = (border_vals[border_vals['entropy'] == best_entropy])[node_label].values[0]
+
+                self.__store_threshold__(node_label, subset, best_threshold)
+
+                meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
+
+                pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right

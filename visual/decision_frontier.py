@@ -12,6 +12,7 @@ from matplotlib.colors import ListedColormap
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier
 
 from treelib import Ardennes
 
@@ -30,6 +31,9 @@ datasets = [
     make_circles(noise=0.2, factor=0.5, random_state=1),
     linearly_separable
 ]
+
+# cls = [DecisionTreeClassifier(max_depth=5)]
+
 
 figure = plt.figure(figsize=(14, 9))
 i = 1
@@ -57,7 +61,7 @@ for ds_cnt, ds in enumerate(datasets):
 
     clf = Ardennes(
         n_individuals=100, n_iterations=100,
-        initial_tree_size=51, distribution='univariate',
+        initial_tree_size=51, distribution='multivariate',
         class_probability='decreased'
     )
     clf.fit(train=(X_train, y_train), verbose=True)

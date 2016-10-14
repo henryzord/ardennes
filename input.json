@@ -1,18 +1,20 @@
 {
-  "n_individuals": 10,
+  "n_individuals": 25,
   "decile": 0.8,
   "uncertainty": 0.01,
   "verbose": true,
   "train_size": 0.8,
+  "n_iterations": 10,
   "n_folds": 10,
   "n_runs": 1,
-  "initial_tree_size": 3,
+  "initial_tree_size": 31,
   "random_state": 1,
   "ensemble": false,
   "metadata_path": "metadata",
-  "distribution": "multivariate",
+  "distribution": "univariate",
   "class_probability": "decreased",
   "dataset_path": "datasets/iris.csv",
   "output_file": null,
+  "mode": "batch",
   "save_metadata": false
 }

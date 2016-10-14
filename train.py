@@ -117,7 +117,8 @@ def main(json_file, mode='batch'):
             uncertainty=kwargs['uncertainty'],
             initial_tree_size=kwargs['initial_tree_size'],
             distribution=kwargs['distribution'],
-            class_probability=kwargs['class_probability']
+            class_probability=kwargs['class_probability'],
+            n_iterations=kwargs['n_iterations']
         )
 
         inst.fit(
