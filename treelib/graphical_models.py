@@ -3,11 +3,11 @@
 import itertools as it
 from collections import Counter
 
-import numpy as np
 import pandas as pd
 
 from treelib import node
 from treelib.classes import SetterClass, AbstractTree
+from treelib.node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -99,9 +99,12 @@ class Tensor(SetterClass):
 
             # iterates over values
             for group_name, group_index in groups.iteritems():
-                try:
-                    group_name = iter(group_name)
-                except TypeError, te:
+                if not isinstance(group_name, str):
+                    try:
+                        group_name = iter(group_name)
+                    except TypeError, te:
+                        group_name = [group_name]
+                else:
                     group_name = [group_name]
 
                 group_size = group_index.shape[0]
@@ -185,6 +188,11 @@ class GraphicalModel(AbstractTree):
         :param fittest:
         :return:
         """
+        def get_node_label(id):
+            try:
+                return fit.tree.node[id]['label'] if not fit.tree.node[id]['terminal'] else self.target_attr
+            except KeyError:
+                return None
 
         pd.options.mode.chained_assignment = None
         
@@ -193,20 +201,23 @@ class GraphicalModel(AbstractTree):
         for i, tensor in enumerate(self.tensors):
             parents = tensor.parents
             order = [tensor.name] + parents
-        
-            all_vec = []
-            for fit in fittest:
-                vec = map(
-                    lambda x: fit.tree.node[x]['label'] if not fit.tree.node[x]['terminal'] else self.target_attr,
-                    order
-                )
-                all_vec += [tuple(vec)]
 
-            count = Counter(all_vec)
+            all_trees = []
+            for fit in fittest:
+                tree = map(get_node_label, order)
+                all_trees += [tuple(tree)]
+
+            count = Counter(all_trees)
             weights = tensor.weights  # type: pd.DataFrame
             weights['probability'] = 0.
             
             for comb, n_occur in count.iteritems():
+                if comb[0] is None:
+                    import warnings
+                    warnings.warn('WARNING: modifying updating process for this method!')
+                    continue
+
+
                 click = it.izip(order, comb)
                 _slice = weights  # type: pd.DataFrame
                 for var_name, value in click:

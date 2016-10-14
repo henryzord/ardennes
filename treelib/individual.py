@@ -26,6 +26,7 @@ class Individual(AbstractTree):
     id = None
 
     thresholds = dict()
+    max_nodes = -1
 
     def __init__(self, sess, sets, **kwargs):
         """
@@ -57,14 +58,14 @@ class Individual(AbstractTree):
 
     def plot(self):
         """
-        Plots this individual.
+        Draw this individual.
         """
     
         fig = plt.figure()
     
         tree = self.tree  # type: nx.DiGraph
         pos = nx.spectral_layout(tree)
-    
+
         node_list = tree.nodes(data=True)
         edge_list = tree.edges(data=True)
     
@@ -113,6 +114,7 @@ class Individual(AbstractTree):
     # ############################ #
 
     def sample(self, sess, sets):
+        self.max_nodes = sess.shape[0]
         self.tree = self.__set_tree__(sess, sets['train'])  # type: nx.DiGraph
         self.val_acc = self.validate(self.sets['val'])
 
@@ -150,7 +152,9 @@ class Individual(AbstractTree):
         :param variable_name:
         :return:
         """
-        
+        if parent_label in self.class_labels:
+            return tree
+
         if subset.shape[0] <= 0 or sess[variable_name] == Individual.target_attr:
             meta, subset_left, subset_right = self.__set_terminal__(
                 variable_name=variable_name,
@@ -299,8 +303,24 @@ class Individual(AbstractTree):
 
     def __set_numerical__(self, node_label, parent_label, subset, **kwargs):
         pd.options.mode.chained_assignment = None
-        
-        def slide_filter(x):
+
+        def middle_value(x):
+            """
+            Gets the middle value between two values.
+
+            :type x: pandas.core.series.Series
+            :param x: A row in the node_label column.
+            :rtype: float
+            :return: middle value between this row and the predecessor of it.
+            """
+            first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
+            second = x.name
+
+            average = (border_vals.loc[first, node_label] + border_vals.loc[second, node_label]) / 2.
+
+            return average
+
+        def same_class(x):
             """
             Verifies if two neighboring objects have the same class.
             
@@ -313,8 +333,9 @@ class Individual(AbstractTree):
             first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
             second = x.name
             column = Individual.target_attr
-            
-            return ss[column].iloc[first] != ss[column].iloc[second]
+
+            # return ss[column].iloc[first] != ss[column].iloc[second]
+            return ss.loc[first, column] != ss.loc[second, column]
 
         def get_entropy(threshold):
             """
@@ -356,8 +377,8 @@ class Individual(AbstractTree):
             ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
             ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
 
-            ss['change'] = ss.apply(slide_filter, axis=1)
-            border_vals = ss.loc[ss['change'] == True]
+            ss['same_class'] = ss.apply(same_class, axis=1)
+            border_vals = ss.loc[ss['same_class'] == True]
 
             if border_vals.empty:
                 meta, best_subset_left, best_subset_right = self.__set_terminal__(
@@ -365,19 +386,17 @@ class Individual(AbstractTree):
                 )
             else:
                 # this only clips the range of values to pick; it doesn't prevent picking a not promising value.
+                border_vals.reset_index(inplace=True, drop=True)
 
-                _max = border_vals[node_label].max()
-                _min = border_vals[node_label].min()
+                candidates = border_vals.apply(middle_value, axis=1).unique()
 
-                border_vals = pd.DataFrame(np.linspace(_min, _max, num=10), columns=[node_label])
-
-                border_vals.drop(border_vals.index[0], inplace=True)
-                border_vals.drop(border_vals.index[-1], inplace=True)
-
-                border_vals['entropy'] = border_vals[node_label].apply(get_entropy)
-                best_entropy = border_vals['entropy'].min()
-
-                best_threshold = (border_vals[border_vals['entropy'] == best_entropy])[node_label].values[0]
+                best_threshold = -np.inf
+                best_entropy = np.inf
+                for cand in candidates:
+                    entropy = get_entropy(cand)
+                    if entropy < best_entropy:
+                        best_threshold = cand
+                        best_entropy = entropy
 
                 self.__store_threshold__(node_label, subset, best_threshold)
 
@@ -409,6 +428,9 @@ class Individual(AbstractTree):
             'terminal': True,
             'color': Individual._terminal_node_color
         }
+
+        # TODO set all children node as None in the label!
+
         return meta, pd.DataFrame([]), pd.DataFrame([])
 
     def __set_categorical__(self, node_label, parent_label, subset, **kwargs):

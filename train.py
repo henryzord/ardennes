@@ -131,6 +131,8 @@ def main(json_file, mode='batch'):
         test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
         print 'accuracy: %0.2f' % test_acc
 
+        inst.plot()
+
 if __name__ == '__main__':
     _json_file = 'input.json'
     main(_json_file, mode='batch')

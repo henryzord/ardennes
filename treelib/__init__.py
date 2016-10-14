@@ -215,8 +215,13 @@ class Ardennes(AbstractTree):
         acc = (test_set[test_set.columns[-1]] == predictions).sum() / float(test_set.shape[0])
         return acc
 
-    def plot(self):
-        raise NotImplementedError('not implemented yet!')
+    def plot(self, ensemble=False):
+        if ensemble:
+            raise NotImplementedError('not implemented yet!')
+        else:
+            self.predictor.plot()
+            from matplotlib import pyplot as plt
+            plt.show()
 
     @staticmethod
     def sample_individuals(df, graphical_model, sets):
@@ -224,7 +229,7 @@ class Ardennes(AbstractTree):
         df = graphical_model.sample(df)
 
         def create_individual(row):
-            ind = Individual(id=row.index, sess=row, sets=sets)
+            ind = Individual(id=row.name, sess=row, sets=sets)
             return ind
 
         population = df.apply(create_individual, axis=1)
@@ -298,3 +303,11 @@ class Ardennes(AbstractTree):
     def __check_tree_size__(initial_tree_size):
         if (initial_tree_size - 1) % 2 != 0:
             raise ValueError('Invalid number of nodes! (initial_tree_size - 1) % 2 must be an integer!')
+
+    @property
+    def predictor(self):
+        if self.trained:
+            predictor = self.last_population[self.best_individual]
+            return predictor
+        else:
+            raise StandardError('The EDA was not trained yet!')
