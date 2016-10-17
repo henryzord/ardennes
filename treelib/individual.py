@@ -11,6 +11,7 @@ from treelib.classes import AbstractTree
 from treelib import node
 
 from matplotlib import pyplot as plt
+from node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -187,9 +188,12 @@ class Individual(AbstractTree):
             else:
                 attr_dict_left = {'threshold': None}
                 attr_dict_right = {'threshold': None}
-            
-            tree.add_edge(variable_name, id_left, attr_dict=attr_dict_left)
-            tree.add_edge(variable_name, id_right, attr_dict=attr_dict_right)
+
+            if id_left in tree.node:
+                tree.add_edge(variable_name, id_left, attr_dict=attr_dict_left)
+
+            if id_right in tree.node:
+                tree.add_edge(variable_name, id_right, attr_dict=attr_dict_right)
 
         tree.add_node(variable_name, attr_dict=meta)
         return tree

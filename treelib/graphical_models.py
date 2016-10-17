@@ -217,7 +217,6 @@ class GraphicalModel(AbstractTree):
                     warnings.warn('WARNING: modifying updating process for this method!')
                     continue
 
-
                 click = it.izip(order, comb)
                 _slice = weights  # type: pd.DataFrame
                 for var_name, value in click:
