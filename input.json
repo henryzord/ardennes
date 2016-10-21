@@ -14,7 +14,7 @@
   "distribution": "multivariate",
   "class_probability": "same",
   "dataset_path": "datasets/iris.csv",
-  "output_file": null,
+  "output_file": "some_metadata.csv",
   "mode": "batch",
-  "save_metadata": false
+  "save_metadata": true
 }

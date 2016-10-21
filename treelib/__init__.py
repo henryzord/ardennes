@@ -6,6 +6,7 @@ from individual import Individual
 
 from collections import Counter
 from datetime import datetime as dt
+import os
 
 import numpy as np
 import pandas
@@ -50,7 +51,7 @@ class Ardennes(AbstractTree):
         self.distribution = distribution
         self.class_probability = class_probability
 
-    def fit(self, train, val=None, verbose=True, output_file=None):
+    def fit(self, train, val=None, verbose=True, output_file=None, metadata_path=None):
         def __treat__(_train, _val):
             type_check(_train, [pd.DataFrame, tuple])
 
@@ -114,6 +115,7 @@ class Ardennes(AbstractTree):
                 fitness=fitness,
                 verbose=verbose,
                 output_file=output_file,
+                metadata_path=metadata_path,
                 elapsed_time=(t2-t1).total_seconds()
             )
             t1 = t2
@@ -273,7 +275,7 @@ class Ardennes(AbstractTree):
 
         if kwargs['output_file']:
             output_file = kwargs['output_file']  # type: str
-            with open(output_file, 'a') as f:
+            with open(os.path.join(kwargs['metadata_path'], output_file), 'a') as f:
                 np.savetxt(f, fitness[:, np.newaxis].T, delimiter=',')
 
     @staticmethod

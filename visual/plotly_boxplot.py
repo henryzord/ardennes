@@ -35,5 +35,5 @@ def main(file_name):
 
 
 if __name__ == '__main__':
-    filename = '/home/henry/Projects/forrestTemp/metadata/fold=00 run=00 10:05 05-10-2016.csv'
+    filename = '/home/henry/Projects/forrestTemp/metadata/some_metadata.csv'
     main(filename)

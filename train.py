@@ -125,7 +125,8 @@ def main(json_file, mode='batch'):
             train=train,
             val=val,
             verbose=kwargs['verbose'],
-            output_file=kwargs['file_name'] if kwargs['save_metadata'] else None
+            output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
+            metadata_path=kwargs['metadata_path']
         )
 
         test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
