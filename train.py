@@ -47,7 +47,7 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
             uncertainty=kwargs['uncertainty'],
-            initial_tree_size=kwargs['initial_tree_size'],
+            max_height=kwargs['initial_tree_size'],
             distribution=kwargs['distribution'],
             class_probability=kwargs['class_probability']
         )
@@ -111,11 +111,13 @@ def main(json_file, mode='batch'):
             dataset, train_size=kwargs['train_size'], random_state=kwargs['random_state']
         )
 
+        tree_height = get_max_height(train, kwargs['random_state'])
+
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
             threshold=kwargs['decile'],
             uncertainty=kwargs['uncertainty'],
-            initial_tree_size=kwargs['initial_tree_size'],
+            max_height=tree_height,
             distribution=kwargs['distribution'],
             class_probability=kwargs['class_probability'],
             n_iterations=kwargs['n_iterations']

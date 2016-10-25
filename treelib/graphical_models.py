@@ -16,7 +16,7 @@ class Tensor(SetterClass):
     global_gms = dict()
     target_attr = None
 
-    def __init__(self, name, values, parents=None, class_probability='same', probability='uniform', gm_id=0, **kwargs):
+    def __init__(self, name, values, parents=None, class_probability='declining', max_height=None, probability='uniform', gm_id=0, **kwargs):
         super(Tensor, self).__init__(**kwargs)
         
         if gm_id not in self.__class__.global_gms:
@@ -33,7 +33,8 @@ class Tensor(SetterClass):
         self.weights = self.__init_probabilities__(
             values,
             probability,
-            class_probability if len(self.values) > 1 else 'same'
+            class_probability if len(self.values) > 1 else 'same',
+            max_height=max_height
         )  # type: pd.DataFrame
         
         self.__class__.global_gms[gm_id][name] = self
@@ -46,7 +47,7 @@ class Tensor(SetterClass):
     def n_values(self):
         return len(self.values)
     
-    def __init_probabilities__(self, values, probability='uniform', class_probability='same'):
+    def __init_probabilities__(self, values, probability='uniform', class_probability='declining', max_height=None):
         if probability == 'uniform':
             vec_vals = [self.values] + [self.global_gms[self.gm_id][p].values for p in self.parents]
             
@@ -64,8 +65,25 @@ class Tensor(SetterClass):
                 _slice = df.loc[df[self.name] == self.target_attr]
                 df['probability'] = 1. / (df.shape[0] - _slice.shape[0])
                 df.loc[_slice.index, 'probability'] = 0.
+            elif class_probability == 'declining':
+                _slice = df.loc[df[self.name] == self.target_attr]
+                if len(self.parents) > 0:
+                    depth = get_depth(self.name)
+                    class_prob = (1./(max_height - 1.)) * float(depth)
+                    slice_prob = class_prob / _slice.shape[0]
+
+                    pred_prob = (1. - class_prob) / (df.shape[0] - _slice.shape[0])
+
+                    df['probability'] = pred_prob
+                    df.loc[_slice.index, 'probability'] = slice_prob
+                else:
+                    _slice = df.loc[df[self.name] == self.target_attr]
+                    df['probability'] = 1. / (df.shape[0] - _slice.shape[0])
+                    df.loc[_slice.index, 'probability'] = 0.
+
+                # print df.sort(axis='columns')  # TODO remove me!
             else:
-                raise ValueError('class probability must be either \'same\' or \'decreased\'!')
+                raise ValueError('class probability must be either \'same\', \'decreased\' or \'declining\'!')
 
             return df
         elif isinstance(probability, list):
@@ -136,14 +154,14 @@ class GraphicalModel(AbstractTree):
     tensors = None  # tensor is a dependency graph
     
     def __init__(
-            self, gm_id=0, initial_tree_size=3, distribution='multivariate', class_probability='decreased', **kwargs
+            self, gm_id=0, max_height=3, distribution='multivariate', class_probability='declining', **kwargs
     ):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
-        self.tensors = self.__init_tensor__(initial_tree_size, distribution, class_probability)
+        self.tensors = self.__init_tensor__(max_height, distribution, class_probability)
     
-    def __init_tensor__(self, initial_tree_size, distribution='uniform', class_probability='decreased'):
+    def __init_tensor__(self, max_height, distribution='uniform', class_probability='declining'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
                 parent = node.get_parent(_id)
@@ -162,21 +180,24 @@ class GraphicalModel(AbstractTree):
             return parents
 
         def is_terminal(_id):
-            return node.get_right_child(_id) >= initial_tree_size
+            return node.get_right_child(_id) >= max_nodes
         
         inner_values = self.pred_attr + [self.target_attr]
         outer_values = [self.target_attr]
-        
+
+        max_nodes = get_total_nodes(max_height)
+
         tensors = map(
             lambda i: Tensor(
                 i,
                 parents=get_parents(i, distribution),
                 values=inner_values if not is_terminal(i) else outer_values,
                 class_probability=class_probability,
+                max_height=max_height,
                 gm_id=self.gm_id,
                 target_attr=self.target_attr
             ),
-            xrange(initial_tree_size)
+            xrange(max_nodes)
         )
         
         return tensors

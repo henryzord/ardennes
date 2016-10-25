@@ -4,7 +4,6 @@ import itertools as it
 from collections import Counter
 
 import networkx as nx
-import numpy as np
 import pandas as pd
 
 from treelib.classes import AbstractTree
@@ -139,7 +138,7 @@ class Individual(AbstractTree):
             tree=tree,
             subset=subset,
             variable_name=0,
-            parent_label=0
+            parent_label=None
         )
         return tree
 
@@ -212,11 +211,11 @@ class Individual(AbstractTree):
         return -1. * _entropy
 
     def __predict_object__(self, obj):
-        arg_node = 0
+        arg_node = 0  # always start with root
     
         tree = self.tree  # type: nx.DiGraph
     
-        node = self.tree.node[arg_node]
+        node = tree.node[arg_node]
         successors = tree.successors(arg_node)
     
         while not node['terminal']:

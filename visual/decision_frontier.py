@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
-from treelib import Ardennes
+from treelib import Ardennes, get_max_height
 
 h = .02  # step size in the mesh
 
@@ -35,7 +35,8 @@ datasets = [
 # cls = [DecisionTreeClassifier(max_depth=5)]
 
 
-figure = plt.figure(figsize=(14, 9))
+# figure = plt.figure(figsize=(14, 9))
+figure = plt.figure()
 i = 1
 
 # classifiers = [('best individual', False), ('last population', True)]
@@ -59,10 +60,12 @@ for ds_cnt, ds in enumerate(datasets):
         np.arange(y_min, y_max, h)
     )
 
+    max_height = get_max_height((X_train, y_train))
+
     clf = Ardennes(
-        n_individuals=100, n_iterations=100,
-        initial_tree_size=51, distribution='multivariate',
-        class_probability='decreased'
+        n_individuals=100, n_iterations=10,
+        max_height=max_height, distribution='multivariate',
+        class_probability='declining'
     )
     clf.fit(train=(X_train, y_train), verbose=True)
     print '-- training complete --'

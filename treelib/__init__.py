@@ -3,6 +3,7 @@
 from graphical_models import *
 from classes import AbstractTree, type_check, value_check
 from individual import Individual
+from sklearn.tree.tree import DecisionTreeClassifier
 
 from collections import Counter
 from datetime import datetime as dt
@@ -15,13 +16,29 @@ import pandas
 __author__ = 'Henry Cagnini'
 
 
+def get_max_height(train_set, random_state=None):
+    if isinstance(train_set, pd.DataFrame):
+        x_train = train_set[train_set.columns[:-1]]
+        y_train = train_set[train_set.columns[-1]]
+    elif isinstance(train_set, tuple):
+        x_train = train_set[0]
+        y_train = train_set[1]
+    else:
+        raise TypeError('Invalid type for this function! Must be either a pandas.DataFrame or a tuple of numpy.ndarray!')
+
+    cls = DecisionTreeClassifier(criterion='entropy', random_state=random_state)
+    cls = cls.fit(x_train, y_train)
+    max_depth = cls.tree_.max_depth
+    return max_depth
+
+
 class Ardennes(AbstractTree):
     gm = None
 
     def __init__(self,
                  n_individuals=100, n_iterations=100, uncertainty=0.01,
-                 decile=0.9, initial_tree_size=3, distribution='multivariate',
-                 class_probability='decreased', **kwargs
+                 decile=0.9, max_height=3, distribution='multivariate',
+                 class_probability='declining', **kwargs
                  ):
         """
         Default EDA class, with common code to all EDAs -- regardless
@@ -47,7 +64,7 @@ class Ardennes(AbstractTree):
         self.trained = False
         self.best_individual = None
         self.last_population = None
-        self.initial_tree_size = initial_tree_size
+        self.max_height = max_height
         self.distribution = distribution
         self.class_probability = class_probability
 
@@ -58,7 +75,7 @@ class Ardennes(AbstractTree):
             _sets = dict()
 
             if isinstance(_train, tuple):
-                _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])))
+                _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])), columns=self.__generate_columns__(_train[0].shape[1], make_class=True))
             elif isinstance(_train, pd.DataFrame):
                 _sets['train'] = _train
 
@@ -66,7 +83,7 @@ class Ardennes(AbstractTree):
                 type_check(_val, [pd.DataFrame, tuple])
 
                 if isinstance(val, tuple):
-                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])))
+                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])), columns=self.__generate_columns__(_val[0].shape[1], make_class=True))
                 else:
                     _sets['val'] = _val
             else:
@@ -93,10 +110,10 @@ class Ardennes(AbstractTree):
 
         t1 = dt.now()  # starts measuring time
 
-        df_replace = pd.DataFrame(np.empty((self.n_individuals, self.initial_tree_size), dtype=np.object))
+        df_replace = pd.DataFrame(np.empty((self.n_individuals, self.max_height), dtype=np.object))
 
         gm = GraphicalModel(
-            initial_tree_size=self.initial_tree_size,
+            max_height=self.max_height,
             distribution=self.distribution,
             class_probability=self.class_probability,
             **class_values
@@ -131,7 +148,7 @@ class Ardennes(AbstractTree):
                 to_replace_integer = self.n_individuals
 
             df_replace = pd.DataFrame(
-                np.empty((to_replace_integer, self.initial_tree_size), dtype=np.object)
+                np.empty((to_replace_integer, self.max_height), dtype=np.object)
             )
 
             replaced = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)  # type: pd.DataFrame
@@ -198,6 +215,12 @@ class Ardennes(AbstractTree):
 
         return all_preds
 
+    def __generate_columns__(self, n_predictive, make_class=True):
+        columns = ['attr_%d' % d for d in xrange(n_predictive)]
+        if make_class:
+            columns += ['class']
+        return columns
+
     def validate(self, test_set=None, X_test=None, y_test=None, ensemble=False):
         """
         Assess the accuracy of this instance against the provided set.
@@ -210,7 +233,7 @@ class Ardennes(AbstractTree):
 
         if test_set is None:
             test_set = pd.DataFrame(
-                np.hstack((X_test, y_test[:, np.newaxis]))
+                np.hstack((X_test, y_test[:, np.newaxis])), columns=self.__generate_columns__(X_test.shape[1], make_class=True)
             )
 
         predictions = self.predict(test_set, ensemble=ensemble)
@@ -238,10 +261,12 @@ class Ardennes(AbstractTree):
 
         return population
 
-    @staticmethod
-    def __to_dataframe__(samples):
-        if isinstance(samples, np.ndarray) or isinstance(samples, list):
-            df = pd.DataFrame(samples)
+    def __to_dataframe__(self, samples):
+        if isinstance(samples, list):
+            samples = np.array(samples)
+
+        if isinstance(samples, np.ndarray):
+            df = pd.DataFrame(samples, columns=self.__generate_columns__(samples.shape[1], make_class=False))
         elif isinstance(samples, pd.DataFrame):
             df = samples
         else:

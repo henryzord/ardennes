@@ -61,7 +61,7 @@ for ds_cnt, ds in enumerate(datasets):
 
     clf = Ardennes(
         n_individuals=10, n_iterations=10,
-        initial_tree_size=7, distribution='univariate',
+        max_height=7, distribution='univariate',
         class_probability='decreased'
     )
     clf.fit(train=(X_train, y_train), verbose=True)
