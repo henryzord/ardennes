@@ -47,16 +47,28 @@ def get_node_count(n_nodes):
     return n_internal, n_leaf
 
 
-def get_total_nodes(height):
+def total_nodes_by_height(height):
     """
     Get number of total nodes from a tree with given height.
 
     :type height: int
-    :param height: The height of the heap (binary) tree.
+    :param height: Number of levels in the binary tree.
     :rtype: int
     :return: The number of nodes in this tree.
     """
-    return np.power(2, height + 1) - 1
+    return np.power(2, height) - 1
+
+
+def total_nodes_by_depth(depth):
+    """
+    Get number of total nodes from a tree with given height.
+
+    :type depth: int
+    :param depth: The depth of the binary tree. Please note that the first level begins at zero.
+    :rtype: int
+    :return: The number of nodes in this tree.
+    """
+    return np.power(2, depth + 1) - 1
 
 
 def nodes_at_level(level):

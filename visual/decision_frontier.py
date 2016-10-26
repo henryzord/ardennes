@@ -63,8 +63,8 @@ for ds_cnt, ds in enumerate(datasets):
     max_height = get_max_height((X_train, y_train))
 
     clf = Ardennes(
-        n_individuals=100, n_iterations=10,
-        max_height=max_height, distribution='multivariate',
+        n_individuals=100, n_iterations=100,
+        max_height=max_height, distribution='univariate',
         class_probability='declining'
     )
     clf.fit(train=(X_train, y_train), verbose=True)

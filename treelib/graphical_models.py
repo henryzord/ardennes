@@ -76,10 +76,12 @@ class Tensor(SetterClass):
 
                     df['probability'] = pred_prob
                     df.loc[_slice.index, 'probability'] = slice_prob
-                else:
+                elif len(values) > 1:
                     _slice = df.loc[df[self.name] == self.target_attr]
                     df['probability'] = 1. / (df.shape[0] - _slice.shape[0])
                     df.loc[_slice.index, 'probability'] = 0.
+                else:
+                    df['probability'] = 1. / df.shape[0]
 
                 # print df.sort(axis='columns')  # TODO remove me!
             else:
@@ -185,7 +187,7 @@ class GraphicalModel(AbstractTree):
         inner_values = self.pred_attr + [self.target_attr]
         outer_values = [self.target_attr]
 
-        max_nodes = get_total_nodes(max_height)
+        max_nodes = total_nodes_by_height(max_height)
 
         tensors = map(
             lambda i: Tensor(
@@ -209,9 +211,9 @@ class GraphicalModel(AbstractTree):
         :param fittest:
         :return:
         """
-        def get_node_label(id):
+        def get_node_label(_id):
             try:
-                return fit.tree.node[id]['label'] if not fit.tree.node[id]['terminal'] else self.target_attr
+                return fit.tree.node[_id]['label'] if not fit.tree.node[_id]['terminal'] else self.target_attr
             except KeyError:
                 return None
 
@@ -231,12 +233,10 @@ class GraphicalModel(AbstractTree):
             count = Counter(all_trees)
             weights = tensor.weights  # type: pd.DataFrame
             weights['probability'] = 0.
-            
+
             for comb, n_occur in count.iteritems():
                 if comb[0] is None:
-                    import warnings
-                    warnings.warn('WARNING: modifying updating process for this method!')
-                    continue
+                    continue  # does nothing
 
                 click = it.izip(order, comb)
                 _slice = weights  # type: pd.DataFrame
@@ -249,6 +249,17 @@ class GraphicalModel(AbstractTree):
             weights['probability'] = weights['probability'].apply(lambda x: x / n_fittest)
             
             tensor.weights = weights
+
+            # if, for some reason, this node hasn't received any value through
+            # ALL fittest individual samplings, then assume an uniform distribution
+            sum_prob = weights['probability'].sum()
+            if sum_prob < 1.:
+                rest = 1. - sum_prob
+                to_add = [rest / weights.shape[0] for b in xrange(weights.shape[0])]
+                further_add = 1. - (sum(to_add) + sum_prob)
+                to_add[np.random.randint(weights.shape[0])] += further_add
+
+                weights['probability'] = weights.apply(lambda x: x['probability'] + to_add[x.name], axis=1)
 
             self.tensors[i].weights = weights
 
