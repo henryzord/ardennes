@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from treelib.classes import value_check
+from treelib import get_max_height
 
 __author__ = 'Henry Cagnini'
 
@@ -111,7 +112,10 @@ def main(json_file, mode='batch'):
             dataset, train_size=kwargs['train_size'], random_state=kwargs['random_state']
         )
 
-        tree_height = get_max_height(train, kwargs['random_state'])
+        try:
+            tree_height = get_max_height(train, kwargs['random_state'])
+        except ValueError as ve:
+            tree_height = kwargs['tree_height']
 
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],

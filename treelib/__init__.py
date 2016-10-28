@@ -17,6 +17,14 @@ __author__ = 'Henry Cagnini'
 
 
 def get_max_height(train_set, random_state=None):
+    """
+    Picks the maximum height for a decision tree induced by the Scikit-Learn deterministic algorithm.
+
+    :param train_set:
+    :param random_state:
+    :return:
+    """
+
     if isinstance(train_set, pd.DataFrame):
         x_train = train_set[train_set.columns[:-1]]
         y_train = train_set[train_set.columns[-1]]
@@ -26,10 +34,14 @@ def get_max_height(train_set, random_state=None):
     else:
         raise TypeError('Invalid type for this function! Must be either a pandas.DataFrame or a tuple of numpy.ndarray!')
 
-    cls = DecisionTreeClassifier(criterion='entropy', random_state=random_state)
-    cls = cls.fit(x_train, y_train)
-    max_depth = cls.tree_.max_depth
-    return max_depth
+    try:
+        cls = DecisionTreeClassifier(criterion='entropy', random_state=random_state)
+        cls = cls.fit(x_train, y_train)
+        max_depth = cls.tree_.max_depth
+        return max_depth
+    except ValueError as ve:
+        ve.message = 'This function only supports datasets with numerical predictive attributes!'
+        raise ve
 
 
 class Ardennes(AbstractTree):
