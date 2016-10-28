@@ -182,8 +182,15 @@ class Individual(AbstractTree):
                 )
 
             if meta['threshold'] is not None:
-                attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}
-                attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
+                if isinstance(meta['threshold'], float):
+                    attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}  # TODO change for nominal attributes!
+                    attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
+                elif type(meta['threshold']) in [list, tuple]:
+                    attr_dict_left = {'threshold': '%s' % ','.join(meta['threshold'])}
+                    attr_dict_right = {'threshold': '%s' % ', '.join(set(subset[meta['label']].unique()) - set(meta['threshold']))}
+                else:
+                    raise TypeError('invalid type for threshold!')
+
             else:
                 attr_dict_left = {'threshold': None}
                 attr_dict_right = {'threshold': None}
@@ -219,7 +226,13 @@ class Individual(AbstractTree):
         successors = tree.successors(arg_node)
     
         while not node['terminal']:
-            go_left = obj[node['label']] < node['threshold']
+            if isinstance(node['threshold'], float):
+                go_left = obj[node['label']] < node['threshold']
+            elif type(node['threshold']) in [tuple, list]:
+                go_left = obj[node['label']] in node['threshold']
+            else:
+                raise TypeError('invalid type for threshold!')
+
             arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
             successors = tree.successors(arg_node)
             node = tree.node[arg_node]
@@ -283,8 +296,25 @@ class Individual(AbstractTree):
         return out
 
     def __store_threshold__(self, node_label, subset, threshold):
-        _mean = subset[node_label].mean()
-        _std = subset[node_label].std()
+        """
+
+        :type node_label: str
+        :param node_label:
+        :type subset: pandas.DataFrame
+        :param subset:
+        :param threshold:
+        """
+        column_type = subset.dtypes[node_label]
+
+        if column_type in [np.float32, np.float64]:
+            _mean = subset[node_label].mean()
+            _std = subset[node_label].std()
+        elif column_type == object:
+            counts = subset[node_label].apply(len)
+            _mean = counts.mean()
+            _std = counts.std()
+        else:
+            raise TypeError('invalid type for threshold!')
 
         key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
         self.__class__.thresholds[key] = threshold
@@ -298,8 +328,17 @@ class Individual(AbstractTree):
         :return:
         """
 
-        _mean = subset[node_label].mean()
-        _std = subset[node_label].std()
+        column_type = subset.dtypes[node_label]
+
+        if column_type in [np.float32, np.float64]:
+            _mean = subset[node_label].mean()
+            _std = subset[node_label].std()
+        elif column_type == object:
+            counts = subset[node_label].apply(len)
+            _mean = counts.mean()
+            _std = counts.std()
+        else:
+            raise TypeError('invalid type for threshold!')
 
         key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
         return self.__class__.thresholds[key]
@@ -437,7 +476,65 @@ class Individual(AbstractTree):
         return meta, pd.DataFrame([]), pd.DataFrame([])
 
     def __set_categorical__(self, node_label, parent_label, subset, **kwargs):
-        raise NotImplemented('not implemented yet!')
+        # TODO enhance this method to perform more smart splits.
+        # TODO currently it tries all combinations. what a mess!
+
+        def __subsets_and_meta__(group):
+            _best_subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
+            _best_subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
+
+            _meta = {
+                'label': node_label,
+                'threshold': group,
+                'terminal': False,
+                'color': Individual._root_node_color if
+                kwargs['variable_name'] == node.root else Individual._inner_node_color
+            }
+
+            return _meta, _best_subset_left, _best_subset_right
+
+        def get_entropy(group):
+            """
+            Gets entropy for a given set of values.
+
+            :type group: tuple
+            :param group: Set of values.
+            :rtype: float
+            :return: the entropy.
+            """
+
+            subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
+            subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
+
+            entropy = \
+                Individual.entropy(subset_left, Individual.target_attr) + \
+                Individual.entropy(subset_right, Individual.target_attr)
+
+            return entropy
+
+        try:
+            best_threshold = self.__retrieve_threshold__(node_label, subset)
+            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
+        except KeyError:
+            groupby = Counter(subset[node_label])
+
+            all_splits = []
+            for i in xrange(1, len(groupby)):
+                combs = list(it.combinations(groupby.keys(), i))  # order does not matter
+                all_splits.extend(combs)
+
+            entropies = map(get_entropy, all_splits)
+            argmin_entropy = np.argmin(entropies)
+            best_split = all_splits[argmin_entropy]
+
+            self.__store_threshold__(node_label, subset, best_split)
+
+            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
+
+        if 'get_meta' in kwargs and kwargs['get_meta'] == False:
+            return best_subset_left, best_subset_right
+        else:
+            return meta, best_subset_left, best_subset_right
 
     @staticmethod
     def __set_error__(self, node_label, parent_label, subset, **kwargs):
