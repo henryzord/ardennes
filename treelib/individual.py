@@ -68,7 +68,9 @@ class Individual(AbstractTree):
 
         node_list = tree.nodes(data=True)
         edge_list = tree.edges(data=True)
-    
+
+
+
         node_labels = {x[0]: x[1]['label'] for x in node_list}
         node_colors = [x[1]['color'] for x in node_list]
         edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
