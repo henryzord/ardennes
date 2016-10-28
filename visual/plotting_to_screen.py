@@ -14,7 +14,7 @@ G.add_nodes_from([1, 2])
 G.add_edge(1, 2)
 
 # convert from networkx -> pydot
-pydot_graph = G.to_pydot()
+pydot_graph = nx.nx_pydot.to_pydot(G)
 
 # render pydot by calling dot, no file saved to disk
 png_str = pydot_graph.create_png(prog='dot')
@@ -27,4 +27,4 @@ img = mpimg.imread(sio)
 
 # plot the image
 imgplot = plt.imshow(img, aspect='equal')
-plt.show(block=False)
+plt.show()
