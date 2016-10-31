@@ -56,50 +56,62 @@ class Individual(AbstractTree):
     def __str__(self):
         return 'fitness: %0.2f' % self.val_acc
 
-    def plot(self):
+    def plot(self, metadata_path=None):
         """
         Draw this individual.
         """
-    
-        fig = plt.figure()
-    
-        tree = self.tree  # type: nx.DiGraph
-        pos = nx.spectral_layout(tree)
+        from wand.image import Image
+        from wand import display
 
-        node_list = tree.nodes(data=True)
-        edge_list = tree.edges(data=True)
+        # convert from networkx -> pydot
+        # pydot_graph = nx.nx_pydot.to_pydot(self.tree)
+        # pydot_graph.write('.temp.pdf', format='pdf', prog='dot')
+        #
+        # img = Image(filename='.temp.pdf')
+        # display.display(img)
 
-        node_labels = {x[0]: x[1]['label'] for x in node_list}
-        node_colors = [x[1]['color'] for x in node_list]
-        edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
-    
-        nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
-        nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
-        nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
-        nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
-    
-        plt.text(
-            0.8,
-            0.9,
-            'Fitness: %0.4f' % self.val_acc,
-            fontsize=15,
-            horizontalalignment='center',
-            verticalalignment='center',
-            transform=fig.transFigure
-        )
-    
-        if self.id is not None:
+        old = True
+        if old:
+            fig = plt.figure()
+
+            tree = self.tree  # type: nx.DiGraph
+            from networkx.drawing.nx_agraph import graphviz_layout
+            pos = graphviz_layout(tree, root=0, prog='dot')
+
+            node_list = tree.nodes(data=True)
+            edge_list = tree.edges(data=True)
+
+            node_labels = {x[0]: x[1]['label'] for x in node_list}
+            node_colors = [x[1]['color'] for x in node_list]
+            edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
+
+            nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
+            nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
+            nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
+            nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
+
             plt.text(
-                0.1,
-                0.1,
-                'ID: %03.d' % self.id,
+                0.8,
+                0.9,
+                'Fitness: %0.4f' % self.val_acc,
                 fontsize=15,
                 horizontalalignment='center',
                 verticalalignment='center',
                 transform=fig.transFigure
             )
-    
-        plt.axis('off')
+
+            if self.id is not None:
+                plt.text(
+                    0.1,
+                    0.1,
+                    'ID: %03.d' % self.id,
+                    fontsize=15,
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    transform=fig.transFigure
+                )
+
+            plt.axis('off')
 
     @property
     def fitness(self):

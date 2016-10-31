@@ -252,11 +252,11 @@ class Ardennes(AbstractTree):
         acc = (test_set[test_set.columns[-1]] == predictions).sum() / float(test_set.shape[0])
         return acc
 
-    def plot(self, ensemble=False):
+    def plot(self, metadata_path=None, ensemble=False):
         if ensemble:
             raise NotImplementedError('not implemented yet!')
         else:
-            self.predictor.plot()
+            self.predictor.plot(metadata_path=metadata_path)
             from matplotlib import pyplot as plt
             plt.show()
 
