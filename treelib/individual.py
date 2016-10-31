@@ -60,58 +60,52 @@ class Individual(AbstractTree):
         """
         Draw this individual.
         """
-        from wand.image import Image
-        from wand import display
 
-        # convert from networkx -> pydot
-        # pydot_graph = nx.nx_pydot.to_pydot(self.tree)
-        # pydot_graph.write('.temp.pdf', format='pdf', prog='dot')
-        #
+        # from wand.image import Image
+        # from wand import display
         # img = Image(filename='.temp.pdf')
         # display.display(img)
 
-        old = True
-        if old:
-            fig = plt.figure()
+        fig = plt.figure()
 
-            tree = self.tree  # type: nx.DiGraph
-            from networkx.drawing.nx_agraph import graphviz_layout
-            pos = graphviz_layout(tree, root=0, prog='dot')
+        tree = self.tree  # type: nx.DiGraph
+        from networkx.drawing.nx_agraph import graphviz_layout
+        pos = graphviz_layout(tree, root=0, prog='dot')
 
-            node_list = tree.nodes(data=True)
-            edge_list = tree.edges(data=True)
+        node_list = tree.nodes(data=True)
+        edge_list = tree.edges(data=True)
 
-            node_labels = {x[0]: x[1]['label'] for x in node_list}
-            node_colors = [x[1]['color'] for x in node_list]
-            edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
+        node_labels = {x[0]: x[1]['label'] for x in node_list}
+        node_colors = [x[1]['color'] for x in node_list]
+        edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
 
-            nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
-            nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
-            nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
-            nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
+        nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
+        nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
+        nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
+        nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
 
+        plt.text(
+            0.8,
+            0.9,
+            'Fitness: %0.4f' % self.val_acc,
+            fontsize=15,
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform=fig.transFigure
+        )
+
+        if self.id is not None:
             plt.text(
-                0.8,
-                0.9,
-                'Fitness: %0.4f' % self.val_acc,
+                0.1,
+                0.1,
+                'ID: %03.d' % self.id,
                 fontsize=15,
                 horizontalalignment='center',
                 verticalalignment='center',
                 transform=fig.transFigure
             )
 
-            if self.id is not None:
-                plt.text(
-                    0.1,
-                    0.1,
-                    'ID: %03.d' % self.id,
-                    fontsize=15,
-                    horizontalalignment='center',
-                    verticalalignment='center',
-                    transform=fig.transFigure
-                )
-
-            plt.axis('off')
+        plt.axis('off')
 
     @property
     def fitness(self):
@@ -318,7 +312,7 @@ class Individual(AbstractTree):
         """
         column_type = subset.dtypes[node_label]
 
-        if column_type in [np.float32, np.float64]:
+        if column_type in [np.float32, np.float64, np.int32, np.int64]:
             _mean = subset[node_label].mean()
             _std = subset[node_label].std()
         elif column_type == object:
@@ -326,7 +320,7 @@ class Individual(AbstractTree):
             _mean = counts.mean()
             _std = counts.std()
         else:
-            raise TypeError('invalid type for threshold!')
+            raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
 
         key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
         self.__class__.thresholds[key] = threshold
@@ -342,7 +336,7 @@ class Individual(AbstractTree):
 
         column_type = subset.dtypes[node_label]
 
-        if column_type in [np.float32, np.float64]:
+        if column_type in [np.float32, np.float64, np.int32, np.int64]:
             _mean = subset[node_label].mean()
             _std = subset[node_label].std()
         elif column_type == object:
@@ -350,7 +344,7 @@ class Individual(AbstractTree):
             _mean = counts.mean()
             _std = counts.std()
         else:
-            raise TypeError('invalid type for threshold!')
+            raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
 
         key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
         return self.__class__.thresholds[key]
@@ -534,14 +528,20 @@ class Individual(AbstractTree):
             for i in xrange(1, len(groupby)):
                 combs = list(it.combinations(groupby.keys(), i))  # order does not matter
                 all_splits.extend(combs)
+                print 'x:', i, 'y:', len(all_splits)  # TODO error here! array gets too big!
 
-            entropies = map(get_entropy, all_splits)
-            argmin_entropy = np.argmin(entropies)
-            best_split = all_splits[argmin_entropy]
+            if len(all_splits) <= 1:
+                meta, best_subset_left, best_subset_right = self.__set_terminal__(
+                    node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
+                )
+            else:
+                entropies = map(get_entropy, all_splits)
+                argmin_entropy = np.argmin(entropies)
+                best_split = all_splits[argmin_entropy]
 
-            self.__store_threshold__(node_label, subset, best_split)
+                self.__store_threshold__(node_label, subset, best_split)
 
-            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
+                meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return best_subset_left, best_subset_right

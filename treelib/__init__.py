@@ -267,6 +267,7 @@ class Ardennes(AbstractTree):
 
         def create_individual(row):
             ind = Individual(id=row.name, sess=row, sets=sets)
+            print 'sampled individual %d' % row.name
             return ind
 
         population = df.apply(create_individual, axis=1)

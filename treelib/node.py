@@ -4,6 +4,7 @@ Convenient module for heap (i.e, binary) tree properties.
 # coding=utf-8
 
 import numpy as np
+from math import ceil, floor
 
 
 __author__ = 'Henry Cagnini'
@@ -59,18 +60,6 @@ def total_nodes_by_height(height):
     return np.power(2, height) - 1
 
 
-def total_nodes_by_depth(depth):
-    """
-    Get number of total nodes from a tree with given height.
-
-    :type depth: int
-    :param depth: The depth of the binary tree. Please note that the first level begins at zero.
-    :rtype: int
-    :return: The number of nodes in this tree.
-    """
-    return np.power(2, depth + 1) - 1
-
-
 def nodes_at_level(level):
     """
     Get number of nodes at given level.
@@ -82,3 +71,38 @@ def nodes_at_level(level):
     """
 
     return np.power(2, level)
+
+
+def get_max_height(n_nodes):
+    """
+    Get the height of the tree by supplying the number of nodes in it.
+
+    :param n_nodes: Total number of nodes in a binary tree.
+    :return: Minimum height of a tree with the given number of nodes.
+    """
+    h = round((n_nodes - 1.) / 2.)
+    return h
+
+
+def get_min_height(n_nodes):
+    """
+    Get the height of the tree by supplying the number of nodes in it.
+
+    :param n_nodes: Total number of nodes in a binary tree.
+    :return: Maximum height of a tree with the given number of nodes.
+    """
+    h = __closest_power__(n_nodes) - 1
+    return h
+
+
+def __closest_power__(n):
+    log = np.log2(n)
+    upper_diff = abs(2.**log - (2. ** ceil(log)))
+    lower_diff = abs(2.**log - (2. ** floor(log)))
+
+    power = (ceil(log) * (upper_diff < lower_diff)) + (floor(log) * (lower_diff <= upper_diff))
+
+    return power
+
+if __name__ == '__main__':
+    __closest_power__(255)
