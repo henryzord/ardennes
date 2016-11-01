@@ -45,8 +45,8 @@ class Individual(AbstractTree):
 
         if Individual.column_types is None:
             Individual.column_types = {
-                x: self.type_handler_dict[str(sets['train'][x].dtype)] for x in sets['train'].columns
-            }  # type: dict
+                x: self.raw_type_dict[str(sets['train'][x].dtype)] for x in sets['train'].columns
+                }  # type: dict
             Individual.column_types['class'] = 'class'
         self.column_types = Individual.column_types
         
@@ -187,6 +187,8 @@ class Individual(AbstractTree):
                     parent_label=meta['label']
                 )
 
+            # TODO if both children have the same key, then prune!
+
             if meta['threshold'] is not None:
                 if isinstance(meta['threshold'], float):
                     attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}  # TODO change for nominal attributes!
@@ -291,7 +293,7 @@ class Individual(AbstractTree):
 
     def __set_inner_node__(self, variable_name, parent_label, subset, sess, **kwargs):
         attr_type = Individual.column_types[sess[variable_name]]
-        out = self.attr_handler_dict[attr_type](
+        out = self.handler_dict[attr_type](
             self,
             node_label=sess[variable_name],
             parent_label=parent_label,
@@ -481,8 +483,103 @@ class Individual(AbstractTree):
 
         return meta, pd.DataFrame([]), pd.DataFrame([])
 
+    # def __set_categorical__(self, node_label, parent_label, subset, **kwargs):
+    #     # TODO enhance this method to perform more smart splits.
+    #     # TODO currently it tries all combinations. what a mess!
+    #
+    #     def __subsets_and_meta__(group):
+    #         _best_subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
+    #         _best_subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
+    #
+    #         _meta = {
+    #             'label': node_label,
+    #             'threshold': group,
+    #             'terminal': False,
+    #             'color': Individual._root_node_color if
+    #             kwargs['variable_name'] == node.root else Individual._inner_node_color
+    #         }
+    #
+    #         return _meta, _best_subset_left, _best_subset_right
+    #
+    #     def get_entropy(group):
+    #         """
+    #         Gets entropy for a given set of values.
+    #
+    #         :type group: tuple
+    #         :param group: Set of values.
+    #         :rtype: float
+    #         :return: the entropy.
+    #         """
+    #
+    #         subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
+    #         subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
+    #
+    #         entropy = \
+    #             Individual.entropy(subset_left, Individual.target_attr) + \
+    #             Individual.entropy(subset_right, Individual.target_attr)
+    #
+    #         return entropy
+    #
+    #     try:
+    #         best_threshold = self.__retrieve_threshold__(node_label, subset)
+    #         meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
+    #     except KeyError:
+    #         # TODO PCA code!
+    #         # TODO transform ALL categorical attributes to binary!
+    #         # from sklearn.preprocessing import LabelBinarizer
+    #
+    #         def pull_left_by_purity(smaller):
+    #             counter = Counter(smaller.apply(tuple, axis=1))
+    #
+    #             if len(counter) <= 1:
+    #                 raise ValueError('partition is already pure!')
+    #
+    #             prob_matrix = pd.DataFrame(counter.keys(), columns=[node_label, self.target_attr])
+    #             prob_matrix['prob'] = counter.values()
+    #             prob_matrix = prob_matrix.sort_values(by=[subset.columns[-1], 'prob'], ascending=False)
+    #
+    #             all_splits = {}
+    #
+    #             for target in self.class_labels:
+    #                 sub_matrix = prob_matrix.loc[prob_matrix[self.target_attr] == target]
+    #
+    #                 left_bag = sub_matrix[node_label].tolist()
+    #                 right_bag = []
+    #
+    #                 entropies = []
+    #
+    #                 while len(left_bag) > 1:
+    #                     argmax = sub_matrix['prob'].argmax()
+    #                     picked = sub_matrix.loc[argmax, node_label]
+    #                     right_bag += [picked]
+    #                     left_bag.remove(picked)
+    #                     sub_matrix = sub_matrix.loc[sub_matrix.index != argmax]  # removes picked row from sub_matrix
+    #                     entropy = get_entropy(left_bag)
+    #                     entropies += [entropy]
+    #
+    #                     all_splits[tuple(left_bag)] = entropy
+    #
+    #             inverse_dict = {x: y for y, x in all_splits.iteritems()}
+    #             key = min(inverse_dict)
+    #             return inverse_dict[key]
+    #
+    #         try:
+    #             best_split = pull_left_by_purity(subset[[node_label, self.target_attr]])
+    #             self.__store_threshold__(node_label, subset, best_split)
+    #             meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
+    #
+    #         except ValueError:
+    #             meta, best_subset_left, best_subset_right = self.__set_terminal__(
+    #                 node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
+    #             )
+    #
+    #     if 'get_meta' in kwargs and kwargs['get_meta'] == False:
+    #         return best_subset_left, best_subset_right
+    #     else:
+    #         return meta, best_subset_left, best_subset_right
+
     def __set_categorical__(self, node_label, parent_label, subset, **kwargs):
-        # TODO enhance this method to perform more smart splits.
+        # TODO enhance this method to perform smarter splits.
         # TODO currently it tries all combinations. what a mess!
 
         def __subsets_and_meta__(group):
@@ -528,7 +625,7 @@ class Individual(AbstractTree):
             for i in xrange(1, len(groupby)):
                 combs = list(it.combinations(groupby.keys(), i))  # order does not matter
                 all_splits.extend(combs)
-                print 'x:', i, 'y:', len(all_splits)  # TODO error here! array gets too big!
+                # print 'x:', i, 'y:', len(all_splits)  # TODO error here! array gets too big!
 
             if len(all_splits) <= 1:
                 meta, best_subset_left, best_subset_right = self.__set_terminal__(
@@ -552,7 +649,7 @@ class Individual(AbstractTree):
     def __set_error__(self, node_label, parent_label, subset, **kwargs):
         raise TypeError('Unsupported data type for column %s!' % node_label)
 
-    attr_handler_dict = {
+    handler_dict = {
         'object': __set_categorical__,
         'str': __set_categorical__,
         'int': __set_numerical__,
@@ -562,9 +659,9 @@ class Individual(AbstractTree):
         'class': __set_terminal__
     }
 
-    type_handler_dict = {
-        'bool': 'bool',
-        'bool_': 'bool',
+    # TODO replace with np.sctypes!
+
+    raw_type_dict = {
         'int': 'int',
         'int_': 'int',
         'intc': 'int',
@@ -585,6 +682,27 @@ class Individual(AbstractTree):
         'complex_': 'complex',
         'complex64': 'complex',
         'complex128': 'complex',
+        'object': 'object',
+        'bool_': 'bool',
+        'bool': 'bool',
         'str': 'str',
-        'object': 'object'
     }
+
+    def get_predictive_type(self, dtype):
+        """
+        Tells whether the attribute is categorical or numerical.
+
+        :type dtype: type
+        :param dtype: dtype of an attribute.
+        :rtype: str
+        :return: Whether this attribute is categorical or numerical.
+        """
+        raw_type = self.raw_type_dict[str(dtype)]
+        func = self.handler_dict[raw_type]
+
+        if func.__name__ == self.__set_categorical__.__name__:
+            return 'categorical'
+        elif func.__name__ == self.__set_numerical__.__name__:
+            return 'numerical'
+        else:
+            raise TypeError('Unsupported column type! Column type is: %s' % dtype)

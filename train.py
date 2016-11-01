@@ -112,9 +112,12 @@ def main(json_file, mode='batch'):
             dataset, train_size=kwargs['train_size'], random_state=kwargs['random_state']
         )
 
-        try:
-            tree_height = get_max_height(train, kwargs['random_state'])
-        except ValueError as ve:
+        if 'tree_height' not in kwargs:
+            try:
+                tree_height = get_max_height(train, kwargs['random_state'])
+            except ValueError as ve:
+                tree_height = kwargs['tree_height']
+        else:
             tree_height = kwargs['tree_height']
 
         inst = Ardennes(

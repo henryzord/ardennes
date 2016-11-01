@@ -53,7 +53,7 @@ class Tensor(SetterClass):
             
             combs = list(it.product(*vec_vals))
             columns = [self.name] + [self.global_gms[self.gm_id][p].name for p in self.parents]
-            
+
             df = pd.DataFrame(
                 data=combs,
                 columns=columns
