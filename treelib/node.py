@@ -70,7 +70,23 @@ def nodes_at_level(level):
     :return: Number of nodes in this level.
     """
 
-    return np.power(2, level)
+    return int(np.power(2, level))
+
+
+def index_at_level(level):
+    """
+    Picks the index of all the nodes at a given level in a binary tree.
+
+    :type level: int
+    :param level: The level, starting at zero.
+    :rtype: list of int
+    :return: A list of the indices of nodes at a given level.
+    """
+    before = nodes_at_level(level - 1)
+    current = nodes_at_level(level)
+
+    index = range(before, before + current)
+    return index
 
 
 def get_max_height(n_nodes):

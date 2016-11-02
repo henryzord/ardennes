@@ -149,6 +149,11 @@ class Ardennes(AbstractTree):
             )
             t1 = t2
 
+            # TODO remove me!
+            fittest_ind = population[fitness.argmax()]
+            fittest_ind.plot()
+            # TODO remove me!
+
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
             # picks fittest population
@@ -181,6 +186,9 @@ class Ardennes(AbstractTree):
         self.last_population = population
         self.trained = True
         GraphicalModel.reset_globals()
+
+        from matplotlib import pyplot as plt  # TODO remove me!
+        plt.show()  # TODO remove me!
 
     def predict_proba(self, samples, ensemble=False):
         df = self.__to_dataframe__(samples)

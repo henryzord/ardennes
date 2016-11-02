@@ -16,7 +16,10 @@ class Tensor(SetterClass):
     global_gms = dict()
     target_attr = None
 
-    def __init__(self, name, values, parents=None, class_probability='declining', max_height=None, probability='uniform', gm_id=0, **kwargs):
+    def __init__(
+            self, name, values, parents=None, class_probability='declining',
+            max_height=None, probability='uniform', gm_id=0, **kwargs
+    ):
         super(Tensor, self).__init__(**kwargs)
         
         if gm_id not in self.__class__.global_gms:
@@ -104,14 +107,15 @@ class Tensor(SetterClass):
         :rtype: pandas.DataFrame
         :return:
         """
-        if len(self.values) == 1:
-            samples[self.name] = self.values[0]
-
-        elif len(self.parents) == 0:
+        if len(self.parents) == 0:
             a, p = (self.weights[self.name], self.weights['probability'])
 
-            values = np.random.choice(a=a, p=p, replace=True, size=samples.shape[0])
-            samples[self.name] = values
+            repeat = (2 ** get_depth(self.name))
+            size = samples.shape[0] * repeat
+
+            values = np.random.choice(a=a, p=p, replace=True, size=size)
+            _index = index_at_level(get_depth(self.name))
+            samples[_index] = values.reshape(samples.shape[0], repeat)
         else:
             # print samples
             grouped = samples.groupby(by=self.parents, axis=0)
@@ -139,10 +143,13 @@ class Tensor(SetterClass):
                 df['probability'] = df['probability'].apply(lambda x: x / _sum)
                 a, p = (df[self.name], df['probability'])
 
-                # proper sample
-                values = np.random.choice(a=a, p=p, replace=True, size=group_size)
+                repeat = (2 ** get_depth(self.name))  # TODO see if this is correct!
+                size = group_size * repeat
 
-                samples.loc[group_index, self.name] = values
+                # proper sample
+                values = np.random.choice(a=a, p=p, replace=True, size=size)
+                _index = index_at_level(get_depth(self.name))
+                samples.loc[group_index, _index] = values.reshape(group_size, repeat)
 
         # ----------------------- #
         return samples
@@ -161,61 +168,55 @@ class GraphicalModel(AbstractTree):
         super(GraphicalModel, self).__init__(**kwargs)
         
         self.gm_id = gm_id
-        self.tensors = self.__init_tensor__(max_height, distribution, class_probability)
+        self.tensors = self.__init_tensors__(max_height, distribution, class_probability)
     
-    def __init_tensor__(self, max_height, distribution='uniform', class_probability='declining'):
+    def __init_tensors__(self, max_height, distribution='uniform', class_probability='declining'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
-                parent = node.get_parent(_id)
-                val = parent
-                parents = []
-                while val is not None:
-                    parents += [parent]
-                    parent = node.get_parent(val)
-                    val = parent
+                parents = range(_id) if _id > 0 else []
             elif _distribution == 'bivariate':
-                parents = [node.get_parent(_id)]
+                parents = [_id - 1] if _id > 0 else []
             elif _distribution == 'univariate':
                 parents = []
             else:
                 raise ValueError('Distribution must be either multivariate, bivariate or univariate!')
             return parents
 
-        def is_terminal(_id):
-            return node.get_right_child(_id) >= max_nodes
-        
-        inner_values = self.pred_attr + [self.target_attr]
-        outer_values = [self.target_attr]
-
-        max_nodes = total_nodes_by_height(max_height)
+        sample_values = self.pred_attr + [self.target_attr]
 
         tensors = map(
             lambda i: Tensor(
                 i,
                 parents=get_parents(i, distribution),
-                values=inner_values if not is_terminal(i) else outer_values,
+                values=sample_values,
                 class_probability=class_probability,
                 max_height=max_height,
                 gm_id=self.gm_id,
                 target_attr=self.target_attr
             ),
-            xrange(max_nodes)
+            xrange(max_height - 1)
         )
         
         return tensors
     
     def update(self, fittest):
         """
-        
+        Updates graphical model.
+
         :type fittest: pandas.Series
         :param fittest:
         :return:
         """
-        def get_node_label(_id):
-            try:
-                return fit.tree.node[_id]['label'] if not fit.tree.node[_id]['terminal'] else self.target_attr
-            except KeyError:
-                return None
+
+        def get_node_label(_level):
+            _index = index_at_level(_level)
+            labels = []
+            for _ind in _index:
+                try:
+                    labels += [fit.tree.node[_ind]['label'] if not fit.tree.node[_ind]['terminal'] else self.target_attr]
+                except KeyError:
+                    pass
+            return labels
 
         pd.options.mode.chained_assignment = None
         
@@ -227,8 +228,20 @@ class GraphicalModel(AbstractTree):
 
             all_trees = []
             for fit in fittest:
-                tree = map(get_node_label, order)
-                all_trees += [tuple(tree)]
+                if i == 2:  # TODO remove me!
+                    raise NotImplementedError('not implemented yet!')
+
+                _children = get_node_label(tensor.name)
+                _parents = map(lambda x: tuple(get_node_label(x)), parents)
+                if len(parents) > 0:
+                    trees = []
+                    for c in _children:
+                        sub = [c]
+                        sub.extend(it.chain(*_parents))
+                        trees.append(tuple(sub))
+                else:
+                    trees = _children
+                all_trees.extend(trees)
 
             count = Counter(all_trees)
             weights = tensor.weights  # type: pd.DataFrame

@@ -158,10 +158,18 @@ class Individual(AbstractTree):
         :param variable_name:
         :return:
         """
-        if parent_label in self.class_labels:
+        if parent_label in self.class_labels:  # doesn't need to set a children of a class node!
             return tree
 
-        if subset.shape[0] <= 0 or sess[variable_name] == Individual.target_attr:
+        # if:
+        # 1. there is only one instance (or none) coming to this node; or
+        # 2. there is only one class coming to this node; or
+        # 3. this node was sampled as a terminal node:
+        # then set this as a terminal node
+        if subset.shape[0] <= 1 or \
+            subset[subset.columns[-1]].unique().shape[0] == 1 or \
+            sess[variable_name] == Individual.target_attr:
+
             meta, subset_left, subset_right = self.__set_terminal__(
                 variable_name=variable_name,
                 node_label=sess[variable_name],
@@ -177,8 +185,9 @@ class Individual(AbstractTree):
             )
 
         id_left, id_right = (node.get_left_child(variable_name), node.get_right_child(variable_name))
-        if id_left in sess and id_right in sess:
-            for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+
+        for (id_child, child_subset) in it.izip([id_left, id_right], [subset_left, subset_right]):
+            if id_left in sess and id_right in sess:
                 tree = self.__set_node__(
                     sess=sess,
                     tree=tree,
@@ -186,28 +195,35 @@ class Individual(AbstractTree):
                     variable_name=id_child,
                     parent_label=meta['label']
                 )
+            elif meta['threshold'] is not None:
+                c_meta, c_subset_left, c_subset_right = self.__set_terminal__(
+                    variable_name=id_child,
+                    node_label=self.target_attr,
+                    parent_label=meta['label'],
+                    subset=child_subset
+                )
+                tree.add_node(id_child, attr_dict=c_meta)
 
-            # TODO if both children have the same key, then prune!
-
-            if meta['threshold'] is not None:
-                if isinstance(meta['threshold'], float):
-                    attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}  # TODO change for nominal attributes!
-                    attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
-                elif type(meta['threshold']) in [list, tuple]:
-                    attr_dict_left = {'threshold': '%s' % ','.join(meta['threshold'])}
-                    attr_dict_right = {'threshold': '%s' % ', '.join(set(subset[meta['label']].unique()) - set(meta['threshold']))}
-                else:
-                    raise TypeError('invalid type for threshold!')
-
+        if meta['threshold'] is not None:
+            if isinstance(meta['threshold'], float):
+                attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}
+                attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
+            elif type(meta['threshold']) in [list, tuple]:
+                attr_dict_left = {'threshold': '%s' % ','.join(meta['threshold'])}
+                attr_dict_right = {
+                    'threshold': '%s' % ', '.join(set(subset[meta['label']].unique()) - set(meta['threshold']))
+                }
             else:
-                attr_dict_left = {'threshold': None}
-                attr_dict_right = {'threshold': None}
+                raise TypeError('invalid type for threshold!')
+        else:
+            attr_dict_left = {'threshold': None}
+            attr_dict_right = {'threshold': None}
 
-            if id_left in tree.node:
-                tree.add_edge(variable_name, id_left, attr_dict=attr_dict_left)
+        if id_left in tree.node:
+            tree.add_edge(variable_name, id_left, attr_dict=attr_dict_left)
 
-            if id_right in tree.node:
-                tree.add_edge(variable_name, id_right, attr_dict=attr_dict_right)
+        if id_right in tree.node:
+            tree.add_edge(variable_name, id_right, attr_dict=attr_dict_right)
 
         tree.add_node(variable_name, attr_dict=meta)
         return tree
