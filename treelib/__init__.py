@@ -76,7 +76,7 @@ class Ardennes(AbstractTree):
         self.trained = False
         self.best_individual = None
         self.last_population = None
-        self.max_height = max_height
+        self.max_height = max_height - 1
         self.distribution = distribution
         self.class_probability = class_probability
 
@@ -122,8 +122,6 @@ class Ardennes(AbstractTree):
 
         t1 = dt.now()  # starts measuring time
 
-        df_replace = pd.DataFrame(np.empty((self.n_individuals, self.max_height), dtype=np.object))
-
         gm = GraphicalModel(
             max_height=self.max_height,
             distribution=self.distribution,
@@ -131,7 +129,10 @@ class Ardennes(AbstractTree):
             **class_values
         )
 
-        population = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)
+        population = np.array([Individual(id=i, graphical_model=gm, max_height=self.max_height, sets=sets) for i in xrange(self.n_individuals)])
+
+        # TODO use numpy.vectorize!
+        raise NotImplementedError('not implemented yet!')
 
         fitness = np.array([x.fitness for x in population])
 
@@ -148,11 +149,6 @@ class Ardennes(AbstractTree):
                 elapsed_time=(t2-t1).total_seconds()
             )
             t1 = t2
-
-            # TODO remove me!
-            fittest_ind = population[fitness.argmax()]
-            fittest_ind.plot()
-            # TODO remove me!
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
@@ -186,9 +182,6 @@ class Ardennes(AbstractTree):
         self.last_population = population
         self.trained = True
         GraphicalModel.reset_globals()
-
-        from matplotlib import pyplot as plt  # TODO remove me!
-        plt.show()  # TODO remove me!
 
     def predict_proba(self, samples, ensemble=False):
         df = self.__to_dataframe__(samples)
@@ -267,19 +260,6 @@ class Ardennes(AbstractTree):
             self.predictor.plot(metadata_path=metadata_path)
             from matplotlib import pyplot as plt
             plt.show()
-
-    @staticmethod
-    def sample_individuals(df, graphical_model, sets):
-        df.reset_index(drop=True, inplace=True)
-        df = graphical_model.sample(df)
-
-        def create_individual(row):
-            ind = Individual(id=row.name, sess=row, sets=sets)
-            return ind
-
-        population = df.apply(create_individual, axis=1)
-
-        return population
 
     def __to_dataframe__(self, samples):
         if isinstance(samples, list):

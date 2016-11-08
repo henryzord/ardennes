@@ -13,22 +13,14 @@ __author__ = 'Henry Cagnini'
 
 
 class Tensor(SetterClass):
-    global_gms = dict()
     target_attr = None
 
     def __init__(
             self, name, values, parents=None, class_probability='declining',
-            max_height=None, probability='uniform', gm_id=0, **kwargs
+            max_height=None, probability='uniform', **kwargs
     ):
         super(Tensor, self).__init__(**kwargs)
-        
-        if gm_id not in self.__class__.global_gms:
-            self.__class__.global_gms[gm_id] = dict()
-        
-        if name in self.__class__.global_gms[gm_id]:
-            raise KeyError('Variable is already defined for this scope!')  # name is also an axis
-        
-        self.gm_id = gm_id  # type: float
+
         self.name = name  # type: int
         self.values = values  # type: list of str
         self.parents = parents if (len(parents) > 0 or parents is not None) else []  # type: list of int
@@ -39,9 +31,7 @@ class Tensor(SetterClass):
             class_probability if len(self.values) > 1 else 'same',
             max_height=max_height
         )  # type: pd.DataFrame
-        
-        self.__class__.global_gms[gm_id][name] = self
-    
+
     @property
     def n_parents(self):
         return len(self.parents)
@@ -52,10 +42,10 @@ class Tensor(SetterClass):
     
     def __init_probabilities__(self, values, probability='uniform', class_probability='declining', max_height=None):
         if probability == 'uniform':
-            vec_vals = [self.values] + [self.global_gms[self.gm_id][p].values for p in self.parents]
+            vec_vals = [self.values] + [self.values for p in self.parents]
             
             combs = list(it.product(*vec_vals))
-            columns = [self.name] + [self.global_gms[self.gm_id][p].name for p in self.parents]
+            columns = [self.name] + [p for p in self.parents]
 
             df = pd.DataFrame(
                 data=combs,
@@ -86,7 +76,6 @@ class Tensor(SetterClass):
                 else:
                     df['probability'] = 1. / df.shape[0]
 
-                # print df.sort(axis='columns')  # TODO remove me!
             else:
                 raise ValueError('class probability must be either \'same\', \'decreased\' or \'declining\'!')
 
@@ -99,24 +88,14 @@ class Tensor(SetterClass):
         else:
             raise TypeError('probability must be either a string or a list!')
     
-    def get_value(self, samples):
-        """
+    def get_value(self, parent_labels=None):
 
-        :type samples: pandas.DataFrame
-        :param samples:
-        :rtype: pandas.DataFrame
-        :return:
-        """
         if len(self.parents) == 0:
             a, p = (self.weights[self.name], self.weights['probability'])
-
-            repeat = (2 ** get_depth(self.name))
-            size = samples.shape[0] * repeat
-
-            values = np.random.choice(a=a, p=p, replace=True, size=size)
-            _index = index_at_level(get_depth(self.name))
-            samples[_index] = values.reshape(samples.shape[0], repeat)
+            value = np.random.choice(a=a, p=p)
         else:
+            raise NotImplementedError('not implemented yet!')
+
             # print samples
             grouped = samples.groupby(by=self.parents, axis=0)
             groups = grouped.groups
@@ -147,12 +126,12 @@ class Tensor(SetterClass):
                 size = group_size * repeat
 
                 # proper sample
-                values = np.random.choice(a=a, p=p, replace=True, size=size)
+                value = np.random.choice(a=a, p=p, replace=True, size=size)
                 _index = index_at_level(get_depth(self.name))
-                samples.loc[group_index, _index] = values.reshape(group_size, repeat)
+                samples.loc[group_index, _index] = value.reshape(group_size, repeat)
 
         # ----------------------- #
-        return samples
+        return value
 
 
 class GraphicalModel(AbstractTree):
@@ -163,11 +142,10 @@ class GraphicalModel(AbstractTree):
     tensors = None  # tensor is a dependency graph
     
     def __init__(
-            self, gm_id=0, max_height=3, distribution='multivariate', class_probability='declining', **kwargs
+            self, max_height=3, distribution='multivariate', class_probability='declining', **kwargs
     ):
         super(GraphicalModel, self).__init__(**kwargs)
-        
-        self.gm_id = gm_id
+
         self.tensors = self.__init_tensors__(max_height, distribution, class_probability)
     
     def __init_tensors__(self, max_height, distribution='uniform', class_probability='declining'):
@@ -191,10 +169,9 @@ class GraphicalModel(AbstractTree):
                 values=sample_values,
                 class_probability=class_probability,
                 max_height=max_height,
-                gm_id=self.gm_id,
                 target_attr=self.target_attr
             ),
-            xrange(max_height - 1)
+            xrange(max_height)
         )
         
         return tensors
@@ -229,7 +206,8 @@ class GraphicalModel(AbstractTree):
             all_trees = []
             for fit in fittest:
                 if i == 2:  # TODO remove me!
-                    raise NotImplementedError('not implemented yet!')
+                    pass
+                    # raise NotImplementedError('not implemented yet!')
 
                 _children = get_node_label(tensor.name)
                 _parents = map(lambda x: tuple(get_node_label(x)), parents)
@@ -278,11 +256,13 @@ class GraphicalModel(AbstractTree):
 
         pd.options.mode.chained_assignment = 'warn'
     
-    def sample(self, df):
-        for tensor in self.tensors:
-            df = tensor.get_value(df)
+    def sample(self, level, parent_labels=None, enforce_nonterminal=False):
+        value = self.tensors[level].get_value(parent_labels=parent_labels)
+        if enforce_nonterminal:
+            while value == self.target_attr:
+                value = self.tensors[level].get_value(parent_labels=parent_labels)
 
-        return df
+        return value
 
     @classmethod
     def reset_globals(cls):

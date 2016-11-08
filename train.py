@@ -92,7 +92,7 @@ def main(json_file, mode='batch'):
     value_check(mode, ['batch', 'folds'])
 
     with open(json_file, 'r') as f:
-        kwargs = json.load(f, encoding='utf-8')
+        kwargs = json.load(f)
 
     if kwargs['random_state'] is not None:
         warnings.warn('WARNING: deterministic approach!')
