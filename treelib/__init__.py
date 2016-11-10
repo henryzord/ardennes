@@ -129,10 +129,8 @@ class Ardennes(AbstractTree):
             **class_values
         )
 
-        population = np.array([Individual(id=i, graphical_model=gm, max_height=self.max_height, sets=sets) for i in xrange(self.n_individuals)])
-
-        # TODO use numpy.vectorize!
-        raise NotImplementedError('not implemented yet!')
+        sample_func = np.vectorize(Individual, excluded=['graphical_model', 'max_height', 'sets'])
+        population = sample_func(id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets)
 
         fitness = np.array([x.fitness for x in population])
 
@@ -153,23 +151,13 @@ class Ardennes(AbstractTree):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
             # picks fittest population
-            fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: pd.Series
+            # fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: pd.Series
+            fittest_pop = population[fitness >= borderline]
+            to_replace_index = population[fitness < borderline]
+
             gm.update(fittest_pop)
 
-            to_replace_integer = self.n_individuals - fittest_pop.shape[0]
-            if to_replace_integer <= 0:
-                to_replace_integer = self.n_individuals
-
-            df_replace = pd.DataFrame(
-                np.empty((to_replace_integer, self.max_height), dtype=np.object)
-            )
-
-            replaced = self.sample_individuals(df=df_replace, graphical_model=gm, sets=sets)  # type: pd.DataFrame
-            if to_replace_integer == self.n_individuals:
-                population = replaced
-            else:
-                population = replaced.append(fittest_pop, ignore_index=True)
-                population.reset_index(inplace=True, drop=True)
+            replaced = sample_func(id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets)
 
             if self.__early_stop__(gm, self.uncertainty):
                 break
@@ -181,7 +169,6 @@ class Ardennes(AbstractTree):
         self.best_individual = np.argmax(fitness)
         self.last_population = population
         self.trained = True
-        GraphicalModel.reset_globals()
 
     def predict_proba(self, samples, ensemble=False):
         df = self.__to_dataframe__(samples)

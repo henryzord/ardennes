@@ -28,6 +28,12 @@ class Individual(AbstractTree):
     thresholds = dict()
     max_height = -1
 
+    shortest_path = dict()  # type: dict
+    """
+    A dictionary where each key is the node's name, and each value a list of integers denoting the
+    \'shortest path\' from the node to the root.
+    """
+
     def __init__(self, graphical_model, max_height, sets, **kwargs):
         """
         
@@ -55,6 +61,50 @@ class Individual(AbstractTree):
 
         self.sets = sets
         self.sample(graphical_model, sets)
+
+    @property
+    def height(self):
+        return max(map(len, self.shortest_path.itervalues()))
+
+    def nodes_at_depth(self, depth):
+        """
+        Picks all nodes which are in the given level.
+
+        :type depth: int
+        :param depth: The level to pick
+        :rtype: list of dict
+        :return: A list of the nodes at the given level.
+        """
+        depths = {k: self.depth_of(k) for k in self.shortest_path.iterkeys()}
+        at_level = []
+        for k, d in depths.iteritems():
+            if d == depth:
+                at_level.append(self.tree.node[k])
+        return at_level
+
+    def parents_of(self, node_id):
+        """
+        The parents of the given node.
+
+        :type node_id: int
+        :param node_id: The id of the node, starting from zero (root).
+        :rtype: list of int
+        :return: A list of parents of this node, excluding the node itself.
+        """
+        parents = self.shortest_path[node_id]
+        parents.remove(node_id)
+        return parents
+
+    def depth_of(self, node_id):
+        """
+        The depth which a node lies in the tree.
+
+        :type node_id: int
+        :param node_id: The id of the node, starting from zero (root).
+        :rtype: int
+        :return: Depth of the node, starting with zero (root).
+        """
+        return len(self.shortest_path[node_id]) - 1
 
     def __str__(self):
         return 'fitness: %0.2f' % self.val_acc
@@ -126,6 +176,9 @@ class Individual(AbstractTree):
         self.id_generator = it.count(start=0, step=1)
 
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
+
+        self.shortest_path = nx.shortest_path(self.tree, 0)
+
         self.val_acc = self.validate(self.sets['val'])
 
     def __set_tree__(self, graphical_model, train_set):
@@ -149,7 +202,20 @@ class Individual(AbstractTree):
         # then set this as a terminal node
         node_id = next(self.id_generator)
 
-        if subset[subset.columns[-1]].unique().shape[0] == 1 or level >= self.max_height:
+        try:
+            label = graphical_model.sample(level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
+        except IndexError as ie:
+            if level >= self.max_height:
+                label = self.target_attr
+            else:
+                raise ie
+
+        if any((
+            subset.empty,
+            subset[subset.columns[-1]].unique().shape[0] == 1,
+            level >= self.max_height,
+            label == self.target_attr
+        )):
             meta, subset_left, subset_right = self.__set_terminal__(
                 node_label=None,
                 parent_labels=parent_labels,
@@ -158,8 +224,6 @@ class Individual(AbstractTree):
                 node_id=node_id
             )
         else:
-            label = graphical_model.sample(level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
-
             meta, subset_left, subset_right = self.__set_inner_node__(
                 label=label,
                 parent_labels=parent_labels,
@@ -423,7 +487,8 @@ class Individual(AbstractTree):
 
             if border_vals.empty:
                 meta, best_subset_left, best_subset_right = self.__set_terminal__(
-                    node_label=Individual.target_attr, parent_labels=parent_labels, subset=subset, node_id=node_id, **kwargs
+                    node_label=Individual.target_attr, parent_labels=parent_labels, subset=subset, node_id=node_id,
+                    **kwargs
                 )
             else:
                 # this only clips the range of values to pick; it doesn't prevent picking a not promising value.
@@ -451,12 +516,15 @@ class Individual(AbstractTree):
             return meta, best_subset_left, best_subset_right
 
     def __set_terminal__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
+        # node label in this case is probably the self.target_attr; so it is not significant
+        # for the **real** label of the terminal node.
+
         if not subset.empty:
             label = Counter(subset[self.target_attr]).most_common()[0][0]
         else:
-            if __name__ == '__main__':
-                label = self.target_attr  # TODO will yield an error. that's life, do it later
-                raise NotImplementedError('not implemented yet!')
+            label = np.random.choice(self.class_labels)
+            import warnings
+            warnings.warn('WARNING: ramdonly picking a class label!')
 
         meta = {
             'label': label,

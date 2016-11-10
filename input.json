@@ -1,6 +1,6 @@
 {
   "n_individuals": 200,
-  "decile": 0.50,
+  "decile": 0.30,
   "uncertainty": 0.01,
   "verbose": true,
   "train_size": 0.80,
@@ -8,12 +8,12 @@
   "n_folds": 10,
   "n_runs": 1,
   "tree_height": 3,
-  "random_state": 6,
+  "random_state": null,
   "ensemble": false,
   "metadata_path": "metadata",
   "distribution": "univariate",
   "class_probability": "declining",
-  "dataset_path": "datasets/iris.csv",
+  "dataset_path": "datasets/glass.csv",
   "output_file": "some_metadata.csv",
   "mode": "batch",
   "save_metadata": false
