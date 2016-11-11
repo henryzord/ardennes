@@ -421,81 +421,31 @@ class Individual(AbstractTree):
         return self.__class__.thresholds[key]
 
     def __set_numerical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
-        def middle_value(x):
-            """
-            Gets the middle value between two values.
-
-            :type x: pandas.core.series.Series
-            :param x: A row in the node_label column.
-            :rtype: float
-            :return: middle value between this row and the predecessor of it.
-            """
-            first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
-            second = x.name
-
-            average = (border_vals.loc[first, node_label] + border_vals.loc[second, node_label]) / 2.
-
-            return average
-
-        def same_class(x):
-            """
-            Verifies if two neighboring objects have the same class.
-            
-            :type x: pandas.core.series.Series
-            :param x: An object with a predictive attribute and the class attribute.
-            :rtype: bool
-            :return: True if the neighbor of x have the same class; False otherwise.
-            """
-
-            first = ((x.name - 1) * (x.name > 0)) + (x.name * (x.name <= 0))
-            second = x.name
-            column = Individual.target_attr
-
-            # return ss[column].iloc[first] != ss[column].iloc[second]
-            return ss.loc[first, column] != ss.loc[second, column]
-
-        # pd.options.mode.chained_assignment = None
-
-        subsets = []
-
         try:
             best_threshold = self.__retrieve_threshold__(node_label, subset)
             meta, subsets = self.__subsets_and_meta__(
                 node_label, best_threshold, subset, node_id, node_level
             )
         except KeyError:
-            ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
-            ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
+            unique_vals = sorted(subset[node_label].unique())
+            candidates = [
+                (unique_vals[i] + unique_vals[i + 1]) / 2.
+                if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
+            ][:-1]
 
-            ss['same_class'] = ss.apply(same_class, axis=1)
-            border_vals = ss.loc[ss['same_class'] == True]
+            best_threshold = -np.inf
+            best_entropy = np.inf
+            for cand in candidates:
+                entropy = self.__get_entropy__(node_label, cand, subset)
+                if entropy < best_entropy:
+                    best_threshold = cand
+                    best_entropy = entropy
 
-            if border_vals.empty:
-                meta, best_subset_left, best_subset_right = self.__set_terminal__(
-                    node_label=Individual.target_attr, parent_labels=parent_labels, subset=subset, node_id=node_id,
-                    **kwargs
-                )
-            else:
-                # this only clips the range of values to pick; it doesn't prevent picking a not promising value.
-                border_vals.reset_index(inplace=True, drop=True)
+            self.__store_threshold__(node_label, subset, best_threshold)
 
-                candidates = border_vals.apply(middle_value, axis=1).unique()
-
-                best_threshold = -np.inf
-                best_entropy = np.inf
-                for cand in candidates:
-                    entropy = self.__get_entropy__(node_label, cand, subset)
-                    if entropy < best_entropy:
-                        best_threshold = cand
-                        best_entropy = entropy
-
-                self.__store_threshold__(node_label, subset, best_threshold)
-
-                meta, subsets = self.__subsets_and_meta__(
-                    node_label, best_threshold, subset, node_id, node_level
-                )
-
-                # pd.options.mode.chained_assignment = 'warn'
+            meta, subsets = self.__subsets_and_meta__(
+                node_label, best_threshold, subset, node_id, node_level
+            )
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return subsets
@@ -503,8 +453,8 @@ class Individual(AbstractTree):
             return meta, subsets
 
     def __set_terminal__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
-        # node label in this case is probably the self.target_attr; so it is not significant
-        # for the **real** label of the terminal node.
+        # node_label in this case is probably the self.target_attr; so it
+        # is not significant for the **real** label of the terminal node.
 
         if not subset.empty:
             label = Counter(subset[self.target_attr]).most_common()[0][0]
@@ -520,8 +470,6 @@ class Individual(AbstractTree):
             'node_id': node_id,
             'color': Individual._terminal_node_color
         }
-
-        # TODO set all children node as None in the label!
 
         return meta, pd.DataFrame([]), pd.DataFrame([])
 
