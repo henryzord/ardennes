@@ -130,7 +130,7 @@ class Ardennes(AbstractTree):
         )
 
         sample_func = np.vectorize(Individual, excluded=['graphical_model', 'max_height', 'sets'])
-        population = sample_func(id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets)
+        population = sample_func(ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets)
 
         fitness = np.array([x.fitness for x in population])
 
@@ -153,11 +153,13 @@ class Ardennes(AbstractTree):
             # picks fittest population
             # fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: pd.Series
             fittest_pop = population[fitness >= borderline]
-            to_replace_index = population[fitness < borderline]
+            to_replace_index = np.flatnonzero(fitness < borderline)
 
             gm.update(fittest_pop)
 
-            replaced = sample_func(id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets)
+            if len(to_replace_index) > 0:
+                replaced = sample_func(ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets)
+                population[to_replace_index] = replaced
 
             if self.__early_stop__(gm, self.uncertainty):
                 break

@@ -122,7 +122,7 @@ def main(json_file, mode='batch'):
 
         inst = Ardennes(
             n_individuals=kwargs['n_individuals'],
-            threshold=kwargs['decile'],
+            decile=kwargs['decile'],
             uncertainty=kwargs['uncertainty'],
             max_height=tree_height,
             distribution=kwargs['distribution'],

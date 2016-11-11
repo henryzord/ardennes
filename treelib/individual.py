@@ -3,6 +3,7 @@
 import itertools as it
 from collections import Counter
 
+import collections
 import networkx as nx
 import pandas as pd
 
@@ -23,7 +24,7 @@ class Individual(AbstractTree):
     sets = None  # type: dict
     tree = None  # type: nx.DiGraph
     val_acc = None  # type: float
-    node_id = None
+    ind_id = None
 
     thresholds = dict()
     max_height = -1
@@ -46,8 +47,10 @@ class Individual(AbstractTree):
         """
         super(Individual, self).__init__(**kwargs)
 
-        if 'node_id' in kwargs:
-            self.node_id = kwargs['node_id']
+        if 'ind_id' in kwargs:
+            self.ind_id = kwargs['ind_id']
+        else:
+            self.ind_id = None
 
         if Individual.column_types is None:
             Individual.column_types = {
@@ -128,7 +131,7 @@ class Individual(AbstractTree):
         node_list = tree.nodes(data=True)
         edge_list = tree.edges(data=True)
 
-        node_labels = {x[0]: x[1]['label'] for x in node_list}
+        node_labels = {x[0]: str(x[1]['node_id']) + ': ' + str(x[1]['label']) for x in node_list}
         node_colors = [x[1]['color'] for x in node_list]
         edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
 
@@ -140,23 +143,12 @@ class Individual(AbstractTree):
         plt.text(
             0.8,
             0.9,
-            'Fitness: %0.4f' % self.val_acc,
+            ('ind_id: %03.d' % self.ind_id if self.ind_id is not None else '') + '    ' + 'val fitness: %0.4f' % self.val_acc,
             fontsize=15,
             horizontalalignment='center',
             verticalalignment='center',
             transform=fig.transFigure
         )
-
-        if self.node_id is not None:
-            plt.text(
-                0.1,
-                0.1,
-                'node_id: %03.d' % self.node_id,
-                fontsize=15,
-                horizontalalignment='center',
-                verticalalignment='center',
-                transform=fig.transFigure
-            )
 
         plt.axis('off')
 
@@ -196,6 +188,17 @@ class Individual(AbstractTree):
         return tree
 
     def __set_node__(self, graphical_model, tree, subset, level, parent_labels):
+        """
+
+        :param graphical_model:
+        :type tree: networkx.DiGraph
+        :param tree:
+        :param subset:
+        :param level:
+        :param parent_labels:
+        :return:
+        """
+
         # if:
         # 1. there is only one instance (or none) coming to this node; or
         # 2. there is only one class coming to this node;
@@ -224,10 +227,10 @@ class Individual(AbstractTree):
                 node_id=node_id
             )
         else:
-            meta, subset_left, subset_right = self.__set_inner_node__(
+            meta, subsets = self.__set_inner_node__(
                 label=label,
                 parent_labels=parent_labels,
-                level=level,
+                node_level=level,
                 graphical_model=graphical_model,
                 subset=subset,
                 node_id=node_id
@@ -235,10 +238,12 @@ class Individual(AbstractTree):
 
             if meta['threshold'] is not None:
                 children_id = []
-                for child_subset in [subset_left, subset_right]:
+                for child_subset in subsets:
+                    # self, graphical_model, tree, subset, level, parent_labels
+
                     tree, some_id = self.__set_node__(
-                        graphical_model=graphical_model,
                         tree=tree,
+                        graphical_model=graphical_model,
                         subset=child_subset,
                         level=level + 1,
                         parent_labels=parent_labels + [label]
@@ -246,19 +251,16 @@ class Individual(AbstractTree):
                     children_id += [some_id]
 
                 if isinstance(meta['threshold'], float):
-                    attr_dict_left = {'threshold': '< %0.2f' % meta['threshold']}
-                    attr_dict_right = {'threshold': '>= %0.2f' % meta['threshold']}
-                elif type(meta['threshold']) in [list, tuple]:
-                    raise NotImplementedError('not implemented yet!')
-                    attr_dict_left = {'threshold': '%s' % ','.join(meta['threshold'])}
-                    attr_dict_right = {
-                        'threshold': '%s' % ', '.join(
-                            set(subset[meta['label']].unique()) - set(meta['threshold']))
-                    }
+                    attr_dicts = [
+                        {'threshold': '< %0.2f' % meta['threshold']},
+                        {'threshold': '>= %0.2f' % meta['threshold']}
+                    ]
+                elif isinstance(meta['threshold'], collections.Iterable):
+                    attr_dicts = [{'threshold': t} for t in meta['threshold']]
                 else:
                     raise TypeError('invalid type for threshold!')
 
-                for some_id, attr_dict in it.izip(children_id, [attr_dict_left, attr_dict_right]):
+                for some_id, attr_dict in it.izip(children_id, attr_dicts):
                     tree.add_edge(node_id, some_id, attr_dict=attr_dict)
 
         tree.add_node(node_id, attr_dict=meta)
@@ -283,18 +285,31 @@ class Individual(AbstractTree):
         tree = self.tree  # type: nx.DiGraph
 
         node = tree.node[arg_node]
-        successors = tree.successors(arg_node)
 
         while not node['terminal']:
             if isinstance(node['threshold'], float):
                 go_left = obj[node['label']] < node['threshold']
-            elif type(node['threshold']) in [tuple, list]:
-                go_left = obj[node['label']] in node['threshold']
+                successors = tree.successors(arg_node)
+                arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
+            elif isinstance(node['threshold'], collections.Iterable):
+                edges = self.tree.edge[arg_node]
+                neither_case = None
+                was_set = False
+                for v, d in edges.iteritems():
+                    if d['threshold'] == 'None':
+                        neither_case = v
+
+                    if obj[node['label']] == d['threshold']:
+                        arg_node = v
+                        was_set = True
+                        break
+
+                # next node is the one which the category is neither one of the seen ones in the training phase
+                if not was_set:
+                    arg_node = neither_case
             else:
                 raise TypeError('invalid type for threshold!')
 
-            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
-            successors = tree.successors(arg_node)
             node = tree.node[arg_node]
 
         return node['label']
@@ -343,13 +358,14 @@ class Individual(AbstractTree):
         acc = hit_count / float(test_set.shape[0])
         return acc
 
-    def __set_inner_node__(self, label, parent_labels, level, graphical_model, subset, node_id, **kwargs):
+    def __set_inner_node__(self, label, parent_labels, node_level, subset, node_id, **kwargs):
         attr_type = Individual.column_types[label]
+
         out = self.handler_dict[attr_type](
             self,
             node_label=label,
             parent_labels=parent_labels,
-            level=level,
+            node_level=node_level,
             subset=subset,
             node_id=node_id,
             **kwargs
@@ -404,9 +420,7 @@ class Individual(AbstractTree):
         key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
         return self.__class__.thresholds[key]
 
-    def __set_numerical__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
-        pd.options.mode.chained_assignment = None
-
+    def __set_numerical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
         def middle_value(x):
             """
             Gets the middle value between two values.
@@ -440,44 +454,15 @@ class Individual(AbstractTree):
             # return ss[column].iloc[first] != ss[column].iloc[second]
             return ss.loc[first, column] != ss.loc[second, column]
 
-        def get_entropy(threshold):
-            """
-            Gets entropy for a given threshold.
-            
-            :type threshold: float
-            :param threshold: Threshold value.
-            :rtype: float
-            :return: the entropy.
-            """
+        # pd.options.mode.chained_assignment = None
 
-            subset_left = subset.loc[subset[node_label] < threshold]
-            subset_right = subset.loc[subset[node_label] >= threshold]
-
-            entropy = \
-                Individual.entropy(subset_left, Individual.target_attr) + \
-                Individual.entropy(subset_right, Individual.target_attr)
-
-            return entropy
-
-        def __subsets_and_meta__(_best_threshold, _level):
-            _best_subset_left = subset.loc[subset[node_label] < _best_threshold]
-            _best_subset_right = subset.loc[subset[node_label] >= _best_threshold]
-
-            _meta = {
-                'label': node_label,
-                'threshold': _best_threshold,
-                'terminal': False,
-                'level': _level,
-                'node_id': node_id,
-                'color': Individual._root_node_color if
-                _level == 0 else Individual._inner_node_color
-            }
-
-            return _meta, _best_subset_left, _best_subset_right
+        subsets = []
 
         try:
             best_threshold = self.__retrieve_threshold__(node_label, subset)
-            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold, level)
+            meta, subsets = self.__subsets_and_meta__(
+                node_label, best_threshold, subset, node_id, node_level
+            )
         except KeyError:
             ss = subset[[node_label, Individual.target_attr]]  # type: pd.DataFrame
             ss = ss.sort_values(by=node_label).reset_index(inplace=False, drop=True)
@@ -499,21 +484,23 @@ class Individual(AbstractTree):
                 best_threshold = -np.inf
                 best_entropy = np.inf
                 for cand in candidates:
-                    entropy = get_entropy(cand)
+                    entropy = self.__get_entropy__(node_label, cand, subset)
                     if entropy < best_entropy:
                         best_threshold = cand
                         best_entropy = entropy
 
                 self.__store_threshold__(node_label, subset, best_threshold)
 
-                meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold, level)
+                meta, subsets = self.__subsets_and_meta__(
+                    node_label, best_threshold, subset, node_id, node_level
+                )
 
-                pd.options.mode.chained_assignment = 'warn'
+                # pd.options.mode.chained_assignment = 'warn'
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-            return best_subset_left, best_subset_right
+            return subsets
         else:
-            return meta, best_subset_left, best_subset_right
+            return meta, subsets
 
     def __set_terminal__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
         # node label in this case is probably the self.target_attr; so it is not significant
@@ -522,9 +509,8 @@ class Individual(AbstractTree):
         if not subset.empty:
             label = Counter(subset[self.target_attr]).most_common()[0][0]
         else:
+            # if there's no data to train, how can I know which class is it? Simply pick one and throw at the user!
             label = np.random.choice(self.class_labels)
-            import warnings
-            warnings.warn('WARNING: ramdonly picking a class label!')
 
         meta = {
             'label': label,
@@ -539,169 +525,22 @@ class Individual(AbstractTree):
 
         return meta, pd.DataFrame([]), pd.DataFrame([])
 
-    # def __set_categorical__(self, node_label, parent_label, subset, **kwargs):
-    #     # TODO enhance this method to perform more smart splits.
-    #     # TODO currently it tries all combinations. what a mess!
-    #
-    #     def __subsets_and_meta__(group):
-    #         _best_subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
-    #         _best_subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
-    #
-    #         _meta = {
-    #             'label': node_label,
-    #             'threshold': group,
-    #             'terminal': False,
-    #             'color': Individual._root_node_color if
-    #             kwargs['variable_name'] == node.root else Individual._inner_node_color
-    #         }
-    #
-    #         return _meta, _best_subset_left, _best_subset_right
-    #
-    #     def get_entropy(group):
-    #         """
-    #         Gets entropy for a given set of values.
-    #
-    #         :type group: tuple
-    #         :param group: Set of values.
-    #         :rtype: float
-    #         :return: the entropy.
-    #         """
-    #
-    #         subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
-    #         subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
-    #
-    #         entropy = \
-    #             Individual.entropy(subset_left, Individual.target_attr) + \
-    #             Individual.entropy(subset_right, Individual.target_attr)
-    #
-    #         return entropy
-    #
-    #     try:
-    #         best_threshold = self.__retrieve_threshold__(node_label, subset)
-    #         meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
-    #     except KeyError:
-    #         # TODO PCA code!
-    #         # TODO transform ALL categorical attributes to binary!
-    #         # from sklearn.preprocessing import LabelBinarizer
-    #
-    #         def pull_left_by_purity(smaller):
-    #             counter = Counter(smaller.apply(tuple, axis=1))
-    #
-    #             if len(counter) <= 1:
-    #                 raise ValueError('partition is already pure!')
-    #
-    #             prob_matrix = pd.DataFrame(counter.keys(), columns=[node_label, self.target_attr])
-    #             prob_matrix['prob'] = counter.values()
-    #             prob_matrix = prob_matrix.sort_values(by=[subset.columns[-1], 'prob'], ascending=False)
-    #
-    #             all_splits = {}
-    #
-    #             for target in self.class_labels:
-    #                 sub_matrix = prob_matrix.loc[prob_matrix[self.target_attr] == target]
-    #
-    #                 left_bag = sub_matrix[node_label].tolist()
-    #                 right_bag = []
-    #
-    #                 entropies = []
-    #
-    #                 while len(left_bag) > 1:
-    #                     argmax = sub_matrix['prob'].argmax()
-    #                     picked = sub_matrix.loc[argmax, node_label]
-    #                     right_bag += [picked]
-    #                     left_bag.remove(picked)
-    #                     sub_matrix = sub_matrix.loc[sub_matrix.index != argmax]  # removes picked row from sub_matrix
-    #                     entropy = get_entropy(left_bag)
-    #                     entropies += [entropy]
-    #
-    #                     all_splits[tuple(left_bag)] = entropy
-    #
-    #             inverse_dict = {x: y for y, x in all_splits.iteritems()}
-    #             key = min(inverse_dict)
-    #             return inverse_dict[key]
-    #
-    #         try:
-    #             best_split = pull_left_by_purity(subset[[node_label, self.target_attr]])
-    #             self.__store_threshold__(node_label, subset, best_split)
-    #             meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
-    #
-    #         except ValueError:
-    #             meta, best_subset_left, best_subset_right = self.__set_terminal__(
-    #                 node_label=Individual.target_attr, parent_label=parent_label, subset=subset, **kwargs
-    #             )
-    #
-    #     if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-    #         return best_subset_left, best_subset_right
-    #     else:
-    #         return meta, best_subset_left, best_subset_right
+    def __set_categorical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
+        # adds an option where the category is neither one of the found in the training set
+        categories = subset[node_label].unique().tolist() + ['None']
 
-    def __set_categorical__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
-        # TODO enhance this method to perform smarter splits.
-        # TODO currently it tries all combinations. what a mess!
-
-        raise NotImplementedError('not implemented yet!')
-
-        def __subsets_and_meta__(group):
-            _best_subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
-            _best_subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
-
-            _meta = {
-                'label': node_label,
-                'threshold': group,
-                'terminal': False,
-                'color': Individual._root_node_color if
-                kwargs['variable_name'] == node.root else Individual._inner_node_color
-            }
-
-            return _meta, _best_subset_left, _best_subset_right
-
-        def get_entropy(group):
-            """
-            Gets entropy for a given set of values.
-
-            :type group: tuple
-            :param group: Set of values.
-            :rtype: float
-            :return: the entropy.
-            """
-
-            subset_left = subset.loc[subset[node_label].apply(lambda x: x in group).index]
-            subset_right = subset.loc[subset[node_label].apply(lambda x: x not in group).index]
-
-            entropy = \
-                Individual.entropy(subset_left, Individual.target_attr) + \
-                Individual.entropy(subset_right, Individual.target_attr)
-
-            return entropy
-
-        try:
-            best_threshold = self.__retrieve_threshold__(node_label, subset)
-            meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_threshold)
-        except KeyError:
-            groupby = Counter(subset[node_label])
-
-            all_splits = []
-            for i in xrange(1, len(groupby)):
-                combs = list(it.combinations(groupby.keys(), i))  # order does not matter
-                all_splits.extend(combs)
-                # print 'x:', i, 'y:', len(all_splits)  # TODO error here! array gets too big!
-
-            if len(all_splits) <= 1:
-                meta, best_subset_left, best_subset_right = self.__set_terminal__(
-                    node_label=Individual.target_attr, parent_labels=parent_label, subset=subset, **kwargs
-                )
-            else:
-                entropies = map(get_entropy, all_splits)
-                argmin_entropy = np.argmin(entropies)
-                best_split = all_splits[argmin_entropy]
-
-                self.__store_threshold__(node_label, subset, best_split)
-
-                meta, best_subset_left, best_subset_right = __subsets_and_meta__(best_split)
+        out = self.__subsets_and_meta__(
+            node_label=node_label,
+            threshold=categories,
+            subset=subset,
+            node_id=node_id,
+            node_level=node_level
+        )
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-            return best_subset_left, best_subset_right
+            return list(out)[1:]
         else:
-            return meta, best_subset_left, best_subset_right
+            return out
 
     @staticmethod
     def __set_error__(self, node_label, parent_label, subset, **kwargs):
@@ -755,6 +594,7 @@ class Individual(AbstractTree):
         :rtype: str
         :return: Whether this attribute is categorical or numerical.
         """
+
         raw_type = self.raw_type_dict[str(dtype)]
         func = self.handler_dict[raw_type]
 
@@ -764,3 +604,50 @@ class Individual(AbstractTree):
             return 'numerical'
         else:
             raise TypeError('Unsupported column type! Column type is: %s' % dtype)
+
+    @staticmethod
+    def __get_entropy__(node_label, threshold, subset):
+        """
+        Gets entropy for a given threshold.
+
+        :type subset: pandas.DataFrame
+        :param subset: data coming to this node.
+        :type node_label: int
+        :param node_label: for picking the attribute in the subset.
+        :param threshold: Threshold value. May be a floating (for numerical attributes) or string (categorical).
+        :rtype: float
+        :return: the entropy.
+        """
+
+        subset_left = subset.loc[subset[node_label] < threshold]
+        subset_right = subset.loc[subset[node_label] >= threshold]
+
+        entropy = \
+            Individual.entropy(subset_left, Individual.target_attr) + \
+            Individual.entropy(subset_right, Individual.target_attr)
+
+        return entropy
+
+    @staticmethod
+    def __subsets_and_meta__(node_label, threshold, subset, node_id, node_level):
+        meta = {
+            'label': node_label,
+            'threshold': threshold,
+            'terminal': False,
+            'level': node_level,
+            'node_id': node_id,
+            'color': Individual._root_node_color if
+            node_level == 0 else Individual._inner_node_color
+        }
+
+        if isinstance(threshold, collections.Iterable):
+            subsets = [subset.loc[subset[node_label] == x] for x in threshold]
+
+        else:
+            import operator as op
+            ops = [op.lt, op.ge]  # <, >=
+            subsets = [
+                subset.loc[x(subset[node_label], threshold)] for x in ops
+            ]
+
+        return meta, subsets
