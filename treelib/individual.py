@@ -8,10 +8,9 @@ import networkx as nx
 import pandas as pd
 
 from treelib.classes import AbstractTree
-from treelib import node
 
 from matplotlib import pyplot as plt
-from node import *
+import numpy as np
 
 __author__ = 'Henry Cagnini'
 
@@ -38,7 +37,7 @@ class Individual(AbstractTree):
     def __init__(self, graphical_model, max_height, sets, **kwargs):
         """
         
-        :type graphical_model: treelib.graphical_models.GraphicalModel
+        :type graphical_model: treelib.graphical_model.GraphicalModel
         :param graphical_model:
         :type sets: dict
         :param sets:
@@ -107,6 +106,7 @@ class Individual(AbstractTree):
         :rtype: int
         :return: Depth of the node, starting with zero (root).
         """
+
         return len(self.shortest_path[node_id]) - 1
 
     def __str__(self):

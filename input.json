@@ -12,8 +12,7 @@
   "ensemble": false,
   "metadata_path": "metadata",
   "distribution": "univariate",
-  "class_probability": "declining",
-  "dataset_path": "datasets/glass.csv",
+  "dataset_path": "datasets/iris.csv",
   "output_file": "some_metadata.csv",
   "mode": "batch",
   "save_metadata": false

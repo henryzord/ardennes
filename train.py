@@ -126,7 +126,6 @@ def main(json_file, mode='batch'):
             uncertainty=kwargs['uncertainty'],
             max_height=tree_height,
             distribution=kwargs['distribution'],
-            class_probability=kwargs['class_probability'],
             n_iterations=kwargs['n_iterations']
         )
 

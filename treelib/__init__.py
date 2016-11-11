@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from graphical_models import *
+from graphical_model import *
 from classes import AbstractTree, type_check, value_check
 from individual import Individual
 from sklearn.tree.tree import DecisionTreeClassifier
@@ -150,8 +150,6 @@ class Ardennes(AbstractTree):
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
-            # picks fittest population
-            # fittest_pop = self.__pick_fittest_population__(population, borderline)  # type: pd.Series
             fittest_pop = population[fitness >= borderline]
             to_replace_index = np.flatnonzero(fitness < borderline)
 
@@ -296,7 +294,7 @@ class Ardennes(AbstractTree):
     def __early_stop__(gm, uncertainty=0.01):
         """
 
-        :type gm: treelib.graphical_models.GraphicalModel
+        :type gm: treelib.graphical_model.GraphicalModel
         :param gm: The Probabilistic Graphical Model (GM) for the current generation.
         :type uncertainty: float
         :param uncertainty: Maximum allowed uncertainty for each probability, for each node.
@@ -304,7 +302,7 @@ class Ardennes(AbstractTree):
         """
 
         should_stop = True
-        for tensor in gm.tensors:
+        for tensor in gm.variables:
             weights = tensor.weights
             upper = abs(1. - weights['probability'].max())
             lower = weights['probability'].min()
