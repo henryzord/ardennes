@@ -12,7 +12,7 @@
   "ensemble": false,
   "metadata_path": "metadata",
   "distribution": "univariate",
-  "dataset_path": "datasets/iris.csv",
+  "dataset_path": "datasets/numerical/iris.csv",
   "output_file": "some_metadata.csv",
   "mode": "batch",
   "save_metadata": false

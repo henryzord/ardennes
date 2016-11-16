@@ -9,7 +9,6 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from treelib.classes import value_check
 from treelib import get_max_height
 
 __author__ = 'Henry Cagnini'
@@ -88,60 +87,66 @@ def get_batch(dataset, train_size=0.8, random_state=None):
     return train, val, test
 
 
-def main(json_file, mode='batch'):
-    value_check(mode, ['batch', 'folds'])
-
+def __comon__(json_file):
     with open(json_file, 'r') as f:
         kwargs = json.load(f)
 
     if kwargs['random_state'] is not None:
-        warnings.warn('WARNING: deterministic approach!')
-        
+        warnings.warn('WARNING: Using seed=%d (i.e, non-randomic approach)' % kwargs['random_state'])
+
         random.seed(kwargs['random_state'])
         np.random.seed(kwargs['random_state'])
 
     dataset = pd.read_csv(kwargs['dataset_path'], sep=',')
 
-    if mode == 'folds':
-        folds = get_folds(dataset, n_folds=kwargs['n_folds'], random_state=kwargs['random_state'])
+    return dataset, kwargs
 
-        for i, (arg_train, arg_test) in enumerate(folds):
-            run_fold(fold=i, dataset=dataset, arg_train=arg_train, arg_test=arg_test, **kwargs)
-    else:
-        train, val, test = get_batch(
-            dataset, train_size=kwargs['train_size'], random_state=kwargs['random_state']
-        )
 
-        if 'tree_height' not in kwargs:
-            try:
-                tree_height = get_max_height(train, kwargs['random_state'])
-            except ValueError as ve:
-                tree_height = kwargs['tree_height']
-        else:
+def folds(json_file):
+    dataset, kwargs = __comon__(json_file)
+
+    folds = get_folds(dataset, n_folds=kwargs['n_folds'], random_state=kwargs['random_state'])
+
+    for i, (arg_train, arg_test) in enumerate(folds):
+        run_fold(fold=i, dataset=dataset, arg_train=arg_train, arg_test=arg_test, **kwargs)
+
+
+def batch(json_file):
+    dataset, kwargs = __comon__(json_file)
+
+    train, val, test = get_batch(
+        dataset, train_size=kwargs['train_size'], random_state=kwargs['random_state']
+    )
+
+    if 'tree_height' not in kwargs:
+        try:
+            tree_height = get_max_height(train, kwargs['random_state'])
+        except ValueError as ve:
             tree_height = kwargs['tree_height']
+    else:
+        tree_height = kwargs['tree_height']
 
-        inst = Ardennes(
-            n_individuals=kwargs['n_individuals'],
-            decile=kwargs['decile'],
-            uncertainty=kwargs['uncertainty'],
-            max_height=tree_height,
-            distribution=kwargs['distribution'],
-            n_iterations=kwargs['n_iterations']
-        )
+    inst = Ardennes(
+        n_individuals=kwargs['n_individuals'],
+        decile=kwargs['decile'],
+        uncertainty=kwargs['uncertainty'],
+        max_height=tree_height,
+        distribution=kwargs['distribution'],
+        n_iterations=kwargs['n_iterations']
+    )
 
-        inst.fit(
-            train=train,
-            val=val,
-            verbose=kwargs['verbose'],
-            output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
-            metadata_path=kwargs['metadata_path']
-        )
+    inst.fit(
+        train=train,
+        val=val,
+        verbose=kwargs['verbose'],
+        output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
+        metadata_path=kwargs['metadata_path']
+    )
 
-        test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
-        print 'Test accuracy: %0.2f' % test_acc
+    test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
+    print 'Test accuracy: %0.2f' % test_acc
 
-        inst.plot(metadata_path=kwargs['metadata_path'])
+    inst.plot(metadata_path=kwargs['metadata_path'])
 
 if __name__ == '__main__':
-    _json_file = 'input.json'
-    main(_json_file, mode='batch')
+    batch('input.json')
