@@ -108,6 +108,7 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
         inst.fit(
             train=train,
             val=val,
+            test=test_set,
             verbose=kwargs['verbose'],
             output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
             fold=fold,
@@ -117,7 +118,7 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
         _test_acc = inst.validate(test_set, ensemble=kwargs['ensemble'])
         arr[run] = _test_acc
 
-    processes = []
+    # processes = []
     for j in xrange(kwargs['n_runs']):
         run_ardennes(j, accs, **kwargs)
 
