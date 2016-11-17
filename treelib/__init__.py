@@ -11,7 +11,7 @@ import os
 
 import numpy as np
 import pandas
-
+import csv
 
 __author__ = 'Henry Cagnini'
 
@@ -80,8 +80,8 @@ class Ardennes(AbstractTree):
         self.distribution = distribution
         self.class_probability = class_probability
 
-    def fit(self, train, val=None, verbose=True, output_file=None, metadata_path=None):
-        def __treat__(_train, _val):
+    def fit(self, train, val=None, verbose=True, output_file=None, **kwargs):
+        def __treat__(_train, _val, _test=None):
             type_check(_train, [pd.DataFrame, tuple])
 
             _sets = dict()
@@ -91,19 +91,27 @@ class Ardennes(AbstractTree):
             elif isinstance(_train, pd.DataFrame):
                 _sets['train'] = _train
 
-            if val is not None:
+            if _val is not None:
                 type_check(_val, [pd.DataFrame, tuple])
 
-                if isinstance(val, tuple):
+                if isinstance(_val, tuple):
                     _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])), columns=self.__generate_columns__(_val[0].shape[1], make_class=True))
                 else:
                     _sets['val'] = _val
             else:
                 _sets['val'] = _sets['train']
 
+            if _test is not None:
+                type_check(_test, [pd.DataFrame, tuple])
+
+                if isinstance(_test, tuple):
+                    _sets['test'] = pd.DataFrame(np.hstack((_test[0], _test[1][:, np.newaxis])), columns=self.__generate_columns__(_test[0].shape[1], make_class=True))
+                else:
+                    _sets['test'] = _test
+
             return _sets
 
-        sets = __treat__(train, val)
+        sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
 
         # from now on, considers only a dictionary 'sets' with train and val subsets
 
@@ -141,10 +149,12 @@ class Ardennes(AbstractTree):
             self.__report__(
                 iteration=iteration,
                 fitness=fitness,
+                population=population,
                 verbose=verbose,
                 output_file=output_file,
-                metadata_path=metadata_path,
-                elapsed_time=(t2-t1).total_seconds()
+                elapsed_time=(t2-t1).total_seconds(),
+                test_set=sets['test'] if 'test' in sets else None,
+                **kwargs
             )
             t1 = t2
 
@@ -215,7 +225,8 @@ class Ardennes(AbstractTree):
 
         return all_preds
 
-    def __generate_columns__(self, n_predictive, make_class=True):
+    @staticmethod
+    def __generate_columns__(n_predictive, make_class=True):
         columns = ['attr_%d' % d for d in xrange(n_predictive)]
         if make_class:
             columns += ['class']
@@ -239,14 +250,6 @@ class Ardennes(AbstractTree):
         predictions = self.predict(test_set, ensemble=ensemble)
         acc = (test_set[test_set.columns[-1]] == predictions).sum() / float(test_set.shape[0])
         return acc
-
-    def plot(self, metadata_path=None, ensemble=False):
-        if ensemble:
-            raise NotImplementedError('not implemented yet!')
-        else:
-            self.predictor.plot(metadata_path=metadata_path)
-            from matplotlib import pyplot as plt
-            plt.show()
 
     def __to_dataframe__(self, samples):
         if isinstance(samples, list):
@@ -274,8 +277,13 @@ class Ardennes(AbstractTree):
     @staticmethod
     def __report__(**kwargs):
         iteration = kwargs['iteration']  # type: int
-
         fitness = kwargs['fitness']  # type: np.ndarray
+        population = kwargs['population']
+
+        if 'fold' in kwargs and 'run' in kwargs:
+            output_file = kwargs['output_file'].split('.')[0].strip() + '_fold_%03.d_run_%03.d.csv' % (kwargs['fold'], kwargs['run'])
+        else:
+            output_file = str(kwargs['output_file'])
 
         if kwargs['verbose']:
             mean = np.mean(fitness)  # type: float
@@ -285,10 +293,23 @@ class Ardennes(AbstractTree):
 
             print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %0.2fsec' % (iteration, mean, median, max_fitness, elapsed_time)
 
-        if kwargs['output_file']:
-            output_file = kwargs['output_file']  # type: str
-            with open(os.path.join(kwargs['metadata_path'], output_file), 'a') as f:
-                np.savetxt(f, fitness[:, np.newaxis].T, delimiter=',')
+        if output_file is not None:
+            if iteration == 0:  # resets file
+                try:
+                    os.remove(output_file)
+                except OSError as ose:
+                    pass
+                finally:
+                    with open(output_file, 'w') as f:
+                        csv_w = csv.writer(f, delimiter=',', quotechar='\"')
+                        csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'])
+
+            with open(output_file, 'a') as f:
+                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
+                for ind in population:
+                    csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height])
+
+            population[np.argmax(fitness)].plot(savepath=output_file.split('.')[0].strip() + '.pdf', test_set=kwargs['test_set'] if 'test_set' in kwargs else None)
 
     @staticmethod
     def __early_stop__(gm, uncertainty=0.01):
@@ -312,16 +333,3 @@ class Ardennes(AbstractTree):
                 break
 
         return should_stop
-
-    @staticmethod
-    def __check_tree_size__(initial_tree_size):
-        if (initial_tree_size - 1) % 2 != 0:
-            raise ValueError('Invalid number of nodes! (initial_tree_size - 1) % 2 must be an integer!')
-
-    @property
-    def predictor(self):
-        if self.trained:
-            predictor = self.last_population[self.best_individual]
-            return predictor
-        else:
-            raise StandardError('The EDA was not trained yet!')

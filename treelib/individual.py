@@ -65,8 +65,20 @@ class Individual(AbstractTree):
         self.sample(graphical_model, sets)
 
     @property
+    def id_ind(self):
+        return self.ind_id
+
+    @property
     def height(self):
         return max(map(len, self.shortest_path.itervalues()))
+
+    @property
+    def fitness(self):
+        """
+        :rtype: float
+        :return: Fitness of this individual.
+        """
+        return self.val_acc
 
     def nodes_at_depth(self, depth):
         """
@@ -112,7 +124,7 @@ class Individual(AbstractTree):
     def __str__(self):
         return 'fitness: %0.2f' % self.val_acc
 
-    def plot(self, metadata_path=None):
+    def plot(self, savepath=None, test_set=None):
         """
         Draw this individual.
         """
@@ -140,25 +152,44 @@ class Individual(AbstractTree):
         nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
         nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
 
+        if self.ind_id is not None:
+            plt.text(
+                0.8,
+                0.9,
+                'individual id: %03.d' % self.ind_id,
+                fontsize=15,
+                horizontalalignment='left',
+                verticalalignment='center',
+                transform=fig.transFigure
+            )
+
         plt.text(
             0.8,
-            0.9,
-            ('ind_id: %03.d' % self.ind_id if self.ind_id is not None else '') + '    ' + 'val fitness: %0.4f' % self.val_acc,
+            0.94,
+            'val accuracy: %0.4f' % self.val_acc,
             fontsize=15,
-            horizontalalignment='center',
+            horizontalalignment='left',
             verticalalignment='center',
             transform=fig.transFigure
         )
 
+        if test_set is not None:
+            test_acc = self.validate(test_set)
+
+            plt.text(
+                0.8,
+                0.98,
+                'test accuracy: %0.4f' % test_acc,
+                fontsize=15,
+                horizontalalignment='left',
+                verticalalignment='center',
+                transform=fig.transFigure
+            )
+
         plt.axis('off')
 
-    @property
-    def fitness(self):
-        """
-        :rtype: float
-        :return: Fitness of this individual.
-        """
-        return self.val_acc
+        if savepath is not None:
+            plt.savefig(savepath, bbox_inches='tight', format='pdf')
 
     # ############################ #
     # sampling and related methods #
