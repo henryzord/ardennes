@@ -74,9 +74,7 @@ def get_folds(df, n_folds=10, random_state=None):
 
 
 def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
-    fold_acc = 0.
-
-    test_set = dataset.iloc[arg_test]  # test set contains both x_test and y_test
+    test_s = dataset.iloc[arg_test]  # test set contains both x_test and y_test
 
     x_train, x_val, y_train, y_val = train_test_split(
         dataset.iloc[arg_train][dataset.columns[:-1]],
@@ -85,12 +83,12 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
         random_state=kwargs['random_state']
     )
 
-    train = x_train
-    val = x_val
-    train['class'] = y_train
-    val['class'] = y_val
+    train_s = x_train
+    val_s = x_val
+    train_s['class'] = y_train
+    val_s['class'] = y_val
 
-    tree_height = __get_tree_height__(train, **kwargs)
+    tree_height = __get_tree_height__(train_s, **kwargs)
 
     # accs = Array('f', range(kwargs['n_runs']))
     accs = np.empty(kwargs['n_runs'], dtype=np.float32)
@@ -106,16 +104,16 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
         )
 
         inst.fit(
-            train=train,
-            val=val,
-            test=test_set,
+            train=train_s,
+            val=val_s,
+            test=test_s,
             verbose=kwargs['verbose'],
             output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
             fold=fold,
             run=j
         )
 
-        _test_acc = inst.validate(test_set, ensemble=kwargs['ensemble'])
+        _test_acc = inst.validate(test_s, ensemble=kwargs['ensemble'])
         arr[run] = _test_acc
 
     # processes = []
@@ -129,9 +127,10 @@ def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
     # for process in processes:
     #     process.join()
 
-    fold_acc = sum(accs)
+    mean = accs.mean()
+    std = accs.std()
 
-    print '%02.d-th fold\tEDA mean accuracy: %0.2f' % (fold, fold_acc / float(kwargs['n_runs']))
+    print '%02.d-th fold\tEDA accuracy: mean %0.2f +- %0.2f' % (fold, mean, std)
 
 
 def run_batch(train_s, val_s, test, **kwargs):
@@ -188,5 +187,4 @@ def train(json_file, mode='cross-validation'):
 
 if __name__ == '__main__':
     json_file = json.load(open('input.json', 'r'))
-
     train(json_file, mode='cross-validation')

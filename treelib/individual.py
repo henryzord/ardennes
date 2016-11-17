@@ -190,6 +190,7 @@ class Individual(AbstractTree):
 
         if savepath is not None:
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
+            plt.close()
 
     # ############################ #
     # sampling and related methods #

@@ -58,7 +58,7 @@ class Variable(SetterClass):
         df.loc[_slice.index, 'probability'] = slice_prob
 
         rest = max(0, 1. - df['probability'].sum())
-        df.iloc[np.random.randint(0, df.shape[0])]['probability'] += rest
+        df.loc[np.random.randint(0, df.shape[0]), 'probability'] += rest
         return df
 
     def get_value(self, parent_labels=None):
