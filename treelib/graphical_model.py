@@ -6,6 +6,7 @@ import pandas as pd
 
 from treelib.classes import AbstractTree
 from treelib.variable import Variable
+from node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -18,38 +19,42 @@ class GraphicalModel(AbstractTree):
     variables = None  # tensor is a dependency graph
     
     def __init__(
-            self, max_height=3, distribution='multivariate', **kwargs
+            self, max_depth=3, distribution='multivariate', **kwargs
     ):
         super(GraphicalModel, self).__init__(**kwargs)
 
         self.distribution = distribution
-        self.max_height = max_height
+        self.max_depth = max_depth
 
-        self.variables = self.__init_variables__(max_height, distribution)
+        self.variables = self.__init_variables__(max_depth, distribution)
     
-    def __init_variables__(self, max_height, distribution='univariate'):
+    def __init_variables__(self, max_depth, distribution='univariate'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
-                parents = range(_id) if _id > 0 else []
+                raise NotImplementedError('not implemented yet!')
+                # parents = range(_id) if _id > 0 else []
             elif _distribution == 'bivariate':
-                parents = [_id - 1] if _id > 0 else []
+                raise NotImplementedError('not implemented yet!')
+                # parents = [_id - 1] if _id > 0 else []
             elif _distribution == 'univariate':
                 parents = []
             else:
-                raise ValueError('Distribution must be either multivariate, bivariate or univariate!')
+                raise ValueError('Distribution must be either \'multivariate\', \'bivariate\' or \'univariate\'!')
             return parents
 
         sample_values = self.pred_attr + [self.target_attr]
+
+        n_variables = get_total_nodes(max_depth)
 
         variables = map(
             lambda i: Variable(
                 name=i,
                 values=sample_values,
                 parents=get_parents(i, distribution),
-                max_height=max_height,
+                max_depth=max_depth,
                 target_attr=self.target_attr  # kwargs
             ),
-            xrange(max_height)
+            xrange(n_variables)
         )
         
         return variables
@@ -63,28 +68,38 @@ class GraphicalModel(AbstractTree):
         :return:
         """
 
-        pd.options.mode.chained_assignment = None  # why not throw some stuff into the fan?
+        # pd.options.mode.chained_assignment = None  # why not throw some stuff into the fan?
+
+        def get_label(_fit, _node_id):
+            if _node_id not in _fit.tree.node:
+                return None
+
+            label = _fit.tree.node[_node_id]['label'] \
+                if _fit.tree.node[_node_id]['label'] not in self.class_labels \
+                else self.target_attr
+            return label
 
         if self.distribution == 'univariate':
-            for height in xrange(self.max_height):
-                at_height = []
-                for fit in fittest:
-                    x = fit.nodes_at_depth(height)
-                    if len(x) > 0:
-                        at_height.extend(x)
+            for i, variable in enumerate(self.variables):
+                weights = self.variables[i].weights
 
-                weights = self.variables[height].weights
+                labels = [get_label(fit, variable.name) for fit in fittest]
+
                 weights['probability'] = 0.
 
-                count = Counter(x['label'] if x['label'] in (self.pred_attr + [self.target_attr]) else self.target_attr for x in at_height)
-
+                count = Counter(labels)
                 for k, v in count.iteritems():
-                    weights.loc[weights[height] == k, 'probability'] = v
+                    weights.loc[weights[variable.name] == k, 'probability'] = v
 
-                weights['probability'] /= float(sum(count.values()))
-                self.variables[height].weights[height] = weights
+                weights['probability'] /= float(weights['probability'].sum())
+                rest = abs(weights['probability'].sum() - 1.)
+                weights.loc[np.random.choice(weights.index), 'probability'] += rest
+
+                self.variables[i].weights = weights
 
         elif self.distribution == 'multivariate':
+            raise NotImplementedError('not implemented yet!')
+
             for height in xrange(self.max_height):  # for each variable in the GM
                 c_weights = self.variables[height].weights.copy()  # type: pd.DataFrame
                 c_weights['probability'] = 0.
@@ -112,12 +127,12 @@ class GraphicalModel(AbstractTree):
         elif self.distribution == 'bivariate':
             raise NotImplementedError('not implemented yet!')
 
-        pd.options.mode.chained_assignment = 'warn'  # ok, I promise I'll behave
+        # pd.options.mode.chained_assignment = 'warn'  # ok, I promise I'll behave
     
-    def sample(self, level, parent_labels=None, enforce_nonterminal=False):
-        value = self.variables[level].get_value(parent_labels=parent_labels)
+    def sample(self, node_id, level, parent_labels=None, enforce_nonterminal=False):
+        value = self.variables[node_id].get_value(parent_labels=parent_labels)
         if enforce_nonterminal:
             while value == self.target_attr:
-                value = self.variables[level].get_value(parent_labels=parent_labels)
+                value = self.variables[node_id].get_value(parent_labels=parent_labels)
 
         return value

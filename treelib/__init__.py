@@ -76,7 +76,7 @@ class Ardennes(AbstractTree):
         self.trained = False
         self.best_individual = None
         self.last_population = None
-        self.max_height = max_height - 1
+        self.max_height = max_height
         self.distribution = distribution
         self.class_probability = class_probability
 
@@ -131,7 +131,7 @@ class Ardennes(AbstractTree):
         t1 = dt.now()  # starts measuring time
 
         gm = GraphicalModel(
-            max_height=self.max_height,
+            max_depth=self.max_height - 1,
             distribution=self.distribution,
             class_probability=self.class_probability,
             **class_values
@@ -302,12 +302,15 @@ class Ardennes(AbstractTree):
                 finally:
                     with open(output_file, 'w') as f:
                         csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                        csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'])
+                        add = [] if 'test_set' not in kwargs else ['test accuracy']
+
+                        csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + add)
 
             with open(output_file, 'a') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
                 for ind in population:
-                    csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height])
+                    add = [] if 'test_set' not in kwargs else [ind.validate(kwargs['test_set'])]
+                    csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height] + add)
 
             population[np.argmax(fitness)].plot(savepath=output_file.split('.')[0].strip() + '.pdf', test_set=kwargs['test_set'] if 'test_set' in kwargs else None)
 

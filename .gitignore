@@ -1,7 +1,11 @@
 # my additions
 *.html
-[100 iter, 100 ind, 0.5 decile] metadata/*
 *.pyc
+treelib/*.pyc
+metadata/*
+
+# folders
+datasets/testzilla/
 
 # Distribution / packaging
 .Python

@@ -1,6 +1,6 @@
 {
   "random_state": null,
-  "n_individuals": 200,
+  "n_individuals": 300,
   "n_iterations": 100,
   "tree_height": null,
   "decile": 0.50,
@@ -11,8 +11,8 @@
   "mode": "batch",
   "ensemble": false,
   "verbose": true,
-  "distribution": "multivariate",
-  "dataset_path": "datasets/numerical/column_2C_weka.arff",
+  "distribution": "univariate",
+  "dataset_path": "datasets/numerical/balance-scale.arff",
   "output_file": "metadata/output.csv",
   "save_metadata": true
 }

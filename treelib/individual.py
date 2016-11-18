@@ -12,6 +12,7 @@ from treelib.classes import AbstractTree
 from matplotlib import pyplot as plt
 import numpy as np
 import copy
+from treelib.node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -153,7 +154,7 @@ class Individual(AbstractTree):
         # img = Image(filename='.temp.pdf')
         # display.display(img)
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=(40, 30))
 
         tree = self.tree  # type: nx.DiGraph
         from networkx.drawing.nx_agraph import graphviz_layout
@@ -207,21 +208,22 @@ class Individual(AbstractTree):
 
         plt.axis('off')
 
+        # plt.show()
         if savepath is not None:
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
+
 
     # ############################ #
     # sampling and related methods #
     # ############################ #
 
     def sample(self, graphical_model, sets):
-        self.id_generator = it.count(start=0, step=1)
+        # self.id_generator = it.count(start=0, step=1)
 
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
 
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-
         self.val_acc = self.validate(self.sets['val'])
 
     def __set_tree__(self, graphical_model, train_set):
@@ -229,7 +231,8 @@ class Individual(AbstractTree):
 
         subset = train_set
 
-        tree, root_id = self.__set_node__(
+        tree = self.__set_node__(
+            node_id=0,
             graphical_model=graphical_model,
             tree=tree,
             subset=subset,
@@ -238,7 +241,7 @@ class Individual(AbstractTree):
         )
         return tree
 
-    def __set_node__(self, graphical_model, tree, subset, level, parent_labels):
+    def __set_node__(self, node_id, graphical_model, tree, subset, level, parent_labels):
         """
 
         :param graphical_model:
@@ -254,10 +257,8 @@ class Individual(AbstractTree):
         # 1. there is only one instance (or none) coming to this node; or
         # 2. there is only one class coming to this node;
         # then set this as a terminal node
-        node_id = next(self.id_generator)
-
         try:
-            label = graphical_model.sample(level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
+            label = graphical_model.sample(node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
         except IndexError as ie:
             if level >= self.max_height:
                 label = self.target_attr
@@ -288,18 +289,17 @@ class Individual(AbstractTree):
             )
 
             if meta['threshold'] is not None:
-                children_id = []
-                for child_subset in subsets:
-                    # self, graphical_model, tree, subset, level, parent_labels
+                children_id = [get_left_child(node_id), get_right_child(node_id)]
 
-                    tree, some_id = self.__set_node__(
+                for child_id, child_subset in it.izip(children_id, subsets):
+                    tree = self.__set_node__(
+                        node_id=child_id,
                         tree=tree,
                         graphical_model=graphical_model,
                         subset=child_subset,
                         level=level + 1,
                         parent_labels=parent_labels + [label]
                     )
-                    children_id += [some_id]
 
                 if isinstance(meta['threshold'], float):
                     attr_dicts = [
@@ -311,11 +311,11 @@ class Individual(AbstractTree):
                 else:
                     raise TypeError('invalid type for threshold!')
 
-                for some_id, attr_dict in it.izip(children_id, attr_dicts):
-                    tree.add_edge(node_id, some_id, attr_dict=attr_dict)
+                for child_id, attr_dict in it.izip(children_id, attr_dicts):
+                    tree.add_edge(node_id, child_id, attr_dict=attr_dict)
 
         tree.add_node(node_id, attr_dict=meta)
-        return tree, node_id
+        return tree
 
     @staticmethod
     def entropy(subset, target_attr):

@@ -5,6 +5,7 @@ import pandas as pd
 import itertools as it
 
 from treelib.classes import SetterClass
+from treelib.node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -18,14 +19,14 @@ class Variable(SetterClass):
     # max_height = max_height,
     # target_attr = self.target_attr
 
-    def __init__(self, name, values, parents=None, max_height=None, **kwargs):
+    def __init__(self, name, values, parents=None, max_depth=None, **kwargs):
         super(Variable, self).__init__(**kwargs)
 
         self.name = name  # type: int
         self.values = values  # type: list of str
         self.parents = parents if (len(parents) > 0 or parents is not None) else []  # type: list of int
 
-        self.weights = self.__init_probabilities__(max_height)  # type: pd.DataFrame
+        self.weights = self.__init_probabilities__(max_depth)  # type: pd.DataFrame
 
     @property
     def n_parents(self):
@@ -35,7 +36,7 @@ class Variable(SetterClass):
     def n_values(self):
         return len(self.values)
 
-    def __init_probabilities__(self, max_height=None):
+    def __init_probabilities__(self, max_depth=None):
 
         vec_vals = [self.values] + [self.values for p in self.parents]
 
@@ -47,9 +48,11 @@ class Variable(SetterClass):
             columns=columns
         )
 
+        # raise NotImplementedError('name of variable is not its height!')
+
         _slice = df.loc[df[self.name] == self.target_attr]
-        depth = self.name
-        class_prob = (1. / (max_height - 1.)) * float(depth)
+        depth = get_depth(self.name)
+        class_prob = (1. / (max_depth + 1)) * float(depth)
         slice_prob = class_prob / _slice.shape[0]
 
         pred_prob = (1. - class_prob) / (df.shape[0] - _slice.shape[0])
@@ -57,14 +60,13 @@ class Variable(SetterClass):
         df['probability'] = pred_prob
         df.loc[_slice.index, 'probability'] = slice_prob
 
-        rest = max(0, 1. - df['probability'].sum())
+        rest = abs(df['probability'].sum() - 1.)
         df.loc[np.random.randint(0, df.shape[0]), 'probability'] += rest
         return df
 
     def get_value(self, parent_labels=None):
-        weights = self.weights.copy()
-
         if len(self.parents) > 0:
+            weights = self.weights.copy()
             # parent_labels are sorted, from the most distance
             for parent, label in it.izip(self.parents, parent_labels):
                 weights = weights.loc[weights[parent] == label]
@@ -72,6 +74,8 @@ class Variable(SetterClass):
             weights['probability'] /= weights['probability'].sum()
             rest = abs(weights['probability'].sum() - 1.)
             weights.loc[np.random.choice(weights.index), 'probability'] += rest
+        else:
+            weights = self.weights
 
         a, p = (weights[self.name], weights['probability'])
 
