@@ -49,6 +49,7 @@ def get_total_nodes(depth):
 def nodes_at_level(level):
     """
     Get number of nodes at given level.
+
     :type level: int
     :param level: The querying level.
     :rtype: int

@@ -158,6 +158,8 @@ def run_batch(train_s, val_s, test, **kwargs):
 
 
 def train(json_file, mode='cross-validation'):
+    print 'training ardennes for %s' % json_file['dataset_path']
+
     if mode not in ['cross-validation', 'holdout']:
         raise ValueError('Mode must be either \'cross-validation\' or \'holdout\'!')
 

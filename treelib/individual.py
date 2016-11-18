@@ -213,14 +213,11 @@ class Individual(AbstractTree):
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
 
-
     # ############################ #
     # sampling and related methods #
     # ############################ #
 
     def sample(self, graphical_model, sets):
-        # self.id_generator = it.count(start=0, step=1)
-
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
 
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
