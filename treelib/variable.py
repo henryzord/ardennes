@@ -71,8 +71,7 @@ class Variable(SetterClass):
 
             weights['probability'] /= weights['probability'].sum()
             rest = abs(weights['probability'].sum() - 1.)
-            if rest > 0:
-                weights.loc[np.random.choice(weights.shape[0]), 'probability'] += rest
+            weights.loc[np.random.choice(weights.index), 'probability'] += rest
 
         a, p = (weights[self.name], weights['probability'])
 

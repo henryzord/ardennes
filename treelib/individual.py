@@ -11,6 +11,7 @@ from treelib.classes import AbstractTree
 
 from matplotlib import pyplot as plt
 import numpy as np
+import copy
 
 __author__ = 'Henry Cagnini'
 
@@ -105,9 +106,27 @@ class Individual(AbstractTree):
         :rtype: list of int
         :return: A list of parents of this node, excluding the node itself.
         """
-        parents = self.shortest_path[node_id]
+        parents = copy.deepcopy(self.shortest_path[node_id])
         parents.remove(node_id)
         return parents
+
+    def height_and_label_to(self, node_id):
+        """
+        Returns a dictionary where the keys are the depth of each one
+        of the parents, and the values the label of the parents.
+
+        :param node_id: ID of the node in the decision tree.
+        :return:
+        """
+        parents = self.parents_of(node_id)
+        parent_labels = {
+            self.tree.node[p]['level']: (
+                self.tree.node[p]['label'] if
+                self.tree.node[p]['label'] not in self.class_labels else
+                self.target_attr
+            ) for p in parents
+        }
+        return parent_labels
 
     def depth_of(self, node_id):
         """
@@ -201,7 +220,7 @@ class Individual(AbstractTree):
 
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
 
-        self.shortest_path = nx.shortest_path(self.tree, 0)
+        self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
         self.val_acc = self.validate(self.sets['val'])
 

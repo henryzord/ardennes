@@ -1,6 +1,7 @@
 # coding=utf-8
 from collections import Counter
 
+import numpy as np
 import pandas as pd
 
 from treelib.classes import AbstractTree
@@ -84,7 +85,30 @@ class GraphicalModel(AbstractTree):
                 self.variables[height].weights[height] = weights
 
         elif self.distribution == 'multivariate':
-            raise NotImplementedError('not implemented yet!')
+            for height in xrange(self.max_height):  # for each variable in the GM
+                c_weights = self.variables[height].weights.copy()  # type: pd.DataFrame
+                c_weights['probability'] = 0.
+
+                for ind in fittest:  # for each individual in the fittest population
+                    nodes_at_depth = ind.nodes_at_depth(height)
+                    for node in nodes_at_depth:
+                        parent_labels = ind.height_and_label_to(node['node_id'])
+
+                        node_label = (node['label'] if not node['terminal'] else self.target_attr)
+                        ind_weights = c_weights.loc[c_weights[node['level']] == node_label].index
+
+                        if len(parent_labels) > 0:
+                            str_ = '&'.join(['(c_weights[%d] == \'%s\')' % (p, l) for (p, l) in parent_labels.iteritems()])
+                            p_ind_weights = c_weights[eval(str_)].index
+                            ind_weights = set(p_ind_weights) & set(ind_weights)
+
+                        c_weights.loc[ind_weights, 'probability'] += 1
+
+                c_weights['probability'] /= float(c_weights['probability'].sum())
+                rest = abs(c_weights['probability'].sum() - 1.)
+                c_weights.loc[np.random.choice(c_weights.shape[0]), 'probability'] += rest
+                self.variables[height].weights = c_weights
+                # print c_weights
         elif self.distribution == 'bivariate':
             raise NotImplementedError('not implemented yet!')
 

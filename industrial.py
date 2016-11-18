@@ -16,7 +16,7 @@ datasets_path = '/home/henry/Projects/ardennes/datasets/numerical'
 
 if __name__ == '__main__':
     datasets = os.listdir(datasets_path)
-    output_path = 'metadata'
+    output_path = '[100 iter, 100 ind, 0.5 decile] metadata'
     validation_mode = 'cross-validation'
     chunk_size = 5
 

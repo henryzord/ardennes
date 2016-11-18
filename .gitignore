@@ -1,6 +1,6 @@
 # my additions
 *.html
-metadata/*
+[100 iter, 100 ind, 0.5 decile] metadata/*
 *.pyc
 
 # Distribution / packaging
