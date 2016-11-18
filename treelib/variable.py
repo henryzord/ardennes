@@ -62,17 +62,19 @@ class Variable(SetterClass):
         return df
 
     def get_value(self, parent_labels=None):
-        weights = self.weights
+        weights = self.weights.copy()
 
         if len(self.parents) > 0:
             # parent_labels are sorted, from the most distance
-            for id_parent, label in enumerate(parent_labels):
-                weights = weights.loc[weights[id_parent] == label]
+            for parent, label in it.izip(self.parents, parent_labels):
+                weights = weights.loc[weights[parent] == label]
 
-            weights['probability'] /= weights.shape[0]
+            weights['probability'] /= weights['probability'].sum()
+            rest = abs(weights['probability'].sum() - 1.)
+            if rest > 0:
+                weights.loc[np.random.choice(weights.shape[0]), 'probability'] += rest
 
         a, p = (weights[self.name], weights['probability'])
-        _sum = p.sum()
 
         value = np.random.choice(a=a, p=p)
         # ----------------------- #

@@ -1,8 +1,8 @@
 {
-  "random_state": null,
-  "n_individuals": 300,
+  "random_state": 1,
+  "n_individuals": 20,
   "n_iterations": 100,
-  "tree_height": null,
+  "tree_height": 5,
   "decile": 0.50,
   "uncertainty": 0.01,
   "train_size": 0.80,
@@ -11,8 +11,8 @@
   "mode": "batch",
   "ensemble": false,
   "verbose": false,
-  "distribution": "univariate",
-  "dataset_path": "datasets/numerical/liver-disorders.arff",
+  "distribution": "multivariate",
+  "dataset_path": "datasets/numerical/iris.arff",
   "output_file": "metadata/output.csv",
   "save_metadata": true
 }

@@ -187,4 +187,4 @@ def train(json_file, mode='cross-validation'):
 
 if __name__ == '__main__':
     json_file = json.load(open('input.json', 'r'))
-    train(json_file, mode='cross-validation')
+    train(json_file, mode='holdout')
