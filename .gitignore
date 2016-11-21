@@ -1,7 +1,6 @@
 # my additions
 *.html
 *.pyc
-treelib/*.pyc
 metadata/*
 
 # folders
@@ -9,7 +8,7 @@ datasets/testzilla/
 
 # Distribution / packaging
 .Python
-.idea/*
+.idea/
 env/
 build/
 develop-eggs/

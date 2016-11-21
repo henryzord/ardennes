@@ -8,7 +8,7 @@ It supports both multiclass and binary classifications.
 
 ### First steps
 
-To perform a 10-fold cross-validation in one of the toy datasets provided along the algorithm, simply run the ```main.py``` script under the root folder:
+To perform a 10-fold cross-validation in one of the toy datasets provided along the algorithm, simply run the ```__main__.py``` script under the root folder:
 
 ```sh
     python train.py
