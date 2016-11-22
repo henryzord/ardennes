@@ -131,9 +131,9 @@ def run_batch(train_s, val_s, test, **kwargs):
     print 'Test accuracy: %0.2f' % test_acc
 
 
-def do_train(config_file, output_folder=None, mode='cross-validation'):
-    assert mode in ['cross-validation', 'holdout'], \
-        ValueError('Mode must be either \'cross-validation\' or \'holdout!\'')
+def do_train(config_file, output_folder=None, evaluation_mode='cross-validation'):
+    assert evaluation_mode in ['cross-validation', 'holdout'], \
+        ValueError('evaluation_mode must be either \'cross-validation\' or \'holdout!\'')
 
     dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
     print 'training ardennes for %s' % dataset_name
@@ -147,7 +147,7 @@ def do_train(config_file, output_folder=None, mode='cross-validation'):
         random.seed(random_state)
         np.random.seed(random_state)
 
-    if mode == 'cross-validation':
+    if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
@@ -181,7 +181,7 @@ def crunch_data(results_file):
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-    do_train(_config_file, output_folder='metadata', mode='cross-validation')
+    do_train(_config_file, output_folder='metadata', evaluation_mode='cross-validation')
 
     # _results_file = json.load(open('metadata/results.json', 'r'))
     # crunch_data(_results_file)
