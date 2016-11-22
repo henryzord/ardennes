@@ -2,12 +2,15 @@
 import json
 import random
 import warnings
-from multiprocessing import Process
+
+from datetime import datetime as dt
 
 import numpy as np
-from sklearn.model_selection import train_test_split
+import os
 
-from preprocessing.dataset import generate_folds, read_dataset, get_batch
+from sklearn.tree import DecisionTreeClassifier
+
+from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
 from treelib import get_max_height
 
@@ -26,64 +29,82 @@ def __get_tree_height__(_train, **kwargs):
     return tree_height
 
 
-def run_fold(fold, dataset, arg_train, arg_test, **kwargs):
-    test_s = dataset.iloc[arg_test]  # test set contains both x_test and y_test
+def get_baseline_algorithms(names):
+    # valid = ['DecisionTreeClassifier']
 
-    x_train, x_val, y_train, y_val = train_test_split(
-        dataset.iloc[arg_train][dataset.columns[:-1]],
-        dataset.iloc[arg_train][dataset.columns[-1]],
-        test_size=1. / (kwargs['n_folds'] - 1.),
-        random_state=kwargs['random_state']
-    )
+    algorithms = dict()
+    for name in names:
+        if name == 'DecisionTreeClassifier':
+            algorithms[name] = DecisionTreeClassifier(criterion='entropy')
 
-    train_s = x_train
-    val_s = x_val
-    train_s['class'] = y_train
-    val_s['class'] = y_val
+    return algorithms
 
-    tree_height = __get_tree_height__(train_s, **kwargs)
 
-    # accs = Array('f', range(kwargs['n_runs']))
-    accs = np.empty(kwargs['n_runs'], dtype=np.float32)
+def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
+    def run_ardennes(run, l_algorithms, **l_kwargs):
+        for name, clf in l_algorithms.iteritems():
+            clf.fit(
+                train_s[train_s.columns[:-1]], train_s[train_s.columns[-1]]
+            )  # type: DecisionTreeClassifier
+            acc = clf.score(test_s[test_s.columns[:-1]], test_s[test_s.columns[-1]])
+            alg_results[name][run] = acc
 
-    def run_ardennes(run, arr, **kwargs):
+        t1 = dt.now()
+
         inst = Ardennes(
-            n_individuals=kwargs['n_individuals'],
-            decile=kwargs['decile'],
-            uncertainty=kwargs['uncertainty'],
+            n_individuals=l_kwargs['n_individuals'],
+            decile=l_kwargs['decile'],
+            uncertainty=l_kwargs['uncertainty'],
             max_height=tree_height,
-            distribution=kwargs['distribution'],
-            n_iterations=kwargs['n_iterations']
+            distribution=l_kwargs['distribution'],
+            n_iterations=l_kwargs['n_iterations']
         )
 
         inst.fit(
             train=train_s,
             val=val_s,
             test=test_s,
-            verbose=kwargs['verbose'],
-            output_file=kwargs['output_file'] if kwargs['save_metadata'] else None,
-            fold=fold,
+            verbose=l_kwargs['verbose'],
+            output_file=l_kwargs['output_file'] if l_kwargs['save_metadata'] else None,
+            fold=n_fold,
             run=j
         )
 
-        _test_acc = inst.validate(test_s, ensemble=kwargs['ensemble'])
-        arr[run] = _test_acc
+        _test_acc = inst.validate(test_s, ensemble=l_kwargs['ensemble'])
+        t2 = dt.now()
+        ardennes_accs[run] = _test_acc
+        ardennes_times[run] = (t2 - t1).total_seconds()
 
-    # processes = []
-    for j in xrange(kwargs['n_runs']):
-        run_ardennes(j, accs, **kwargs)
+        print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
+            run, n_fold, _test_acc, ardennes_times[run]
+        )
 
-    #     p = Process(target=run_ardennes, args=(j, accs), kwargs=kwargs)
-    #     p.start()
-    #     processes.append(p)
-    #
-    # for process in processes:
-    #     process.join()
+    tree_height = __get_tree_height__(train_s, **config_file)
 
-    mean = accs.mean()
-    std = accs.std()
+    base_alg_names = config_file['baseline_algorithms']
+    algorithms = get_baseline_algorithms(base_alg_names)
 
-    print '%02.d-th fold\tEDA accuracy: mean %0.2f +- %0.2f' % (fold, mean, std)
+    ardennes_accs = np.empty(n_runs, dtype=np.float32).tolist()
+    ardennes_times = np.empty(n_runs, dtype=np.float32).tolist()
+
+    alg_results = {name: np.empty(n_runs, dtype=np.float32).tolist() for name in algorithms.iterkeys()}
+
+    for j in xrange(n_runs):
+        run_ardennes(j, algorithms, **config_file)
+
+    acc_mean = np.mean(ardennes_accs)
+    acc_std = np.std(ardennes_accs)
+
+    time_mean = np.mean(ardennes_times)
+    time_std = np.std(ardennes_times)
+
+    print 'Fold %d (%d runs): accuracy %02.2f +- %02.2f\ttime: %02.2f +- %02.2f secs' % (
+        n_fold, n_runs, acc_mean, acc_std, time_mean, time_std
+    )
+
+    alg_results['ardennes'] = ardennes_accs
+
+    return alg_results
 
 
 def run_batch(train_s, val_s, test, **kwargs):
@@ -110,45 +131,57 @@ def run_batch(train_s, val_s, test, **kwargs):
     print 'Test accuracy: %0.2f' % test_acc
 
 
-def do_train(_json_file, mode='cross-validation'):
-    print 'training ardennes for %s' % _json_file['dataset_path']
+def do_train(config_file, output_folder=None, mode='cross-validation'):
+    assert mode in ['cross-validation', 'holdout'], \
+        ValueError('Mode must be either \'cross-validation\' or \'holdout!\'')
 
-    if mode not in ['cross-validation', 'holdout']:
-        raise ValueError('Mode must be either \'cross-validation\' or \'holdout\'!')
+    dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
+    print 'training ardennes for %s' % dataset_name
 
-    dataset = read_dataset(_json_file['dataset_path'])
-    random_state = _json_file['random_state']
+    df = read_dataset(config_file['dataset_path'])
+    random_state = config_file['random_state']
 
     if random_state is not None:
-        warnings.warn('WARNING: Using seed=%d (i.e, non-randomic approach)' % random_state)
+        warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
 
         random.seed(random_state)
         np.random.seed(random_state)
 
     if mode == 'cross-validation':
-        folds = generate_folds(dataset, n_folds=_json_file['n_folds'], random_state=_json_file['random_state'])
+        assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
+                                                       'file for folds! Provide it through the \'folds_path\' '
+                                                       'parameter in the configuration file!')
 
-        processes = []
-        for i, (arg_train, arg_test) in enumerate(folds):
-            p = Process(
-                target=run_fold,
-                kwargs=dict(fold=i, dataset=dataset, arg_train=arg_train, arg_test=arg_test, **_json_file)
+        folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
+
+        all_fold_results = dict()
+
+        for i, (train_s, val_s, test_s) in enumerate(folds):
+            print 'Running fold %d for dataset %s' % (i, dataset_name)
+            all_fold_results[i] = run_fold(
+                n_fold=i, train_s=train_s, val_s=val_s,
+                test_s=test_s, n_runs=config_file['n_runs'], config_file=config_file
             )
-            p.start()
-            processes.append(p)
 
-        for process in processes:
-            process.join()
+        if output_folder is not None:
+            json.dump(all_fold_results, open(os.path.join(output_folder, '%s.json' % dataset_name), 'w'), indent=2)
+
     else:
         train_s, val_s, test_s = get_batch(
-            dataset, train_size=_json_file['train_size'], random_state=_json_file['random_state']
+            df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
 
-        run_batch(train_s=train_s, val_s=val_s, test=test_s, **_json_file)
+        run_batch(train_s=train_s, val_s=val_s, test=test_s, **config_file)
 
+
+def crunch_data(results_file):
+    for fold in sorted(results_file.keys()):
+        for alg, vec in results_file[fold].iteritems():
+            print '%s fold %d: %02.2f +- %02.2f' % (alg, int(fold), np.mean(vec), np.std(vec))
 
 if __name__ == '__main__':
-    raise NotImplementedError('must get folds from files!')
+    _config_file = json.load(open('config.json', 'r'))
+    do_train(_config_file, output_folder='metadata', mode='cross-validation')
 
-    config_file = json.load(open('config.json', 'r'))
-    do_train(config_file, mode='holdout')
+    # _results_file = json.load(open('metadata/results.json', 'r'))
+    # crunch_data(_results_file)

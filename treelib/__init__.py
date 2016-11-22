@@ -35,7 +35,9 @@ def get_max_height(train_set, random_state=None):
         raise TypeError('Invalid type for this function! Must be either a pandas.DataFrame or a tuple of numpy.ndarray!')
 
     try:
-        cls = DecisionTreeClassifier(criterion='entropy', random_state=random_state)
+        cls = DecisionTreeClassifier(
+            criterion='entropy', random_state=random_state, min_samples_split=2, min_samples_leaf=1
+        )
         cls = cls.fit(x_train, y_train)
         max_depth = cls.tree_.max_depth
         return max_depth
@@ -280,10 +282,15 @@ class Ardennes(AbstractTree):
         fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
 
-        if 'fold' in kwargs and 'run' in kwargs:
-            output_file = kwargs['output_file'].split('.')[0].strip() + '_fold_%03.d_run_%03.d.csv' % (kwargs['fold'], kwargs['run'])
+        if 'output_file' in kwargs:
+            if kwargs['output_file'] is not None and 'fold' in kwargs and 'run' in kwargs:
+                output_file = kwargs['output_file'].split('.')[0].strip() + '_fold_%03.d_run_%03.d.csv' % (
+                    kwargs['fold'], kwargs['run']
+                )
+            else:
+                output_file = None
         else:
-            output_file = str(kwargs['output_file'])
+            output_file = None
 
         if kwargs['verbose']:
             mean = np.mean(fitness)  # type: float

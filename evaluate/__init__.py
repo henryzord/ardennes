@@ -11,12 +11,13 @@ from multiprocessing import Process
 
 __author__ = 'Henry Cagnini'
 
-datasets_path = '/home/henry/Projects/ardennes/datasets/numerical'
+datasets_path = '../datasets/numerical'
+folds_path = '../datasets/folds'
 
 
-if __name__ == '__main__':
+def main():
     datasets = os.listdir(datasets_path)
-    output_path = 'metadata/[500 ind, 50 iter, 50 decile]'
+    output_path = 'metadata/[500 ind, 50 iter, 0.5 decile]'
     validation_mode = 'cross-validation'
     chunk_size = 2
 
@@ -36,3 +37,7 @@ if __name__ == '__main__':
         p = Process(target=do_train, args=(config_file, validation_mode))
         p.start()
         processes.append(p)
+
+
+if __name__ == '__main__':
+    main()

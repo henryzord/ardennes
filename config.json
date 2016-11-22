@@ -10,9 +10,11 @@
   "n_runs": 10,
   "mode": "batch",
   "ensemble": false,
-  "verbose": false,
+  "verbose": true,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/balance-scale.arff",
+  "dataset_path": "datasets/numerical/liver-disorders.arff",
+  "folds_path": "datasets/folds",
   "output_file": "metadata/output.csv",
-  "save_metadata": true
+  "save_metadata": false,
+  "baseline_algorithms": ["DecisionTreeClassifier"]
 }
