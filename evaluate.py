@@ -12,30 +12,25 @@ from multiprocessing import Process
 __author__ = 'Henry Cagnini'
 
 
-def evaluate_several(datasets_path, folds_path, output_path, n_jobs=2):
+def evaluate_several(datasets_path, output_path, validation_mode='cross-validation', n_jobs=2):
     datasets = os.listdir(datasets_path)
-
-    validation_mode = 'cross-validation'
 
     config_file = json.load(open('config.json', 'r'))
 
     processes = []
 
     for i, dataset in enumerate(datasets):
-        dataset_name = dataset.split('.')[0]
-
         if ((i % n_jobs) == 0) and i > 0:
             for process in processes:
                 process.join()
             processes = []
 
-        output_folder = os.path.join(output_path, dataset_name)
         config_file['dataset_path'] = os.path.join(datasets_path, dataset)
 
         p = Process(
             target=do_train, kwargs={
                 'config_file': config_file,
-                'output_path': output_folder,
+                'output_path': output_path,
                 'evaluation_mode': validation_mode
             }
         )
@@ -50,7 +45,11 @@ def evaluate_several(datasets_path, folds_path, output_path, n_jobs=2):
 
 if __name__ == '__main__':
     _datasets_path = 'datasets/numerical'
-    _folds_path = 'datasets/folds'
     _output_path = 'metadata'
+    validation_mode = 'cross-validation'
 
-    evaluate_several(_datasets_path, _folds_path, _output_path)
+    evaluate_several(
+        datasets_path=_datasets_path,
+        output_path=_output_path,
+        validation_mode=validation_mode
+    )

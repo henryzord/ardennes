@@ -211,8 +211,8 @@ def crunch_data(results_file):
     print df
 
 if __name__ == '__main__':
-    # _config_file = json.load(open('config.json', 'r'))
-    # do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation')
+    _config_file = json.load(open('config.json', 'r'))
+    do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation')
 
-    _results_file = json.load(open('metadata/iris/iris.json', 'r'))
-    crunch_data(_results_file)
+    # _results_file = json.load(open('metadata/iris/iris.json', 'r'))
+    # crunch_data(_results_file)
