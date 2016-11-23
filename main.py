@@ -1,6 +1,7 @@
 # coding=utf-8
 import json
 import random
+import shutil
 import warnings
 
 from datetime import datetime as dt
@@ -13,6 +14,7 @@ from sklearn.tree import DecisionTreeClassifier
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
 from treelib import get_max_height
+import pandas as pd
 
 __author__ = 'Henry Cagnini'
 
@@ -65,7 +67,8 @@ def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
             val=val_s,
             test=test_s,
             verbose=l_kwargs['verbose'],
-            output_file=l_kwargs['output_file'] if l_kwargs['save_metadata'] else None,
+            dataset_name=l_kwargs['dataset_name'],
+            output_path=l_kwargs['output_path'] if l_kwargs['save_metadata'] else None,
             fold=n_fold,
             run=j
         )
@@ -124,14 +127,14 @@ def run_batch(train_s, val_s, test, **kwargs):
         val=val_s,
         test=test,
         verbose=kwargs['verbose'],
-        output_file=kwargs['output_file'] if kwargs['save_metadata'] else None
+        output_path=kwargs['output_file'] if kwargs['save_metadata'] else None
     )
 
     test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
     print 'Test accuracy: %0.2f' % test_acc
 
 
-def do_train(config_file, output_folder=None, evaluation_mode='cross-validation'):
+def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
     assert evaluation_mode in ['cross-validation', 'holdout'], \
         ValueError('evaluation_mode must be either \'cross-validation\' or \'holdout!\'')
 
@@ -146,6 +149,19 @@ def do_train(config_file, output_folder=None, evaluation_mode='cross-validation'
 
         random.seed(random_state)
         np.random.seed(random_state)
+
+    # setting output_path
+    config_file['dataset_name'] = dataset_name
+    if output_path is not None:
+        dataset_output_path = os.path.join(output_path, dataset_name)
+        config_file['output_path'] = dataset_output_path
+
+        if not os.path.exists(config_file['output_path']):
+            os.mkdir(dataset_output_path)
+        else:
+            shutil.rmtree(dataset_output_path)
+    else:
+        dataset_output_path = None
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -163,8 +179,8 @@ def do_train(config_file, output_folder=None, evaluation_mode='cross-validation'
                 test_s=test_s, n_runs=config_file['n_runs'], config_file=config_file
             )
 
-        if output_folder is not None:
-            json.dump(all_fold_results, open(os.path.join(output_folder, '%s.json' % dataset_name), 'w'), indent=2)
+            if dataset_output_path is not None:
+                json.dump(all_fold_results, open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'), indent=2)
 
     else:
         train_s, val_s, test_s = get_batch(
@@ -175,13 +191,28 @@ def do_train(config_file, output_folder=None, evaluation_mode='cross-validation'
 
 
 def crunch_data(results_file):
-    for fold in sorted(results_file.keys()):
-        for alg, vec in results_file[fold].iteritems():
-            print '%s fold %d: %02.2f +- %02.2f' % (alg, int(fold), np.mean(vec), np.std(vec))
+
+    n_folds = len(results_file.keys())
+    algorithms = results_file[str(0)].keys()
+    n_algorithms = len(algorithms)
+    # n_runs = len(results_file[str(0)][algorithms[0]])
+
+    df = pd.DataFrame(columns=['algorithm', 'fold', 'acc mean', 'acc std'], index=np.arange(n_algorithms * n_folds))
+
+    count_row = 0
+    for n_fold, fold in results_file.iteritems():
+        for alg, vec in fold.iteritems():
+            acc_mean = np.mean(vec)
+            acc_std = np.std(vec)
+
+            df.loc[count_row] = [alg, n_fold, acc_mean, acc_std]
+            count_row += 1
+
+    print df
 
 if __name__ == '__main__':
-    _config_file = json.load(open('config.json', 'r'))
-    do_train(_config_file, output_folder='metadata', evaluation_mode='cross-validation')
+    # _config_file = json.load(open('config.json', 'r'))
+    # do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation')
 
-    # _results_file = json.load(open('metadata/results.json', 'r'))
-    # crunch_data(_results_file)
+    _results_file = json.load(open('metadata/iris/iris.json', 'r'))
+    crunch_data(_results_file)

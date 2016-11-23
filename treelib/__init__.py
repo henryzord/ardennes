@@ -82,7 +82,7 @@ class Ardennes(AbstractTree):
         self.distribution = distribution
         self.class_probability = class_probability
 
-    def fit(self, train, val=None, verbose=True, output_file=None, **kwargs):
+    def fit(self, train, val=None, verbose=True, output_path=None, **kwargs):
         def __treat__(_train, _val, _test=None):
             type_check(_train, [pd.DataFrame, tuple])
 
@@ -153,7 +153,7 @@ class Ardennes(AbstractTree):
                 fitness=fitness,
                 population=population,
                 verbose=verbose,
-                output_file=output_file,
+                output_path=output_path,
                 elapsed_time=(t2-t1).total_seconds(),
                 test_set=sets['test'] if 'test' in sets else None,
                 **kwargs
@@ -282,10 +282,12 @@ class Ardennes(AbstractTree):
         fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
 
-        if 'output_file' in kwargs:
-            if kwargs['output_file'] is not None and 'fold' in kwargs and 'run' in kwargs:
-                output_file = kwargs['output_file'].split('.')[0].strip() + '_fold_%03.d_run_%03.d.csv' % (
-                    kwargs['fold'], kwargs['run']
+        if 'output_path' in kwargs:
+            if kwargs['output_path'] is not None and 'fold' in kwargs and 'run' in kwargs:
+                output_file = os.path.join(
+                    kwargs['output_path'], kwargs['dataset_name'] + '_fold_%03.d_run_%03.d.csv' % (
+                        kwargs['fold'], kwargs['run']
+                    )
                 )
             else:
                 output_file = None
@@ -298,7 +300,9 @@ class Ardennes(AbstractTree):
             max_fitness = np.max(fitness)  # type: float
             elapsed_time = kwargs['elapsed_time']
 
-            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %0.2fsec' % (iteration, mean, median, max_fitness, elapsed_time)
+            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %0.2fsec' % (
+                iteration, mean, median, max_fitness, elapsed_time
+            )
 
         if output_file is not None:
             if iteration == 0:  # resets file
@@ -319,7 +323,10 @@ class Ardennes(AbstractTree):
                     add = [] if 'test_set' not in kwargs else [ind.validate(kwargs['test_set'])]
                     csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height] + add)
 
-            population[np.argmax(fitness)].plot(savepath=output_file.split('.')[0].strip() + '.pdf', test_set=kwargs['test_set'] if 'test_set' in kwargs else None)
+            population[np.argmax(fitness)].plot(
+                savepath=output_file.split('.')[0].strip() + '.pdf',
+                test_set=kwargs['test_set'] if 'test_set' in kwargs else None
+            )
 
     @staticmethod
     def __early_stop__(gm, uncertainty=0.01):

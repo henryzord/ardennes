@@ -35,7 +35,7 @@ def evaluate_several(datasets_path, folds_path, output_path, n_jobs=2):
         p = Process(
             target=do_train, kwargs={
                 'config_file': config_file,
-                'output_folder': output_folder,
+                'output_path': output_folder,
                 'evaluation_mode': validation_mode
             }
         )
@@ -51,6 +51,6 @@ def evaluate_several(datasets_path, folds_path, output_path, n_jobs=2):
 if __name__ == '__main__':
     _datasets_path = 'datasets/numerical'
     _folds_path = 'datasets/folds'
-    _output_path = 'metadata/first_run'
+    _output_path = 'metadata'
 
     evaluate_several(_datasets_path, _folds_path, _output_path)
