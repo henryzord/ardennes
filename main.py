@@ -20,13 +20,20 @@ __author__ = 'Henry Cagnini'
 
 
 def __get_tree_height__(_train, **kwargs):
+    random_state = kwargs['random_state'] if 'random_state' in kwargs else None
+    max_height = get_max_height(_train, random_state)
+
     if 'tree_height' not in kwargs or kwargs['tree_height'] is None:
-        try:
-            tree_height = get_max_height(_train, kwargs['random_state'])
-        except ValueError as ve:
-            tree_height = kwargs['tree_height']
+        tree_height = max_height
     else:
-        tree_height = kwargs['tree_height']
+        c_tree_height = kwargs['tree_height']
+
+        if isinstance(c_tree_height, int):
+            tree_height = c_tree_height
+        elif isinstance(c_tree_height, str) or isinstance(c_tree_height, unicode):
+            tree_height = eval(c_tree_height % max_height)
+        else:
+            raise TypeError('\'tree_height\' must be either a string, None or an int!')
 
     return tree_height
 
@@ -160,6 +167,7 @@ def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
             os.mkdir(dataset_output_path)
         else:
             shutil.rmtree(dataset_output_path)
+            os.mkdir(dataset_output_path)
     else:
         dataset_output_path = None
 

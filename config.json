@@ -1,8 +1,8 @@
 {
   "random_state": null,
-  "n_individuals": 10000,
+  "n_individuals": 100,
   "n_iterations": 25,
-  "tree_height": null,
+  "tree_height": "int(%d*2)",
   "distribution": "univariate",
   "decile": 0.50,
   "uncertainty": 0.01,

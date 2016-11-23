@@ -314,6 +314,31 @@ class Individual(AbstractTree):
         tree.add_node(node_id, attr_dict=meta)
         return tree
 
+    def gain_ratio(self, subset, subset_left, subset_right, target_attr):
+        ig = self.information_gain(subset, subset_left, subset_right, target_attr)
+        si = self.__split_info__(subset, subset_left, subset_right)
+
+        gr = ig/si
+
+        return gr
+
+    @staticmethod
+    def __split_info__(subset, subset_left, subset_right):
+        sum_term = 0.
+        for child_subset in [subset_left, subset_right]:
+            temp = (child_subset.shape[0] / float(subset.shape[0]))
+            sum_term += temp * np.log2(temp)
+
+        return -sum_term
+
+    def information_gain(self, subset, subset_left, subset_right, target_attr):
+        sum_term = 0.
+        for child_subset in [subset_left, subset_right]:
+            sum_term += (child_subset.shape[0] / float(subset.shape[0])) * self.entropy(child_subset, target_attr)
+
+        ig = self.entropy(subset, target_attr) - sum_term
+        return ig
+
     @staticmethod
     def entropy(subset, target_attr):
         # the smaller, the better
@@ -482,12 +507,21 @@ class Individual(AbstractTree):
             ][:-1]
 
             best_threshold = -np.inf
-            best_entropy = np.inf
+            # best_entropy = np.inf
+            best_gr = -np.inf
             for cand in candidates:
-                entropy = self.__get_entropy__(node_label, cand, subset)
-                if entropy < best_entropy:
+                gr = self.gain_ratio(
+                    subset,
+                    subset.loc[subset[node_label] < cand],
+                    subset.loc[subset[node_label] >= cand],
+                    self.target_attr
+                )
+                # entropy = self.__get_entropy__(node_label, cand, subset)
+                # if entropy < best_entropy:
+                if gr > best_gr:
+                    best_gr = gr
                     best_threshold = cand
-                    best_entropy = entropy
+                    # best_entropy = entropy
 
             self.__store_threshold__(node_label, subset, best_threshold)
 
