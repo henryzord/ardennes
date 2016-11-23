@@ -165,11 +165,21 @@ class Ardennes(AbstractTree):
             fittest_pop = population[fitness >= borderline]
             to_replace_index = np.flatnonzero(fitness < borderline)
 
-            gm.update(fittest_pop)
+            if len(to_replace_index) > 1:
+                to_replace_before = [to_replace_index[i] for i in xrange(len(to_replace_index)/2)]
+                to_replace_after = [to_replace_index[i] for i in xrange(len(to_replace_index) / 2, len(to_replace_index))]
 
-            if len(to_replace_index) > 0:
-                replaced = sample_func(ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets)
-                population[to_replace_index] = replaced
+                population[to_replace_before] = sample_func(
+                    ind_id=to_replace_before, graphical_model=gm, max_height=self.max_height, sets=sets
+                )
+
+                gm.update(fittest_pop)
+
+                population[to_replace_after] = sample_func(
+                    ind_id=to_replace_after, graphical_model=gm, max_height=self.max_height, sets=sets
+                )
+            else:
+                gm.update(fittest_pop)
 
             if self.__early_stop__(gm, self.uncertainty):
                 break
