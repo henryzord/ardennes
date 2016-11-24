@@ -6,14 +6,16 @@ Performs tests in an 'industrial' fashion.
 
 import json
 import os
+
 from main import do_train
-from multiprocessing import Process
+import numpy as np
 
 __author__ = 'Henry Cagnini'
 
 
 def evaluate_several(datasets_path, output_path, validation_mode='cross-validation', n_jobs=2):
     datasets = os.listdir(datasets_path)
+    np.random.shuffle(datasets)  # everyday I'm shuffling
 
     config_file = json.load(open('config.json', 'r'))
 
@@ -30,11 +32,11 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 if __name__ == '__main__':
     _datasets_path = 'datasets/numerical'
     _output_path = 'metadata'
-    validation_mode = 'cross-validation'
+    _validation_mode = 'cross-validation'
 
     evaluate_several(
         datasets_path=_datasets_path,
         output_path=_output_path,
-        validation_mode=validation_mode,
+        validation_mode=_validation_mode,
         n_jobs=2
     )

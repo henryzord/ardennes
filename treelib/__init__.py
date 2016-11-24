@@ -162,7 +162,7 @@ class Ardennes(AbstractTree):
 
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
-            fittest_pop = population[fitness >= borderline]
+            fittest_pop = population[fitness > borderline]
             to_replace_index = np.flatnonzero(fitness < borderline)
 
             if len(to_replace_index) > 1:

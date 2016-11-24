@@ -55,8 +55,10 @@ def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
             clf.fit(
                 train_s[train_s.columns[:-1]], train_s[train_s.columns[-1]]
             )  # type: DecisionTreeClassifier
-            acc = clf.score(test_s[test_s.columns[:-1]], test_s[test_s.columns[-1]])
-            alg_results[name][run] = acc
+            test_acc = clf.score(test_s[test_s.columns[:-1]], test_s[test_s.columns[-1]])
+            val_acc = clf.score(val_s[val_s.columns[:-1]], val_s[val_s.columns[-1]])
+            print name, 'test acc', test_acc, 'val acc', val_acc
+            alg_results[name][run] = test_acc
 
         t1 = dt.now()
 
@@ -91,13 +93,12 @@ def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
 
     tree_height = __get_tree_height__(train_s, **config_file)
 
-    base_alg_names = config_file['baseline_algorithms']
-    algorithms = get_baseline_algorithms(base_alg_names)
+    algorithms = get_baseline_algorithms(config_file['baseline_algorithms'])
 
-    ardennes_accs = np.empty(n_runs, dtype=np.float32).tolist()
-    ardennes_times = np.empty(n_runs, dtype=np.float32).tolist()
+    ardennes_accs = np.zeros(n_runs, dtype=np.float32).tolist()
+    ardennes_times = np.zeros(n_runs, dtype=np.float32).tolist()
 
-    alg_results = {name: np.empty(n_runs, dtype=np.float32).tolist() for name in algorithms.iterkeys()}
+    alg_results = {name: np.zeros(n_runs, dtype=np.float32).tolist() for name in algorithms.iterkeys()}
 
     for j in xrange(n_runs):
         run_ardennes(j, algorithms, **config_file)
@@ -188,7 +189,11 @@ def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
             )
 
             if dataset_output_path is not None:
-                json.dump(all_fold_results, open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'), indent=2)
+                json.dump(
+                    all_fold_results,
+                    open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'),
+                    indent=2
+                )
 
     else:
         train_s, val_s, test_s = get_batch(
@@ -220,7 +225,7 @@ def crunch_data(results_file):
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-    do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation')
+    do_train(_config_file, output_path='metadata', evaluation_mode='holdout')
 
     # _results_file = json.load(open('metadata/iris/iris.json', 'r'))
     # crunch_data(_results_file)

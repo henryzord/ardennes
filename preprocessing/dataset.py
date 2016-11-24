@@ -8,7 +8,6 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold
 
 import warnings
-warnings.filterwarnings('error')
 
 __author__ = 'Henry Cagnini'
 
@@ -35,15 +34,17 @@ def generate_folds(df, dataset_name, output_folder, n_folds=10, random_state=Non
 
     d_folds = dict()
 
-    for i, (arg_train, arg_test) in enumerate(_folds):
+    for i, (arg_rest, arg_test) in enumerate(_folds):
+
         x_train, x_val, y_train, y_val = train_test_split(
-            df.iloc[arg_train][df.columns[:-1]],
-            df.iloc[arg_train][df.columns[-1]],
+            df.loc[arg_rest, df.columns[:-1]],
+            df.loc[arg_rest, df.columns[-1]],
             test_size=1. / (n_folds - 1.),
             random_state=random_state
         )
 
         d_folds[i] = {'train': list(x_train.index), 'val': list(x_val.index), 'test': list(arg_test)}
+
     json.dump(d_folds, open(os.path.join(output_folder, dataset_name + '.json'), 'w'), indent=2)
 
 
@@ -114,10 +115,8 @@ def main():
         df = read_dataset(os.path.join(dataset_path, dataset_format))
 
         print 'doing for dataset %s' % name
-        # generate_folds(df, dataset_name=name, output_folder=output_folder, n_folds=n_folds)
-        it = get_fold_iter(df, os.path.join(output_folder, name + '.json'))
-        for train_s, test_s, val_s in it:
-            z = 0
+        generate_folds(df, dataset_name=name, output_folder=output_folder, n_folds=n_folds)
+        # it = get_fold_iter(df, os.path.join(output_folder, name + '.json'))
 
 
 if __name__ == '__main__':
