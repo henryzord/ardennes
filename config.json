@@ -1,8 +1,8 @@
 {
-  "random_state": 1,
-  "n_individuals": 10,
-  "n_iterations": 2,
-  "tree_height": 14,
+  "random_state": null,
+  "n_individuals": 100,
+  "n_iterations": 50,
+  "tree_height": null,
   "distribution": "univariate",
   "decile": 0.50,
   "uncertainty": 0.01,
@@ -10,7 +10,7 @@
   "n_runs": 2,
   "ensemble": false,
   "verbose": true,
-  "dataset_path": "datasets/numerical/mfeat-morphological.arff",
+  "dataset_path": "datasets/numerical/liver-disorders.arff",
   "folds_path": "datasets/folds",
   "save_metadata": false,
   "baseline_algorithms": ["DecisionTreeClassifier"]

@@ -16,7 +16,7 @@ class GraphicalModel(AbstractTree):
         A graphical model is a tree itself.
     """
     
-    variables = None  # tensor is a dependency graph
+    attributes = None  # tensor is a dependency graph
     
     def __init__(
             self, max_depth=3, distribution='multivariate', **kwargs
@@ -26,9 +26,9 @@ class GraphicalModel(AbstractTree):
         self.distribution = distribution
         self.max_depth = max_depth
 
-        self.variables = self.__init_variables__(max_depth, distribution)
+        self.attributes = self.__init_attributes__(max_depth, distribution)
     
-    def __init_variables__(self, max_depth, distribution='univariate'):
+    def __init_attributes__(self, max_depth, distribution='univariate'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
                 raise NotImplementedError('not implemented yet!')
@@ -46,7 +46,7 @@ class GraphicalModel(AbstractTree):
 
         n_variables = get_total_nodes(max_depth)
 
-        variables = map(
+        attributes = map(
             lambda i: Variable(
                 name=i,
                 values=sample_values,
@@ -57,18 +57,16 @@ class GraphicalModel(AbstractTree):
             xrange(n_variables)
         )
         
-        return variables
+        return attributes
     
     def update(self, fittest):
         """
-        Updates graphical model.
+        Update attributes' probabilities.
 
         :type fittest: pandas.Series
         :param fittest:
         :return:
         """
-
-        # pd.options.mode.chained_assignment = None  # why not throw some stuff into the fan?
 
         def get_label(_fit, _node_id):
             if _node_id not in _fit.tree.node:
@@ -80,8 +78,8 @@ class GraphicalModel(AbstractTree):
             return label
 
         if self.distribution == 'univariate':
-            for i, variable in enumerate(self.variables):
-                weights = self.variables[i].weights
+            for i, variable in enumerate(self.attributes):
+                weights = self.attributes[i].weights
 
                 labels = [get_label(fit, variable.name) for fit in fittest]
 
@@ -95,7 +93,7 @@ class GraphicalModel(AbstractTree):
                 rest = abs(weights['probability'].sum() - 1.)
                 weights.loc[np.random.choice(weights.index), 'probability'] += rest
 
-                self.variables[i].weights = weights
+                self.attributes[i].weights = weights
 
         elif self.distribution == 'multivariate':
             raise NotImplementedError('not implemented yet!')
@@ -127,12 +125,10 @@ class GraphicalModel(AbstractTree):
         elif self.distribution == 'bivariate':
             raise NotImplementedError('not implemented yet!')
 
-        # pd.options.mode.chained_assignment = 'warn'  # ok, I promise I'll behave
-    
     def sample(self, node_id, level, parent_labels=None, enforce_nonterminal=False):
-        value = self.variables[node_id].get_value(parent_labels=parent_labels)
+        value = self.attributes[node_id].get_value(parent_labels=parent_labels)
         if enforce_nonterminal:
             while value == self.target_attr:
-                value = self.variables[node_id].get_value(parent_labels=parent_labels)
+                value = self.attributes[node_id].get_value(parent_labels=parent_labels)
 
         return value

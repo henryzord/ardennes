@@ -133,7 +133,7 @@ class Ardennes(AbstractTree):
         t1 = dt.now()  # starts measuring time
 
         gm = GraphicalModel(
-            max_depth=self.max_height - 1,
+            max_depth=self.max_height - 1,  # since last level must be all leafs
             distribution=self.distribution,
             class_probability=self.class_probability,
             **class_values
@@ -165,21 +165,28 @@ class Ardennes(AbstractTree):
             fittest_pop = population[fitness > borderline]
             to_replace_index = np.flatnonzero(fitness < borderline)
 
-            if len(to_replace_index) > 1:
-                to_replace_before = [to_replace_index[i] for i in xrange(len(to_replace_index)/2)]
-                to_replace_after = [to_replace_index[i] for i in xrange(len(to_replace_index) / 2, len(to_replace_index))]
+            gm.update(fittest_pop)
 
-                population[to_replace_before] = sample_func(
-                    ind_id=to_replace_before, graphical_model=gm, max_height=self.max_height, sets=sets
+            if len(to_replace_index) > 0:
+                population[to_replace_index] = sample_func(
+                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets
                 )
 
-                gm.update(fittest_pop)
-
-                population[to_replace_after] = sample_func(
-                    ind_id=to_replace_after, graphical_model=gm, max_height=self.max_height, sets=sets
-                )
-            else:
-                gm.update(fittest_pop)
+            # if len(to_replace_index) > 1:
+            #     to_replace_before = [to_replace_index[i] for i in xrange(len(to_replace_index)/2)]
+            #     to_replace_after = [to_replace_index[i] for i in xrange(len(to_replace_index) / 2, len(to_replace_index))]
+            #
+            #     population[to_replace_before] = sample_func(
+            #         ind_id=to_replace_before, graphical_model=gm, max_height=self.max_height, sets=sets
+            #     )
+            #
+            #     gm.update(fittest_pop)
+            #
+            #     population[to_replace_after] = sample_func(
+            #         ind_id=to_replace_after, graphical_model=gm, max_height=self.max_height, sets=sets
+            #     )
+            # else:
+            #     gm.update(fittest_pop)
 
             if self.__early_stop__(gm, self.uncertainty):
                 break
@@ -350,7 +357,7 @@ class Ardennes(AbstractTree):
         """
 
         should_stop = True
-        for tensor in gm.variables:
+        for tensor in gm.attributes:
             weights = tensor.weights
             upper = abs(1. - weights['probability'].max())
             lower = weights['probability'].min()
