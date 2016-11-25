@@ -223,7 +223,12 @@ class Individual(AbstractTree):
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
         import warnings
         warnings.warn('WARNING: using train set for calculate fitness!')
-        self.val_acc = self.validate(self.sets['train']) + self.validate(self.sets['val'])
+
+        train_shape = self.sets['train'].shape[0]
+        val_shape = self.sets['val'].shape[0]
+
+        self.val_acc = ((self.validate(self.sets['train']) * train_shape) +
+                        (self.validate(self.sets['val']) * val_shape)) / float(train_shape + val_shape)
 
     def __set_tree__(self, graphical_model, train_set):
         tree = nx.DiGraph()

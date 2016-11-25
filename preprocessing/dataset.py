@@ -28,6 +28,8 @@ def generate_folds(df, dataset_name, output_folder, n_folds=10, random_state=Non
     :param random_state: Optional - Seed to use in the splitting process. Defaults to None (no seed).
     :return:
     """
+    import warnings
+    warnings.filterwarnings('error')
 
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
     _folds = skf.split(df[df.columns[:-1]], df[df.columns[-1]])
@@ -108,13 +110,13 @@ def main():
     dataset_path = '../datasets/numerical'
     output_folder = '../datasets/folds'
 
-    n_folds = 5
+    n_folds = 10
 
     for dataset_format in os.listdir(dataset_path):
         name = dataset_format.split('.')[0]
         df = read_dataset(os.path.join(dataset_path, dataset_format))
 
-        print 'doing for dataset %s' % name
+        print 'Genering folds for dataset %s' % name
         generate_folds(df, dataset_name=name, output_folder=output_folder, n_folds=n_folds)
         # it = get_fold_iter(df, os.path.join(output_folder, name + '.json'))
 

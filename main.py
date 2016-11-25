@@ -57,7 +57,17 @@ def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
             )  # type: DecisionTreeClassifier
             test_acc = clf.score(test_s[test_s.columns[:-1]], test_s[test_s.columns[-1]])
             val_acc = clf.score(val_s[val_s.columns[:-1]], val_s[val_s.columns[-1]])
-            print name, 'test acc', test_acc, 'val acc', val_acc
+            train_acc = clf.score(train_s[train_s.columns[:-1]], train_s[train_s.columns[-1]])
+
+            val_size = val_s.shape[0]
+            train_size = train_s.shape[0]
+            test_size = test_s.shape[0]
+
+            print '%s: train %02.2f val %02.2f test %02.2f train+val: %02.2f' % (
+                name, train_acc, val_acc, test_acc,
+                ((train_acc * train_size) + (val_acc * val_size))/float(train_size + val_size)
+            )
+
             alg_results[name][run] = test_acc
 
         t1 = dt.now()
