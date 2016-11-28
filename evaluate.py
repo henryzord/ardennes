@@ -7,6 +7,8 @@ Performs tests in an 'industrial' fashion.
 import json
 import os
 import itertools as it
+import pandas as pd
+import arff
 
 from main import do_train
 import numpy as np
@@ -19,44 +21,61 @@ def evaluate_j48(datasets_path, folds_path):
     from weka.core.converters import Loader
     from weka.classifiers import Classifier
 
-    dataset_name = 'iris'
-    iris_fold = json.load(open(os.path.join(folds_path, dataset_name + '.json'), 'r'))
-
     jvm.start()
 
-    loader = Loader(classname="weka.core.converters.ArffLoader")
-    data = loader.load_file(os.path.join(datasets_path, 'iris.arff'))
-    data.class_is_last()
+    try:
+        for dataset in os.listdir(folds_path):
+            dataset_name = dataset.split('.')[0]
 
-    for folds_sets in iris_fold.itervalues():
-        test_s = data.copy_instances(data)
-        train_s = data.copy_instances(data)
+            print 'doing for dataset %s' % dataset_name
 
-        for name, set in folds_sets.iteritems():
-            some_set = None
-            if name == 'test':
-                some_set = train_s
-            elif name == 'train':
-                some_set = test_s
-            elif name == 'val':
-                some_set = test_s
+            fold_file = json.load(open(os.path.join(folds_path, dataset_name + '.json'), 'r'))
+            arff_dtst = arff.load(open(os.path.join(datasets_path, dataset_name + '.arff'), 'r'))
 
-            some_set.delete(set)  # TODO by using this method, does not keep other indices!
+            loader = Loader(classname="weka.core.converters.CSVLoader")
 
-        cls = Classifier(classname="weka.classifiers.trees.J48", options=["-C", "0.25", "-M", "2"])
-        cls.build_classifier(train_s)
+            for n_fold, folds_sets in fold_file.iteritems():
+                attributes = [x[0] for x in arff_dtst['attributes']]
+                np_train_s = pd.DataFrame(arff_dtst['data'], columns=attributes)
+                np_test_s = pd.DataFrame(arff_dtst['data'], columns=attributes)
 
-        acc = 0.
-        for index, inst in enumerate(test_s):
-            pred = cls.classify_instance(inst)
-            real = inst.get_value(data.class_index)
-            acc += (pred == real)
+                np_train_s = np_train_s.loc[folds_sets['train'] + folds_sets['val']]
+                np_test_s = np_test_s.loc[folds_sets['test']]
 
-        acc /= float(data.num_instances)
+                np_train_s.to_csv('.train_temp.csv', index=False)
+                np_test_s.to_csv('.test_temp.csv', index=False)
 
-        print 'accuracy: %02.2f' % acc
+                train_s = loader.load_file('.train_temp.csv')
+                test_s = loader.load_file('.test_temp.csv')
+                train_s.class_is_last()
+                test_s.class_is_last()
 
-    jvm.stop()
+                cls = Classifier(classname="weka.classifiers.trees.J48", options=["-C", "0.25", "-M", "2"])
+                cls.build_classifier(train_s)
+
+                acc = 0.
+                for index, inst in enumerate(test_s):
+                    pred = cls.classify_instance(inst)
+                    real = inst.get_value(inst.class_index)
+                    acc += (pred == real)
+
+                acc /= float(test_s.num_instances)
+
+                print 'dataset %s %d-th fold accuracy: %02.2f' % (dataset_name, int(n_fold), acc)
+
+                os.remove('.train_temp.csv')
+                os.remove('.test_temp.csv')
+    finally:
+        jvm.stop()
+
+        try:
+            os.remove('.train_temp.csv')
+        except OSError:
+            pass
+        try:
+            os.remove('.test_temp.csv')
+        except OSError:
+            pass
 
 
 def evaluate_several(datasets_path, output_path, validation_mode='cross-validation', n_jobs=2):
