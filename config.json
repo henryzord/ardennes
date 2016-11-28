@@ -1,17 +1,17 @@
 {
   "random_state": null,
   "n_individuals": 500,
-  "n_iterations": 50,
+  "n_iterations": 100,
   "tree_height": null,
   "distribution": "univariate",
   "decile": 0.80,
   "uncertainty": 0.01,
   "train_size": 0.80,
-  "n_runs": 2,
+  "n_runs": 10,
   "ensemble": false,
-  "verbose": true,
-  "dataset_path": "datasets/numerical/diabetes.arff",
+  "verbose": false,
+  "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds",
-  "save_metadata": false,
+  "save_metadata": true,
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

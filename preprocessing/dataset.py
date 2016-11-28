@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+from collections import Counter
 
 import arff
 import pandas as pd
@@ -118,7 +119,14 @@ def main():
 
         print 'Genering folds for dataset %s' % name
         generate_folds(df, dataset_name=name, output_folder=output_folder, n_folds=n_folds)
+
+        # verifies distribution
         # it = get_fold_iter(df, os.path.join(output_folder, name + '.json'))
+        # for train_s, test_s, val_s in it:
+        #     class_a = train_s.columns[-1]
+        #
+        #     dist_train, dist_test, dist_val = Counter(train_s[class_a]), Counter(test_s[class_a]), Counter(val_s[class_a])
+        #     print [[x / float(sum(dist.values())) for x in dist.itervalues()] for dist in [dist_train, dist_test, dist_val]]
 
 
 if __name__ == '__main__':

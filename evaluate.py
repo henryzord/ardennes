@@ -23,9 +23,13 @@ def evaluate_j48(datasets_path, folds_path):
 
     jvm.start()
 
+    results = dict()
+
     try:
         for dataset in os.listdir(folds_path):
             dataset_name = dataset.split('.')[0]
+
+            results[dataset_name] = dict()
 
             print 'doing for dataset %s' % dataset_name
 
@@ -61,10 +65,15 @@ def evaluate_j48(datasets_path, folds_path):
 
                 acc /= float(test_s.num_instances)
 
+                results[dataset_name][n_fold] = acc
+
                 print 'dataset %s %d-th fold accuracy: %02.2f' % (dataset_name, int(n_fold), acc)
 
                 os.remove('.train_temp.csv')
                 os.remove('.test_temp.csv')
+
+        json.dump(results, open('j48_results.json', 'w'), indent=2)
+
     finally:
         jvm.stop()
 
@@ -104,11 +113,11 @@ if __name__ == '__main__':
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
 
-    # evaluate_several(
-    #     datasets_path=_datasets_path,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode,
-    #     n_jobs=2
-    # )
+    evaluate_several(
+        datasets_path=_datasets_path,
+        output_path=_output_path,
+        validation_mode=_validation_mode,
+        n_jobs=2
+    )
 
-    evaluate_j48(_datasets_path, _folds_path)
+    # evaluate_j48(_datasets_path, _folds_path)

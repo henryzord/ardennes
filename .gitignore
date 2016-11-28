@@ -1,7 +1,6 @@
 # my additions
 *.html
 *.pyc
-metadata/*
 
 # folders
 datasets/testzilla/

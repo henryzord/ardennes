@@ -49,83 +49,40 @@ def get_baseline_algorithms(names):
     return algorithms
 
 
-def run_fold(n_fold, train_s, val_s, test_s, n_runs, config_file):
-    def run_ardennes(run, l_algorithms, **l_kwargs):
-        for name, clf in l_algorithms.iteritems():
-            clf.fit(
-                train_s[train_s.columns[:-1]], train_s[train_s.columns[-1]]
-            )  # type: DecisionTreeClassifier
-            test_acc = clf.score(test_s[test_s.columns[:-1]], test_s[test_s.columns[-1]])
-            val_acc = clf.score(val_s[val_s.columns[:-1]], val_s[val_s.columns[-1]])
-            train_acc = clf.score(train_s[train_s.columns[:-1]], train_s[train_s.columns[-1]])
-
-            val_size = val_s.shape[0]
-            train_size = train_s.shape[0]
-            test_size = test_s.shape[0]
-
-            print '%s: train %02.2f val %02.2f test %02.2f train+val: %02.2f' % (
-                name, train_acc, val_acc, test_acc,
-                ((train_acc * train_size) + (val_acc * val_size))/float(train_size + val_size)
-            )
-
-            alg_results[name][run] = test_acc
-
-        t1 = dt.now()
-
-        inst = Ardennes(
-            n_individuals=l_kwargs['n_individuals'],
-            decile=l_kwargs['decile'],
-            uncertainty=l_kwargs['uncertainty'],
-            max_height=tree_height,
-            distribution=l_kwargs['distribution'],
-            n_iterations=l_kwargs['n_iterations']
-        )
-
-        inst.fit(
-            train=train_s,
-            val=val_s,
-            test=test_s,
-            verbose=l_kwargs['verbose'],
-            dataset_name=l_kwargs['dataset_name'],
-            output_path=l_kwargs['output_path'] if l_kwargs['save_metadata'] else None,
-            fold=n_fold,
-            run=j
-        )
-
-        _test_acc = inst.validate(test_s, ensemble=l_kwargs['ensemble'])
-        t2 = dt.now()
-        ardennes_accs[run] = _test_acc
-        ardennes_times[run] = (t2 - t1).total_seconds()
-
-        print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
-            run, n_fold, _test_acc, ardennes_times[run]
-        )
-
+def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file):
     tree_height = __get_tree_height__(train_s, **config_file)
 
-    algorithms = get_baseline_algorithms(config_file['baseline_algorithms'])
+    t1 = dt.now()
 
-    ardennes_accs = np.zeros(n_runs, dtype=np.float32).tolist()
-    ardennes_times = np.zeros(n_runs, dtype=np.float32).tolist()
-
-    alg_results = {name: np.zeros(n_runs, dtype=np.float32).tolist() for name in algorithms.iterkeys()}
-
-    for j in xrange(n_runs):
-        run_ardennes(j, algorithms, **config_file)
-
-    acc_mean = np.mean(ardennes_accs)
-    acc_std = np.std(ardennes_accs)
-
-    time_mean = np.mean(ardennes_times)
-    time_std = np.std(ardennes_times)
-
-    print 'Fold %d (%d runs): accuracy %02.2f +- %02.2f\ttime: %02.2f +- %02.2f secs' % (
-        n_fold, n_runs, acc_mean, acc_std, time_mean, time_std
+    inst = Ardennes(
+        n_individuals=config_file['n_individuals'],
+        decile=config_file['decile'],
+        uncertainty=config_file['uncertainty'],
+        max_height=tree_height,
+        distribution=config_file['distribution'],
+        n_iterations=config_file['n_iterations']
     )
 
-    alg_results['ardennes'] = ardennes_accs
+    inst.fit(
+        train=train_s,
+        val=val_s,
+        test=test_s,
+        verbose=config_file['verbose'],
+        dataset_name=config_file['dataset_name'],
+        output_path=config_file['output_path'] if config_file['save_metadata'] else None,
+        fold=n_fold,
+        run=n_run
+    )
 
-    return alg_results
+    _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
+
+    t2 = dt.now()
+
+    print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
+        n_run, n_fold, _test_acc, (t2 - t1).total_seconds()
+    )
+
+    return _test_acc
 
 
 def run_batch(train_s, val_s, test, **kwargs):
@@ -187,23 +144,28 @@ def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
 
-        folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
+        result_dict = {
+            'runs': {
+                str(i): {'folds': dict()} for i in xrange(config_file['n_runs'])
+            }
+        }
 
-        all_fold_results = dict()
+        for n_run in xrange(config_file['n_runs']):
+            folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
 
-        for i, (train_s, val_s, test_s) in enumerate(folds):
-            print 'Running fold %d for dataset %s' % (i, dataset_name)
-            all_fold_results[i] = run_fold(
-                n_fold=i, train_s=train_s, val_s=val_s,
-                test_s=test_s, n_runs=config_file['n_runs'], config_file=config_file
-            )
-
-            if dataset_output_path is not None:
-                json.dump(
-                    all_fold_results,
-                    open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'),
-                    indent=2
+            for i, (train_s, val_s, test_s) in enumerate(folds):
+                print 'Running fold %d for dataset %s' % (i, dataset_name)
+                result_dict['runs'][str(n_run)]['folds'][str(i)] = run_fold(
+                    n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
+                    test_s=test_s, config_file=config_file
                 )
+
+                if dataset_output_path is not None:
+                    json.dump(
+                        result_dict,
+                        open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'),
+                        indent=2
+                    )
 
     else:
         train_s, val_s, test_s = get_batch(
