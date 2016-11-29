@@ -54,29 +54,29 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file):
 
     t1 = dt.now()
 
-    inst = Ardennes(
+    _test_acc = -1.
+    with Ardennes(
         n_individuals=config_file['n_individuals'],
         decile=config_file['decile'],
         uncertainty=config_file['uncertainty'],
         max_height=tree_height,
         distribution=config_file['distribution'],
         n_iterations=config_file['n_iterations']
-    )
+    ) as inst:
+        inst.fit(
+            train=train_s,
+            val=val_s,
+            test=test_s,
+            verbose=config_file['verbose'],
+            dataset_name=config_file['dataset_name'],
+            output_path=config_file['output_path'] if config_file['save_metadata'] else None,
+            fold=n_fold,
+            run=n_run
+        )
 
-    inst.fit(
-        train=train_s,
-        val=val_s,
-        test=test_s,
-        verbose=config_file['verbose'],
-        dataset_name=config_file['dataset_name'],
-        output_path=config_file['output_path'] if config_file['save_metadata'] else None,
-        fold=n_fold,
-        run=n_run
-    )
+        _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
 
-    _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
-
-    t2 = dt.now()
+        t2 = dt.now()
 
     print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
         n_run, n_fold, _test_acc, (t2 - t1).total_seconds()
@@ -109,11 +109,12 @@ def run_batch(train_s, val_s, test, **kwargs):
     print 'Test accuracy: %0.2f' % test_acc
 
 
-def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
+def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     assert evaluation_mode in ['cross-validation', 'holdout'], \
         ValueError('evaluation_mode must be either \'cross-validation\' or \'holdout!\'')
 
     dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
+    config_file['dataset_name'] = dataset_name
     print 'training ardennes for %s' % dataset_name
 
     df = read_dataset(config_file['dataset_path'])
@@ -125,49 +126,27 @@ def do_train(config_file, output_path=None, evaluation_mode='cross-validation'):
         random.seed(random_state)
         np.random.seed(random_state)
 
-    # setting output_path
-    config_file['dataset_name'] = dataset_name
-    if output_path is not None:
-        dataset_output_path = os.path.join(output_path, dataset_name)
-        config_file['output_path'] = dataset_output_path
-
-        if not os.path.exists(config_file['output_path']):
-            os.mkdir(dataset_output_path)
-        else:
-            shutil.rmtree(dataset_output_path)
-            os.mkdir(dataset_output_path)
-    else:
-        dataset_output_path = None
-
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
 
-        result_dict = {
-            'runs': {
-                str(i): {'folds': dict()} for i in xrange(config_file['n_runs'])
-            }
-        }
+        result_dict = {'folds': dict()}
 
-        for n_run in xrange(config_file['n_runs']):
-            folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
+        folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
 
-            for i, (train_s, val_s, test_s) in enumerate(folds):
-                print 'Running fold %d for dataset %s' % (i, dataset_name)
-                result_dict['runs'][str(n_run)]['folds'][str(i)] = run_fold(
-                    n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
-                    test_s=test_s, config_file=config_file
-                )
+        for i, (train_s, val_s, test_s) in enumerate(folds):
+            print 'Running fold %d for dataset %s' % (i, dataset_name)
+            result_dict['folds'][str(i)] = run_fold(
+                n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
+                test_s=test_s, config_file=config_file
+            )
 
-                if dataset_output_path is not None:
-                    json.dump(
-                        result_dict,
-                        open(os.path.join(dataset_output_path, '%s.json' % dataset_name), 'w'),
-                        indent=2
-                    )
+        return result_dict
 
     else:
+        raise NotImplementedError('not implemented yet!')
+
         train_s, val_s, test_s = get_batch(
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
@@ -196,8 +175,8 @@ def crunch_data(results_file):
     print df
 
 if __name__ == '__main__':
-    _config_file = json.load(open('config.json', 'r'))
-    do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation')
+    # _config_file = json.load(open('config.json', 'r'))
+    # do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation', n_runs=1)
 
-    # _results_file = json.load(open('metadata/iris/iris.json', 'r'))
-    # crunch_data(_results_file)
+    _results_file = json.load(open('/home/henry/Desktop/[6 runs] balance-scale.json', 'r'))
+    crunch_data(_results_file)

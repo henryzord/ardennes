@@ -1,23 +1,20 @@
 # coding=utf-8
 
+import collections
+import copy
 import itertools as it
 from collections import Counter
 
-import collections
 import networkx as nx
 import pandas as pd
-
-from treelib.classes import AbstractTree
-
 from matplotlib import pyplot as plt
-import numpy as np
-import copy
+
 from treelib.node import *
 
 __author__ = 'Henry Cagnini'
 
 
-class Individual(AbstractTree):
+class Individual(object):
     _terminal_node_color = '#98FB98'
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
@@ -36,17 +33,17 @@ class Individual(AbstractTree):
     \'shortest path\' from the node to the root.
     """
 
-    def __init__(self, graphical_model, max_height, sets, **kwargs):
+    def __init__(self, graphical_model, max_height, sets, pred_attr, target_attr, class_labels, **kwargs):
         """
         
         :type graphical_model: treelib.graphical_model.GraphicalModel
         :param graphical_model:
         :type sets: dict
         :param sets:
-        :type kwargs: dict
-        :param kwargs:
         """
-        super(Individual, self).__init__(**kwargs)
+        self.pred_attr = pred_attr
+        self.target_attr = target_attr
+        self.class_labels = class_labels
 
         if 'ind_id' in kwargs:
             self.ind_id = kwargs['ind_id']
@@ -61,10 +58,16 @@ class Individual(AbstractTree):
         self.column_types = Individual.column_types
 
         self.max_height = max_height
-        self.id_generator = None
 
         self.sets = sets
         self.sample(graphical_model, sets)
+
+    @classmethod
+    def clean(cls):
+        cls.pred_attr = None
+        cls.target_attr = None
+        cls.class_labels = None
+        cls.column_types = None
 
     @property
     def id_ind(self):
@@ -221,8 +224,6 @@ class Individual(AbstractTree):
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
 
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-        import warnings
-        warnings.warn('WARNING: using train set for calculate fitness!')
 
         train_shape = self.sets['train'].shape[0]
         val_shape = self.sets['val'].shape[0]
@@ -506,7 +507,7 @@ class Individual(AbstractTree):
             meta, subsets = self.__subsets_and_meta__(
                 node_label, best_threshold, subset, node_id, node_level
             )
-        except KeyError:
+        except KeyError as ke:
             unique_vals = sorted(subset[node_label].unique())
             candidates = [
                 (unique_vals[i] + unique_vals[i + 1]) / 2.
@@ -535,6 +536,8 @@ class Individual(AbstractTree):
             meta, subsets = self.__subsets_and_meta__(
                 node_label, best_threshold, subset, node_id, node_level
             )
+        except Exception as e:
+            raise e
 
         if 'get_meta' in kwargs and kwargs['get_meta'] == False:
             return subsets

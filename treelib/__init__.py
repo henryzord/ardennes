@@ -1,7 +1,7 @@
 # coding=utf-8
 
 from graphical_model import *
-from classes import AbstractTree, type_check, value_check
+from classes import type_check, value_check
 from individual import Individual
 from sklearn.tree.tree import DecisionTreeClassifier
 
@@ -12,6 +12,7 @@ import os
 import numpy as np
 import pandas
 import csv
+import copy
 
 __author__ = 'Henry Cagnini'
 
@@ -46,14 +47,13 @@ def get_max_height(train_set, random_state=None):
         raise ve
 
 
-class Ardennes(AbstractTree):
+class Ardennes(object):
     gm = None
 
     def __init__(self,
                  n_individuals=100, n_iterations=100, uncertainty=0.01,
                  decile=0.9, max_height=3, distribution='multivariate',
-                 class_probability='declining', **kwargs
-                 ):
+                 class_probability='declining'):
         """
         Default EDA class, with common code to all EDAs -- regardless
         of the complexity of inner GMs or updating techniques.
@@ -68,19 +68,37 @@ class Ardennes(AbstractTree):
             how much of it must be resampled for the next generation. For example, if decile=0.9, then 10% of the
             population will be used for GM updating and 90% will be resampled.
         """
-        super(Ardennes, self).__init__(**kwargs)
-
         self.n_individuals = n_individuals
-        self.n_iterations = n_iterations
-        self.uncertainty = uncertainty
         self.decile = decile
+        self.uncertainty = uncertainty
+
+        self.max_height = max_height
+        self.distribution = distribution
+        self.n_iterations = n_iterations
 
         self.trained = False
         self.best_individual = None
         self.last_population = None
-        self.max_height = max_height
-        self.distribution = distribution
+
         self.class_probability = class_probability
+
+        self.pred_attr = None
+        self.target_attr = None
+        self.class_labels = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        GraphicalModel.clean()
+        Individual.clean()
+        self.clean()
+
+    @classmethod
+    def clean(cls):
+        cls.pred_attr = None
+        cls.target_attr = None
+        cls.class_labels = None
 
     def fit(self, train, val=None, verbose=True, output_path=None, **kwargs):
         def __treat__(_train, _val, _test=None):
@@ -133,14 +151,21 @@ class Ardennes(AbstractTree):
         t1 = dt.now()  # starts measuring time
 
         gm = GraphicalModel(
+            pred_attr=self.pred_attr,
+            target_attr=self.target_attr,
+            class_labels=self.class_labels,
             max_depth=self.max_height - 1,  # since last level must be all leafs
-            distribution=self.distribution,
-            class_probability=self.class_probability,
-            **class_values
+            distribution=self.distribution
         )
 
-        sample_func = np.vectorize(Individual, excluded=['graphical_model', 'max_height', 'sets'])
-        population = sample_func(ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets)
+        sample_func = np.vectorize(
+            Individual,
+            excluded=['graphical_model', 'max_height', 'sets', 'pred_attr', 'target_attr', 'class_labels']
+        )
+        population = sample_func(
+            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets,
+            pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
+        )
 
         fitness = np.array([x.fitness for x in population])
 
@@ -169,7 +194,8 @@ class Ardennes(AbstractTree):
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets
+                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets,
+                    pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
             # if len(to_replace_index) > 1:
@@ -195,6 +221,7 @@ class Ardennes(AbstractTree):
 
             iteration += 1
 
+        self.gm = gm
         self.best_individual = np.argmax(fitness)
         self.last_population = population
         self.trained = True

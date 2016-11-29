@@ -14,24 +14,6 @@ class SetterClass(object):
             setattr(cls, k, v)
 
 
-class AbstractTree(object):
-    pred_attr = None
-    target_attr = None
-    class_labels = None
-    
-    def __init__(self, **kwargs):
-        attrs = ['pred_attr', 'target_attr', 'class_labels']
-        
-        for k in attrs:
-            if k in kwargs and getattr(self.__class__.__base__, k) is None:
-                setattr(self.__class__.__base__, k, kwargs[k])
-            else:
-                setattr(self, k, getattr(self.__class__.__base__, k))
-
-    def plot(self):
-        pass
-
-
 def type_check(var, val):
     """
     Checks the type of var (i.e, checks if var is in val). Raises an exception otherwise.

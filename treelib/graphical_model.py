@@ -4,14 +4,13 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from treelib.classes import AbstractTree
 from treelib.variable import Variable
 from node import *
 
 __author__ = 'Henry Cagnini'
 
 
-class GraphicalModel(AbstractTree):
+class GraphicalModel(object):
     """
         A graphical model is a tree itself.
     """
@@ -19,15 +18,23 @@ class GraphicalModel(AbstractTree):
     attributes = None  # tensor is a dependency graph
     
     def __init__(
-            self, max_depth=3, distribution='multivariate', **kwargs
+            self, pred_attr, target_attr, class_labels, max_depth=3, distribution='multivariate'
     ):
-        super(GraphicalModel, self).__init__(**kwargs)
 
+        self.class_labels = class_labels
+        self.pred_attr = pred_attr
+        self.target_attr = target_attr
         self.distribution = distribution
         self.max_depth = max_depth
 
         self.attributes = self.__init_attributes__(max_depth, distribution)
-    
+
+    @classmethod
+    def clean(cls):
+        cls.pred_attr = None
+        cls.target_attr = None
+        cls.class_labels = None
+
     def __init_attributes__(self, max_depth, distribution='univariate'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
