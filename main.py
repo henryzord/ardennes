@@ -1,7 +1,6 @@
 # coding=utf-8
 import json
 import random
-import shutil
 import warnings
 
 from datetime import datetime as dt
@@ -15,6 +14,8 @@ from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
 from treelib import get_max_height
 import pandas as pd
+
+from multiprocessing import Process, Manager
 
 __author__ = 'Henry Cagnini'
 
@@ -49,12 +50,13 @@ def get_baseline_algorithms(names):
     return algorithms
 
 
-def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file):
+def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
     tree_height = __get_tree_height__(train_s, **config_file)
 
     t1 = dt.now()
 
     _test_acc = -1.
+
     with Ardennes(
         n_individuals=config_file['n_individuals'],
         decile=config_file['decile'],
@@ -69,7 +71,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file):
             test=test_s,
             verbose=config_file['verbose'],
             dataset_name=config_file['dataset_name'],
-            output_path=config_file['output_path'] if config_file['save_metadata'] else None,
+            output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
             run=n_run
         )
@@ -81,6 +83,9 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file):
     print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
         n_run, n_fold, _test_acc, (t2 - t1).total_seconds()
     )
+
+    if 'dict_manager' in kwargs:
+        kwargs['dict_manager'][n_fold] = _test_acc
 
     return _test_acc
 
@@ -110,6 +115,15 @@ def run_batch(train_s, val_s, test, **kwargs):
 
 
 def do_train(config_file, n_run, evaluation_mode='cross-validation'):
+    """
+
+
+    :param config_file:
+    :param n_run:
+    :param evaluation_mode:
+    :return:
+    """
+
     assert evaluation_mode in ['cross-validation', 'holdout'], \
         ValueError('evaluation_mode must be either \'cross-validation\' or \'holdout!\'')
 
@@ -135,13 +149,25 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
         folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
 
-        for i, (train_s, val_s, test_s) in enumerate(folds):
-            print 'Running fold %d for dataset %s' % (i, dataset_name)
-            result_dict['folds'][str(i)] = run_fold(
-                n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
-                test_s=test_s, config_file=config_file
-            )
+        manager = Manager()
+        dict_manager = manager.dict()
 
+        processes = []
+
+        for i, (train_s, val_s, test_s) in enumerate(folds):
+            p = Process(
+                target=run_fold, kwargs=dict(
+                    n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
+                    test_s=test_s, config_file=config_file, dict_manager=dict_manager
+                )
+            )
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+
+        result_dict['folds'] = dict(dict_manager)
         return result_dict
 
     else:
@@ -156,27 +182,42 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
 def crunch_data(results_file):
 
-    n_folds = len(results_file.keys())
-    algorithms = results_file[str(0)].keys()
-    n_algorithms = len(algorithms)
-    # n_runs = len(results_file[str(0)][algorithms[0]])
+    n_runs = len(results_file['runs'].keys())
+    some_run = results_file['runs'].keys()[0]
+    some_dataset = results_file['runs'][some_run].keys()[0]
+    n_datasets = len(results_file['runs'][some_run].keys())
+    n_folds = len(results_file['runs'][some_run][some_dataset]['folds'].keys())
 
-    df = pd.DataFrame(columns=['algorithm', 'fold', 'acc mean', 'acc std'], index=np.arange(n_algorithms * n_folds))
+    df = pd.DataFrame(
+        columns=['run', 'dataset', 'fold', 'acc'],
+        index=np.arange(n_runs * n_datasets * n_folds)
+    )
 
     count_row = 0
-    for n_fold, fold in results_file.iteritems():
-        for alg, vec in fold.iteritems():
-            acc_mean = np.mean(vec)
-            acc_std = np.std(vec)
+    for n_run, run in results_file['runs'].iteritems():
+        for dataset_name, dataset in run.iteritems():
+            for n_fold, acc in dataset['folds'].iteritems():
+                df.loc[count_row] = [int(n_run), str(dataset_name), int(n_fold), float(acc)]
+                count_row += 1
 
-            df.loc[count_row] = [alg, n_fold, acc_mean, acc_std]
-            count_row += 1
+    df['acc'] = df['acc'].astype(np.float32)
+    df['dataset'] = df['dataset'].astype(np.object)
+    df['run'] = df['run'].astype(np.int32)
+    df['fold'] = df['fold'].astype(np.int32)
 
-    print df
+    mean_acc = df.groupby(by=['dataset', 'fold'])['acc'].mean()
+    std_acc = df.groupby(by=['dataset', 'fold'])['acc'].std()
+
+    print '============= mean acc: ============='
+    print mean_acc
+    print '============= std acc: ============='
+    print std_acc
 
 if __name__ == '__main__':
     # _config_file = json.load(open('config.json', 'r'))
-    # do_train(_config_file, output_path='metadata', evaluation_mode='cross-validation', n_runs=1)
+    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode='cross-validation')
+    # for k, v in dict_results['folds'].iteritems():
+    #     print k, ':', v
 
-    _results_file = json.load(open('/home/henry/Desktop/[6 runs] balance-scale.json', 'r'))
+    _results_file = json.load(open('metadata/results.json', 'r'))
     crunch_data(_results_file)

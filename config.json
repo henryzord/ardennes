@@ -2,16 +2,15 @@
   "random_state": null,
   "n_individuals": 500,
   "n_iterations": 100,
-  "tree_height": null,
+  "tree_height": 6,
   "distribution": "univariate",
   "decile": 0.80,
   "uncertainty": 0.01,
   "train_size": 0.80,
   "n_runs": 10,
-  "ensemble": false,
   "verbose": false,
+  "ensemble": false,
   "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds",
-  "save_metadata": true,
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

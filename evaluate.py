@@ -137,21 +137,20 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 
             if output_path is not None:
                 config_file['output_path'] = dataset_output_path
-            # try:
-            dt_dict = do_train(
-                config_file=config_file,
-                evaluation_mode=validation_mode,
-                n_run=n_run
-            )
+            try:
+                dt_dict = do_train(
+                    config_file=config_file,
+                    evaluation_mode=validation_mode,
+                    n_run=n_run
+                )
 
-            dict_results['runs'][str(n_run)][dataset_name] = dt_dict
+                dict_results['runs'][str(n_run)][dataset_name] = dt_dict
 
-            json.dump(dict_results, open(os.path.join(output_path, 'all_results.json'), 'w'), indent=2)
-
-            # except Exception as e:
-            #     import warnings
-            #     warnings.warn('Exception found when running %s!' % dataset)
-            #     print(e.message, e.args)
+                json.dump(dict_results, open(os.path.join(output_path, 'results.json'), 'w'), indent=2)
+            except Exception as e:
+                import warnings
+                warnings.warn('Exception found when running %s!' % dataset)
+                print(e.message, e.args)
 
 
 if __name__ == '__main__':
