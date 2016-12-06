@@ -21,7 +21,7 @@ class Individual(object):
     column_types = None  # type: dict
     sets = None  # type: dict
     tree = None  # type: nx.DiGraph
-    val_acc = None  # type: float
+    acc = None  # type: float
     ind_id = None
 
     thresholds = dict()
@@ -83,7 +83,7 @@ class Individual(object):
         :rtype: float
         :return: Fitness of this individual.
         """
-        return self.val_acc
+        return self.acc
 
     def nodes_at_depth(self, depth):
         """
@@ -145,7 +145,7 @@ class Individual(object):
         return len(self.shortest_path[node_id]) - 1
 
     def __str__(self):
-        return 'fitness: %0.2f' % self.val_acc
+        return 'fitness: %0.2f' % self.acc
 
     def plot(self, savepath=None, test_set=None):
         """
@@ -189,7 +189,7 @@ class Individual(object):
         plt.text(
             0.8,
             0.94,
-            'val accuracy: %0.4f' % self.val_acc,
+            'val accuracy: %0.4f' % self.acc,
             fontsize=15,
             horizontalalignment='left',
             verticalalignment='center',
@@ -222,14 +222,8 @@ class Individual(object):
 
     def sample(self, graphical_model, sets):
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
-
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-
-        train_shape = self.sets['train'].shape[0]
-        val_shape = self.sets['val'].shape[0]
-
-        self.val_acc = ((self.validate(self.sets['train']) * train_shape) +
-                        (self.validate(self.sets['val']) * val_shape)) / float(train_shape + val_shape)
+        self.acc = (0.25 * self.validate(self.sets['train'])) + (0.75 * self.validate(self.sets['val']))
 
     def __set_tree__(self, graphical_model, train_set):
         tree = nx.DiGraph()

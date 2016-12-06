@@ -55,8 +55,6 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
 
     t1 = dt.now()
 
-    _test_acc = -1.
-
     with Ardennes(
         n_individuals=config_file['n_individuals'],
         decile=config_file['decile'],
@@ -88,30 +86,6 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
         kwargs['dict_manager'][n_fold] = _test_acc
 
     return _test_acc
-
-
-def run_batch(train_s, val_s, test, **kwargs):
-    tree_height = __get_tree_height__(train_s, **kwargs)
-
-    inst = Ardennes(
-        n_individuals=kwargs['n_individuals'],
-        decile=kwargs['decile'],
-        uncertainty=kwargs['uncertainty'],
-        max_height=tree_height,
-        distribution=kwargs['distribution'],
-        n_iterations=kwargs['n_iterations']
-    )
-
-    inst.fit(
-        train=train_s,
-        val=val_s,
-        test=test,
-        verbose=kwargs['verbose'],
-        output_path=kwargs['output_file'] if kwargs['save_metadata'] else None
-    )
-
-    test_acc = inst.validate(test, ensemble=kwargs['ensemble'])
-    print 'Test accuracy: %0.2f' % test_acc
 
 
 def do_train(config_file, n_run, evaluation_mode='cross-validation'):
@@ -171,13 +145,10 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         return result_dict
 
     else:
-        raise NotImplementedError('not implemented yet!')
-
         train_s, val_s, test_s = get_batch(
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
-
-        run_batch(train_s=train_s, val_s=val_s, test=test_s, **config_file)
+        run_fold(n_fold=0, n_run=0, train_s=train_s, val_s=val_s, test_s=test_s, config_file=config_file)
 
 
 def crunch_accuracy(results_file, output_file=None):
@@ -220,49 +191,57 @@ def crunch_accuracy(results_file, output_file=None):
 
 
 def crunch_ensemble(path_results):
-    def is_csv(_f):
-        return _f.split('.')[-1] == 'csv'
-
-    def get_heights(_f):
-        fpcsv = os.path.join(fp, _f)
-
-        try:
-            df = pd.read_csv(fpcsv, delimiter=',')
-            l_heights = df.loc[(df['iteration'] == df['iteration'].max())]
-            l_heights = l_heights.loc[l_heights['test accuracy'] == l_heights['test accuracy'].max()]['tree height']
-            return l_heights
-        except KeyError:
-            df = pd.read_csv(fpcsv, delimiter=',', names=['individual','iteration','validation accuracy', 'tree height', 'test accuracy'])
-            l_heights = df.loc[(df['iteration'] == df['iteration'].max())]
-            l_heights = l_heights.loc[l_heights['test accuracy'] == l_heights['test accuracy'].max()]['tree height']
-            return l_heights
-
-    heights = []
-
-    dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
-
-    for dir in dirs:
-        fp = os.path.join(path_results, dir)
-        csv_files = [f for f in os.listdir(fp) if is_csv(f)]
-        for csv_f in csv_files:
-            heights.extend(get_heights(csv_f))
-
     from matplotlib import pyplot as plt
 
-    n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
+    def best_tree_height(_dirs):
+        def is_csv(_f):
+            return _f.split('.')[-1] == 'csv'
 
-    plt.xlabel('Heights')
-    plt.ylabel('Quantity')
-    # plt.axis([40, 160, 0, 0.03])
-    plt.grid(True)
+        def get_heights(_f):
+            def proper_get(df):
+                _h = df.loc[(df['iteration'] == df['iteration'].max())]
+                _h = _h.loc[_h['test accuracy'] == _h['test accuracy'].max()]['tree height']
+                return _h
 
+            fpcsv = os.path.join(fp, _f)
+
+            df = pd.read_csv(fpcsv, delimiter=',')
+            if 'iteration' not in df.columns:
+                df = pd.read_csv(fpcsv, delimiter=',',
+                                 names=['individual', 'iteration', 'validation accuracy', 'tree height',
+                                        'test accuracy'])
+            l_heights = proper_get(df)
+            return l_heights
+
+        heights = []
+
+        for dir in _dirs:
+            fp = os.path.join(path_results, dir)
+            csv_files = [f for f in os.listdir(fp) if is_csv(f)]
+            for csv_f in csv_files:
+                heights.extend(get_heights(csv_f))
+
+        plt.figure()
+
+        n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
+
+        plt.xlabel('Heights')
+        plt.ylabel('Quantity')
+        plt.title('heights')
+        plt.grid(True)
+
+    dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
+    best_tree_height(dirs)
     plt.show()
 
 if __name__ == '__main__':
-    _config_file = json.load(open('config.json', 'r'))
-    dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode='cross-validation')
-    for k, v in dict_results['folds'].iteritems():
-        print k, ':', v
+    # _config_file = json.load(open('config.json', 'r'))
+    # evaluation_mode = 'cross-validation'
+    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
+    #
+    # if evaluation_mode == 'cross-validation':
+    #     for k, v in dict_results['folds'].iteritems():
+    #         print k, ':', v
 
     # --------------------------------------------------- #
 
@@ -273,5 +252,5 @@ if __name__ == '__main__':
 
     # --------------------------------------------------- #
 
-    # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
-    # crunch_ensemble(_results_path)
+    _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
+    crunch_ensemble(_results_path)

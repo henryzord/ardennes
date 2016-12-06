@@ -84,12 +84,12 @@ class Variable(SetterClass):
 
         try:
             value = np.random.choice(a=a, p=p)
-        except RuntimeWarning:
+        except RuntimeWarning as rw:
             print 'values:', a
             print 'probs:', p
-            value = np.random.choice(a=a, p=p)
+            raise rw
         # ----------------------- #
 
-        warnings.filterwarnings('warn')
+        warnings.filterwarnings('default')
 
         return value

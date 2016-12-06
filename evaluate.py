@@ -150,7 +150,7 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 
                 dict_results['runs'][str(n_run)][dataset_name] = dt_dict
 
-                json.dump(dict_results, open(os.path.join(output_path, '700i_100g_7h_80d.json'), 'w'), indent=2)
+                json.dump(dict_results, open(os.path.join(output_path, 'results.json'), 'w'), indent=2)
             except Exception as e:
                 import warnings
                 warnings.warn('Exception found when running %s!' % dataset)
@@ -158,7 +158,7 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 
 
 if __name__ == '__main__':
-    _datasets_path = 'datasets/numerical'
+    _datasets_path = 'datasets/subsample'
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
