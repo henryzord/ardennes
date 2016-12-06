@@ -6,6 +6,7 @@ import itertools as it
 
 from treelib.classes import SetterClass
 from treelib.node import *
+import warnings
 
 __author__ = 'Henry Cagnini'
 
@@ -79,6 +80,16 @@ class Variable(SetterClass):
 
         a, p = (weights[self.name], weights['probability'])
 
-        value = np.random.choice(a=a, p=p)
+        warnings.filterwarnings('error')
+
+        try:
+            value = np.random.choice(a=a, p=p)
+        except RuntimeWarning:
+            print 'values:', a
+            print 'probs:', p
+            value = np.random.choice(a=a, p=p)
         # ----------------------- #
+
+        warnings.filterwarnings('warn')
+
         return value

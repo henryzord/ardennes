@@ -180,7 +180,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         run_batch(train_s=train_s, val_s=val_s, test=test_s, **config_file)
 
 
-def crunch_data(results_file):
+def crunch_accuracy(results_file, output_file=None):
 
     n_runs = len(results_file['runs'].keys())
     some_run = results_file['runs'].keys()[0]
@@ -200,24 +200,78 @@ def crunch_data(results_file):
                 df.loc[count_row] = [int(n_run), str(dataset_name), int(n_fold), float(acc)]
                 count_row += 1
 
-    df['acc'] = df['acc'].astype(np.float32)
+    df['acc'] = df['acc'].astype(np.float)
     df['dataset'] = df['dataset'].astype(np.object)
-    df['run'] = df['run'].astype(np.int32)
-    df['fold'] = df['fold'].astype(np.int32)
+    df['run'] = df['run'].astype(np.int)
+    df['fold'] = df['fold'].astype(np.int)
 
-    mean_acc = df.groupby(by=['dataset', 'fold'])['acc'].mean()
-    std_acc = df.groupby(by=['dataset', 'fold'])['acc'].std()
+    grouped = df.groupby(by=['dataset', 'fold'])
 
-    print '============= mean acc: ============='
-    print mean_acc
-    print '============= std acc: ============='
-    print std_acc
+    mean_acc = grouped['acc'].mean()
+    std_acc = grouped['acc'].std()
+
+    summ = pd.DataFrame(mean_acc)
+    summ['std'] = std_acc
+
+    print summ
+
+    if output_file is not None:
+        summ.to_csv(output_file, sep=',', quotechar='\"')
+
+
+def crunch_ensemble(path_results):
+    def is_csv(_f):
+        return _f.split('.')[-1] == 'csv'
+
+    def get_heights(_f):
+        fpcsv = os.path.join(fp, _f)
+
+        try:
+            df = pd.read_csv(fpcsv, delimiter=',')
+            l_heights = df.loc[(df['iteration'] == df['iteration'].max())]
+            l_heights = l_heights.loc[l_heights['test accuracy'] == l_heights['test accuracy'].max()]['tree height']
+            return l_heights
+        except KeyError:
+            df = pd.read_csv(fpcsv, delimiter=',', names=['individual','iteration','validation accuracy', 'tree height', 'test accuracy'])
+            l_heights = df.loc[(df['iteration'] == df['iteration'].max())]
+            l_heights = l_heights.loc[l_heights['test accuracy'] == l_heights['test accuracy'].max()]['tree height']
+            return l_heights
+
+    heights = []
+
+    dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
+
+    for dir in dirs:
+        fp = os.path.join(path_results, dir)
+        csv_files = [f for f in os.listdir(fp) if is_csv(f)]
+        for csv_f in csv_files:
+            heights.extend(get_heights(csv_f))
+
+    from matplotlib import pyplot as plt
+
+    n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
+
+    plt.xlabel('Heights')
+    plt.ylabel('Quantity')
+    # plt.axis([40, 160, 0, 0.03])
+    plt.grid(True)
+
+    plt.show()
 
 if __name__ == '__main__':
-    # _config_file = json.load(open('config.json', 'r'))
-    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode='cross-validation')
-    # for k, v in dict_results['folds'].iteritems():
-    #     print k, ':', v
+    _config_file = json.load(open('config.json', 'r'))
+    dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode='cross-validation')
+    for k, v in dict_results['folds'].iteritems():
+        print k, ':', v
 
-    _results_file = json.load(open('metadata/results.json', 'r'))
-    crunch_data(_results_file)
+    # --------------------------------------------------- #
+
+    # _results_file = json.load(
+    #     open('/home/henry/Projects/ardennes/past_runs/[10 runs 10 folds] ardennes/700i_100g_7h_80d.json', 'r')
+    # )
+    # crunch_accuracy(_results_file, output_file='ardennes_results.csv')
+
+    # --------------------------------------------------- #
+
+    # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
+    # crunch_ensemble(_results_path)

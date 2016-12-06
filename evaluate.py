@@ -102,6 +102,10 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
     np.random.shuffle(datasets)  # everyday I'm shuffling
 
     config_file = json.load(open('config.json', 'r'))
+
+    print 'configuration file:'
+    print config_file
+
     n_runs = config_file['n_runs']
 
     # --------------------------------------------------- #
@@ -146,7 +150,7 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 
                 dict_results['runs'][str(n_run)][dataset_name] = dt_dict
 
-                json.dump(dict_results, open(os.path.join(output_path, 'results.json'), 'w'), indent=2)
+                json.dump(dict_results, open(os.path.join(output_path, '700i_100g_7h_80d.json'), 'w'), indent=2)
             except Exception as e:
                 import warnings
                 warnings.warn('Exception found when running %s!' % dataset)
