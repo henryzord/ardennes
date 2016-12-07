@@ -198,26 +198,10 @@ class Ardennes(object):
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
-            # if len(to_replace_index) > 1:
-            #     to_replace_before = [to_replace_index[i] for i in xrange(len(to_replace_index)/2)]
-            #     to_replace_after = [to_replace_index[i] for i in xrange(len(to_replace_index) / 2, len(to_replace_index))]
-            #
-            #     population[to_replace_before] = sample_func(
-            #         ind_id=to_replace_before, graphical_model=gm, max_height=self.max_height, sets=sets
-            #     )
-            #
-            #     gm.update(fittest_pop)
-            #
-            #     population[to_replace_after] = sample_func(
-            #         ind_id=to_replace_after, graphical_model=gm, max_height=self.max_height, sets=sets
-            #     )
-            # else:
-            #     gm.update(fittest_pop)
-
-            if self.__early_stop__(gm, self.uncertainty):
-                break
-
             fitness = np.array([x.fitness for x in population])
+
+            if self.__early_stop__(fitness, self.uncertainty):
+                break
 
             iteration += 1
 
@@ -373,24 +357,5 @@ class Ardennes(object):
             )
 
     @staticmethod
-    def __early_stop__(gm, uncertainty=0.01):
-        """
-
-        :type gm: treelib.graphical_model.GraphicalModel
-        :param gm: The Probabilistic Graphical Model (GM) for the current generation.
-        :type uncertainty: float
-        :param uncertainty: Maximum allowed uncertainty for each probability, for each node.
-        :return:
-        """
-
-        should_stop = True
-        for tensor in gm.attributes:
-            weights = tensor.weights
-            upper = abs(1. - weights['probability'].max())
-            lower = weights['probability'].min()
-
-            if upper > uncertainty or lower > uncertainty:
-                should_stop = False
-                break
-
-        return should_stop
+    def __early_stop__(fitness, uncertainty):
+        return abs(fitness.min() - fitness.max()) < uncertainty

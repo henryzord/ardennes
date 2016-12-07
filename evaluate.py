@@ -97,7 +97,7 @@ def evaluate_j48(datasets_path, folds_path):
             pass
 
 
-def evaluate_several(datasets_path, output_path, validation_mode='cross-validation', n_jobs=2):
+def evaluate_ardennes(datasets_path, output_path, validation_mode='cross-validation'):
     datasets = os.listdir(datasets_path)
     np.random.shuffle(datasets)  # everyday I'm shuffling
 
@@ -122,8 +122,6 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
             else:
                 shutil.rmtree(dataset_output_path)
                 os.mkdir(dataset_output_path)
-        else:
-            dataset_output_path = None
     # --------------------------------------------------- #
     # end of {removes previous results, create folders}
     # --------------------------------------------------- #
@@ -158,16 +156,15 @@ def evaluate_several(datasets_path, output_path, validation_mode='cross-validati
 
 
 if __name__ == '__main__':
-    _datasets_path = 'datasets/subsample'
+    _datasets_path = 'datasets/numerical'
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
 
-    evaluate_several(
+    evaluate_ardennes(
         datasets_path=_datasets_path,
         output_path=_output_path,
-        validation_mode=_validation_mode,
-        n_jobs=2
+        validation_mode=_validation_mode
     )
 
     # evaluate_j48(_datasets_path, _folds_path)

@@ -51,6 +51,17 @@ def get_baseline_algorithms(names):
 
 
 def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
+    try:
+        random_state = kwargs['random_state']
+    except KeyError:
+        random_state = None
+
+    if random_state is not None:
+        warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
+
+    random.seed(random_state)
+    np.random.seed(random_state)
+
     tree_height = __get_tree_height__(train_s, **config_file)
 
     t1 = dt.now()
@@ -91,7 +102,6 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
 def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     """
 
-
     :param config_file:
     :param n_run:
     :param evaluation_mode:
@@ -107,12 +117,6 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
-
-    if random_state is not None:
-        warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
-
-        random.seed(random_state)
-        np.random.seed(random_state)
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -132,7 +136,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             p = Process(
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
-                    test_s=test_s, config_file=config_file, dict_manager=dict_manager
+                    test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state
                 )
             )
             p.start()
@@ -148,7 +152,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         train_s, val_s, test_s = get_batch(
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
-        run_fold(n_fold=0, n_run=0, train_s=train_s, val_s=val_s, test_s=test_s, config_file=config_file)
+        run_fold(n_fold=0, n_run=0, train_s=train_s, val_s=val_s, test_s=test_s, config_file=config_file, random_state=random_state)
 
 
 def crunch_accuracy(results_file, output_file=None):
@@ -235,13 +239,13 @@ def crunch_ensemble(path_results):
     plt.show()
 
 if __name__ == '__main__':
-    # _config_file = json.load(open('config.json', 'r'))
-    # evaluation_mode = 'cross-validation'
-    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
-    #
-    # if evaluation_mode == 'cross-validation':
-    #     for k, v in dict_results['folds'].iteritems():
-    #         print k, ':', v
+    _config_file = json.load(open('config.json', 'r'))
+    evaluation_mode = 'holdout'
+    dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
+
+    if evaluation_mode == 'cross-validation':
+        for k, v in dict_results['folds'].iteritems():
+            print k, ':', v
 
     # --------------------------------------------------- #
 
@@ -252,5 +256,5 @@ if __name__ == '__main__':
 
     # --------------------------------------------------- #
 
-    _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
-    crunch_ensemble(_results_path)
+    # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
+    # crunch_ensemble(_results_path)

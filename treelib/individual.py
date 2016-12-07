@@ -223,7 +223,13 @@ class Individual(object):
     def sample(self, graphical_model, sets):
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-        self.acc = (0.25 * self.validate(self.sets['train'])) + (0.75 * self.validate(self.sets['val']))
+
+        n_train = self.sets['train'].shape[0]
+        n_val = self.sets['val'].shape[0]
+        _sum = n_train + n_val
+
+        self.acc = (0.5 * self.validate(self.sets['train'])) + \
+                   (0.5 * self.validate(self.sets['val']))
 
     def __set_tree__(self, graphical_model, train_set):
         tree = nx.DiGraph()
