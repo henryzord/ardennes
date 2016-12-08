@@ -224,10 +224,6 @@ class Individual(object):
         self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        n_train = self.sets['train'].shape[0]
-        n_val = self.sets['val'].shape[0]
-        _sum = n_train + n_val
-
         self.acc = (0.5 * self.validate(self.sets['train'])) + \
                    (0.5 * self.validate(self.sets['val']))
 

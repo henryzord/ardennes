@@ -4,7 +4,8 @@
 metadata/*
 
 # folders
-datasets/testzilla/
+datasets/subsample
+intermediary
 
 # Distribution / packaging
 .Python
