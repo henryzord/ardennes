@@ -6,6 +6,7 @@ import pandas as pd
 
 from treelib.variable import Variable
 from node import *
+import warnings
 
 __author__ = 'Henry Cagnini'
 
@@ -49,20 +50,49 @@ class GraphicalModel(object):
                 raise ValueError('Distribution must be either \'multivariate\', \'bivariate\' or \'univariate\'!')
             return parents
 
-        sample_values = self.pred_attr + [self.target_attr]
+        def set_probability(column):
+            # class attribute is the last one
+            n_attributes = column.index.shape[0]
+
+            depth = get_depth(column.name)
+
+            # class_prob = (1. / (max_depth + 1)) * float(depth)  # linear progression
+            class_prob = 2. ** depth / 2. ** (max_depth + 1)  # power of 2 progression
+            pred_prob = (1. - class_prob) / (n_attributes - 1.)
+
+            column[-1] = class_prob
+            column[:-1] = pred_prob
+
+            rest = abs(column.values.sum() - 1.)
+            column[np.random.randint(0, n_attributes)] += rest
+
+            return column
 
         n_variables = get_total_nodes(max_depth)
 
-        attributes = map(
-            lambda i: Variable(
-                name=i,
-                values=sample_values,
-                parents=get_parents(i, distribution),
-                max_depth=max_depth,
-                target_attr=self.target_attr  # kwargs
-            ),
-            xrange(n_variables)
-        )
+        warnings.warn('WARNING: using a single pandas.DataFrame for attributes!')
+
+        attributes = pd.DataFrame(
+            index=self.pred_attr + [self.target_attr], columns=range(n_variables)
+        ).apply(set_probability, axis=0)
+
+        # sample_values = self.pred_attr + [self.target_attr]
+        #
+        # # TODO reduce!
+        #
+        # warnings.warn('WARNING: not using a linear progression!')
+        # class_prob = 2. ** depth / 2. ** (max_depth + 1)  # power of 2 progression
+
+        # attributes = map(
+        #     lambda i: Variable(
+        #         name=i,
+        #         values=sample_values,
+        #         parents=get_parents(i, distribution),
+        #         max_depth=max_depth,
+        #         target_attr=self.target_attr  # kwargs
+        #     ),
+        #     xrange(n_variables)
+        # )
         
         return attributes
     
@@ -116,9 +146,9 @@ class GraphicalModel(object):
         #         print attr.name, attr.weights.values.ravel()
 
     def sample(self, node_id, level, parent_labels=None, enforce_nonterminal=False):
-        value = self.attributes[node_id].get_value(parent_labels=parent_labels)
+        value = np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])
         if enforce_nonterminal:
             while value == self.target_attr:
-                value = self.attributes[node_id].get_value(parent_labels=parent_labels)
+                value = np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])
 
         return value

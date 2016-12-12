@@ -264,11 +264,11 @@ class Individual(object):
         # then set this as a terminal node
         try:
             label = graphical_model.sample(node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
-        except IndexError as ie:
+        except KeyError as ke:
             if level >= self.max_height:
                 label = self.target_attr
             else:
-                raise ie
+                raise ke
 
         if any((
             subset.empty,
