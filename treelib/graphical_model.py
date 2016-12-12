@@ -115,35 +115,29 @@ class GraphicalModel(object):
             return label
 
         if self.distribution == 'univariate':
-            for attr in self.attributes:
 
-                weights = attr.weights
-
-                labels = [get_label(fit, attr.name) for fit in fittest]
+            def local_update(column):
+                labels = [get_label(fit, column.name) for fit in fittest]
                 labels = [x for x in labels if x is not None]
-                # TODO remove all nones!
 
                 if len(labels) > 0:
-                    weights['probability'] = 0.
-
                     count = Counter(labels)
+                    column[:] = 0.
                     for k, v in count.iteritems():
-                        weights.loc[weights[attr.name] == k, 'probability'] = v
+                        column[column.index == k] = v
 
-                    weights['probability'] /= float(weights['probability'].sum())
-                    rest = abs(weights['probability'].sum() - 1.)
-                    weights.loc[np.random.choice(weights.index), 'probability'] += rest
+                    column /= float(column.sum())
+                    rest = abs(column.sum() - 1.)
+                    column[np.random.choice(column.index)] += rest
 
-                    attr.weights = weights
+                return column
+
+            self.attributes = self.attributes.apply(local_update, axis=0)
 
         elif self.distribution == 'multivariate':
             raise NotImplementedError('not implemented yet!')
         elif self.distribution == 'bivariate':
             raise NotImplementedError('not implemented yet!')
-
-        # for attr in self.attributes:
-        #     if attr.name == 29:
-        #         print attr.name, attr.weights.values.ravel()
 
     def sample(self, node_id, level, parent_labels=None, enforce_nonterminal=False):
         value = np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])
