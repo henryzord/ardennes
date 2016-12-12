@@ -1,4 +1,5 @@
 # coding=utf-8
+import warnings
 
 from graphical_model import *
 from classes import type_check, value_check
@@ -188,6 +189,8 @@ class Ardennes(object):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
             fittest_pop = population[fitness > borderline]
+            # to_replace_index = np.arange(self.n_individuals)
+            # warnings.warn('WARNING: replacing whole population!')
             to_replace_index = np.flatnonzero(fitness < borderline)
 
             gm.update(fittest_pop)
@@ -309,6 +312,7 @@ class Ardennes(object):
         iteration = kwargs['iteration']  # type: int
         fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
+        test_set = kwargs['test_set'] if 'test_set' in kwargs else None
 
         if 'output_path' in kwargs:
             if kwargs['output_path'] is not None and 'fold' in kwargs and 'run' in kwargs:
@@ -327,10 +331,9 @@ class Ardennes(object):
             median = np.median(fitness)  # type: float
             max_fitness = np.max(fitness)  # type: float
             elapsed_time = kwargs['elapsed_time']
+            best_test_fitness = population[np.argmax(fitness)].validate(test_set)
 
-            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %0.2fsec' % (
-                iteration, mean, median, max_fitness, elapsed_time
-            )
+            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %02.2fsec' % (iteration, mean, median, max_fitness, elapsed_time) + ' Max test: %0.6f' % best_test_fitness if test_set is not None else ''
 
         if output_file is not None:
             if iteration == 0:  # resets file
@@ -341,19 +344,19 @@ class Ardennes(object):
                 finally:
                     with open(output_file, 'w') as f:
                         csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                        add = [] if 'test_set' not in kwargs else ['test accuracy']
+                        add = [] if test_set is None else ['test accuracy']
 
                         csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + add)
 
             with open(output_file, 'a') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
                 for ind in population:
-                    add = [] if 'test_set' not in kwargs else [ind.validate(kwargs['test_set'])]
+                    add = [] if test_set is None else [ind.validate(test_set)]
                     csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height] + add)
 
             population[np.argmax(fitness)].plot(
                 savepath=output_file.split('.')[0].strip() + '.pdf',
-                test_set=kwargs['test_set'] if 'test_set' in kwargs else None
+                test_set=test_set
             )
 
     @staticmethod

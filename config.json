@@ -1,10 +1,10 @@
 {
   "random_state": null,
-  "n_individuals": 1000,
+  "n_individuals": 500,
   "n_iterations": 100,
   "tree_height": 8,
   "distribution": "univariate",
-  "decile": 0.80,
+  "decile": 0.75,
   "uncertainty": 0.001,
   "train_size": 0.80,
   "n_runs": 10,

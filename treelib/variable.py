@@ -53,10 +53,17 @@ class Variable(SetterClass):
 
         _slice = df.loc[df[self.name] == self.target_attr]
         depth = get_depth(self.name)
-        class_prob = (1. / (max_depth + 1)) * float(depth)
+
+        # TODO reduce!
+
+        warnings.warn('WARNING: not using a linear progression!')
+        class_prob = 2.**depth / 2.**(max_depth + 1)  # power of 2 progression
+        # class_prob = (depth**2.)/(max_depth + 1)**2. # squared progression
+        # class_prob = (1. / (max_depth + 1)) * float(depth)  # linear progression
+        # print 'class prob at depth %d: %f' % (depth, class_prob)
         slice_prob = class_prob / _slice.shape[0]
 
-        pred_prob = (1. - class_prob) / (df.shape[0] - _slice.shape[0])
+        pred_prob = (1. - class_prob) / (df.shape[0] - _slice.shape[0])  # probability for each one of the attributes
 
         df['probability'] = pred_prob
         df.loc[_slice.index, 'probability'] = slice_prob

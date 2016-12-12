@@ -180,18 +180,26 @@ def crunch_accuracy(results_file, output_file=None):
     df['run'] = df['run'].astype(np.int)
     df['fold'] = df['fold'].astype(np.int)
 
-    grouped = df.groupby(by=['dataset', 'fold'])
+    grouped1 = df.groupby(by=['dataset', 'fold'])
 
-    mean_acc = grouped['acc'].mean()
-    std_acc = grouped['acc'].std()
+    temp_mean_acc = grouped1['acc'].mean()
+    temp_std_acc = grouped1['acc'].std()
 
-    summ = pd.DataFrame(mean_acc)
-    summ['std'] = std_acc
+    temp = pd.DataFrame(temp_mean_acc)
+    temp['std'] = temp_std_acc
+    temp['dataset'] = [x[0] for x in temp.index]
 
-    print summ
+    grouped2 = temp.groupby(by='dataset')
+    acc = grouped2['acc'].mean()
+    std = grouped2['acc'].std()
+
+    final = pd.DataFrame(acc)
+    final['std'] = std
+
+    print final
 
     if output_file is not None:
-        summ.to_csv(output_file, sep=',', quotechar='\"')
+        grouped2.to_csv(output_file, sep=',', quotechar='\"')
 
 
 def crunch_ensemble(path_results):
@@ -240,17 +248,20 @@ def crunch_ensemble(path_results):
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-    evaluation_mode = 'holdout'
+    evaluation_mode = 'cross-validation'
     dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
 
     if evaluation_mode == 'cross-validation':
+        accs = np.array(dict_results['folds'].values(), dtype=np.float32)
+
         for k, v in dict_results['folds'].iteritems():
             print k, ':', v
+        print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
 
     # --------------------------------------------------- #
 
     # _results_file = json.load(
-    #     open('/home/henry/Projects/ardennes/past_runs/[10 runs 10 folds] ardennes/700i_100g_7h_80d.json', 'r')
+    #     open('/home/henry/Desktop/[temp] results.json', 'r')
     # )
     # crunch_accuracy(_results_file, output_file='ardennes_results.csv')
 

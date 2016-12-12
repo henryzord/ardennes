@@ -3,6 +3,7 @@
 import collections
 import copy
 import itertools as it
+import warnings
 from collections import Counter
 
 import networkx as nx
@@ -230,7 +231,10 @@ class Individual(object):
     def __set_tree__(self, graphical_model, train_set):
         tree = nx.DiGraph()
 
-        subset = train_set
+        warnings.warn('WARNING: using a subset of train for induction!')
+        # subset = train_set
+
+        subset = train_set.loc[np.random.choice(train_set.index, size=train_set.shape[0]/2, replace=False)]
 
         tree = self.__set_node__(
             node_id=0,
