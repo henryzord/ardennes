@@ -53,15 +53,14 @@ class Individual(object):
 
         if Individual.column_types is None:
             Individual.column_types = {
-                x: self.raw_type_dict[str(sets['train'][x].dtype)] for x in sets['train'].columns
+                x: self.raw_type_dict[str(sets['loc_train_set'][x].dtype)] for x in sets['loc_train_set'].columns
                 }  # type: dict
             Individual.column_types['class'] = 'class'
         self.column_types = Individual.column_types
 
         self.max_height = max_height
 
-        self.sets = sets
-        self.sample(graphical_model, sets)
+        self.sample(graphical_model, sets['loc_train_set'], sets['loc_val_set'])
 
     @classmethod
     def clean(cls):
@@ -221,20 +220,13 @@ class Individual(object):
     # sampling and related methods #
     # ############################ #
 
-    def sample(self, graphical_model, sets):
-        self.tree = self.__set_tree__(graphical_model, sets['train'])  # type: nx.DiGraph
+    def sample(self, graphical_model, loc_train_set, loc_val_set):
+        self.tree = self.__set_tree__(graphical_model, loc_train_set)  # type: nx.DiGraph
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
+        self.acc = self.validate(loc_val_set)
 
-        self.acc = (0.5 * self.validate(self.sets['train'])) + \
-                   (0.5 * self.validate(self.sets['val']))
-
-    def __set_tree__(self, graphical_model, train_set):
+    def __set_tree__(self, graphical_model, subset):
         tree = nx.DiGraph()
-
-        warnings.warn('WARNING: using a subset of train for induction!')
-        # subset = train_set
-
-        subset = train_set.loc[np.random.choice(train_set.index, size=train_set.shape[0]/2, replace=False)]
 
         tree = self.__set_node__(
             node_id=0,

@@ -163,8 +163,9 @@ class Ardennes(object):
             Individual,
             excluded=['graphical_model', 'max_height', 'sets', 'pred_attr', 'target_attr', 'class_labels']
         )
+
         population = sample_func(
-            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets,
+            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=self.__get_local_sets__(sets),
             pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
         )
 
@@ -197,7 +198,7 @@ class Ardennes(object):
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=sets,
+                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=self.__get_local_sets__(sets),
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
@@ -212,6 +213,18 @@ class Ardennes(object):
         self.best_individual = np.argmax(fitness)
         self.last_population = population
         self.trained = True
+
+    def __get_local_sets__(self, sets):
+        warnings.warn('WARNING: using a subset of train for induction!')
+        train_set = sets['train']
+        val_set = sets['val']
+
+        train_train_index = np.random.choice(train_set.index, size=int(train_set.shape[0] * 0.5), replace=False)
+        train_test_index = list(set(train_set.index) - set(train_train_index))
+
+        cpy = val_set.append(train_set.loc[train_test_index])
+
+        return {'loc_train_set': train_set.loc[train_train_index], 'loc_val_set': cpy}
 
     def predict_proba(self, samples, ensemble=False):
         df = self.__to_dataframe__(samples)
