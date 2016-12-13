@@ -248,7 +248,7 @@ def crunch_ensemble(path_results):
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-    evaluation_mode = 'cross-validation'
+    evaluation_mode = 'holdout'
     dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
 
     if evaluation_mode == 'cross-validation':
