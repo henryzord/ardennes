@@ -53,14 +53,14 @@ class Individual(object):
 
         if Individual.column_types is None:
             Individual.column_types = {
-                x: self.raw_type_dict[str(sets['loc_train_set'][x].dtype)] for x in sets['loc_train_set'].columns
+                x: self.raw_type_dict[str(sets['train'][x].dtype)] for x in sets['train'].columns
                 }  # type: dict
             Individual.column_types['class'] = 'class'
         self.column_types = Individual.column_types
 
         self.max_height = max_height
 
-        self.sample(graphical_model, sets['loc_train_set'], sets['loc_val_set'])
+        self.sample(graphical_model, sets['train'], sets['val'])
 
     @classmethod
     def clean(cls):
@@ -315,10 +315,20 @@ class Individual(object):
         return tree
 
     def gain_ratio(self, subset, subset_left, subset_right, target_attr):
+        warnings.filterwarnings('error')
+
         ig = self.information_gain(subset, subset_left, subset_right, target_attr)
         si = self.__split_info__(subset, subset_left, subset_right)
 
-        gr = ig/si
+        try:
+            gr = ig/si
+        except RuntimeWarning as rw:
+            if si == 0:
+                gr = 0.
+            else:
+                raise rw
+
+        warnings.filterwarnings('default')
 
         return gr
 
@@ -327,7 +337,13 @@ class Individual(object):
         sum_term = 0.
         for child_subset in [subset_left, subset_right]:
             temp = (child_subset.shape[0] / float(subset.shape[0]))
-            sum_term += temp * np.log2(temp)
+            try:
+                sum_term += temp * np.log2(temp)
+            except RuntimeWarning as rw:
+                if temp == 0:
+                    pass
+                else:
+                    raise rw
 
         return -sum_term
 
@@ -500,14 +516,16 @@ class Individual(object):
                 node_label, best_threshold, subset, node_id, node_level
             )
         except KeyError as ke:
-            unique_vals = sorted(subset[node_label].unique())
+            unique_vals = [float(x) for x in sorted(subset[node_label].unique())]
+
             candidates = [
                 (unique_vals[i] + unique_vals[i + 1]) / 2.
                 if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
             ][:-1]
 
+            candidates += unique_vals
+
             best_threshold = -np.inf
-            # best_entropy = np.inf
             best_gr = -np.inf
             for cand in candidates:
                 gr = self.gain_ratio(
@@ -516,12 +534,9 @@ class Individual(object):
                     subset.loc[subset[node_label] >= cand],
                     self.target_attr
                 )
-                # entropy = self.__get_entropy__(node_label, cand, subset)
-                # if entropy < best_entropy:
                 if gr > best_gr:
                     best_gr = gr
                     best_threshold = cand
-                    # best_entropy = entropy
 
             self.__store_threshold__(node_label, subset, best_threshold)
 

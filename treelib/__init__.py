@@ -165,7 +165,7 @@ class Ardennes(object):
         )
 
         population = sample_func(
-            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=self.__get_local_sets__(sets),
+            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets,
             pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
         )
 
@@ -198,16 +198,26 @@ class Ardennes(object):
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height, sets=self.__get_local_sets__(sets),
+                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height,
+                    sets=self.__get_local_sets__(sets),
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
             fitness = np.array([x.fitness for x in population])
 
+            warnings.warn('WARNING: Plotting best individual!')
+            # TODO remove me!
+            population[np.argmax(fitness)].plot(savepath='/home/henry/Desktop/plots/%03.d.pdf' % iteration, test_set=sets['test'])
+
             if self.__early_stop__(fitness, self.uncertainty):
                 break
 
             iteration += 1
+
+        # self.best_individual = sample_func(
+        #     ind_id=0, graphical_model=gm, max_height=self.max_height, sets=sets,
+        #     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
+        # )
 
         self.gm = gm
         self.best_individual = np.argmax(fitness)
@@ -224,9 +234,11 @@ class Ardennes(object):
 
         cpy = val_set.append(train_set.loc[train_test_index])
 
-        return {'loc_train_set': train_set.loc[train_train_index], 'loc_val_set': cpy}
+        return {'train': train_set.loc[train_train_index], 'val': cpy}
 
     def predict_proba(self, samples, ensemble=False):
+        raise NotImplementedError('not implemented yet!')
+
         df = self.__to_dataframe__(samples)
 
         if not ensemble:
