@@ -155,7 +155,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         run_fold(n_fold=0, n_run=0, train_s=train_s, val_s=val_s, test_s=test_s, config_file=config_file, random_state=random_state)
 
 
-def crunch_accuracy(results_file, output_file=None):
+def crunch_result_file(results_file, output_file=None):
 
     n_runs = len(results_file['runs'].keys())
     some_run = results_file['runs'].keys()[0]
@@ -164,45 +164,37 @@ def crunch_accuracy(results_file, output_file=None):
     n_folds = len(results_file['runs'][some_run][some_dataset]['folds'].keys())
 
     df = pd.DataFrame(
-        columns=['run', 'dataset', 'fold', 'acc'],
+        columns=['run', 'dataset', 'fold', 'acc', 'height'],
         index=np.arange(n_runs * n_datasets * n_folds)
     )
 
     count_row = 0
     for n_run, run in results_file['runs'].iteritems():
         for dataset_name, dataset in run.iteritems():
-            for n_fold, acc in dataset['folds'].iteritems():
-                df.loc[count_row] = [int(n_run), str(dataset_name), int(n_fold), float(acc)]
+            for n_fold, v in dataset['folds'].iteritems():
+                acc = v['acc']
+                height = v['height']
+                df.loc[count_row] = [int(n_run), str(dataset_name), int(n_fold), float(acc), float(height)]
                 count_row += 1
 
     df['acc'] = df['acc'].astype(np.float)
     df['dataset'] = df['dataset'].astype(np.object)
     df['run'] = df['run'].astype(np.int)
     df['fold'] = df['fold'].astype(np.int)
+    df['height'] = df['height'].astype(np.float)
 
-    grouped1 = df.groupby(by=['dataset', 'fold'])
+    print df
 
-    temp_mean_acc = grouped1['acc'].mean()
-    temp_std_acc = grouped1['acc'].std()
-
-    temp = pd.DataFrame(temp_mean_acc)
-    temp['std'] = temp_std_acc
-    temp['dataset'] = [x[0] for x in temp.index]
-
-    grouped2 = temp.groupby(by='dataset')
-    acc = grouped2['acc'].mean()
-    std = grouped2['acc'].std()
-
-    final = pd.DataFrame(acc)
-    final['std'] = std
+    grouped = df.groupby(by=['dataset'])['acc', 'height']
+    final = grouped.aggregate([np.mean, np.std])
 
     print final
 
     if output_file is not None:
-        grouped2.to_csv(output_file, sep=',', quotechar='\"')
+        final.to_csv(output_file, sep=',', quotechar='\"')
 
 
-def crunch_ensemble(path_results):
+def crunch_population_data(path_results):
     from matplotlib import pyplot as plt
 
     def best_tree_height(_dirs):
@@ -247,23 +239,23 @@ def crunch_ensemble(path_results):
     plt.show()
 
 if __name__ == '__main__':
-    _config_file = json.load(open('config.json', 'r'))
-    evaluation_mode = 'holdout'
-    dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
-
-    if evaluation_mode == 'cross-validation':
-        accs = np.array(dict_results['folds'].values(), dtype=np.float32)
-
-        for k, v in dict_results['folds'].iteritems():
-            print k, ':', v
-        print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
+    # _config_file = json.load(open('config.json', 'r'))
+    # evaluation_mode = 'holdout'
+    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
+    #
+    # if evaluation_mode == 'cross-validation':
+    #     accs = np.array(dict_results['folds'].values(), dtype=np.float32)
+    #
+    #     for k, v in dict_results['folds'].iteritems():
+    #         print k, ':', v
+    #     print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
 
     # --------------------------------------------------- #
 
-    # _results_file = json.load(
-    #     open('/home/henry/Desktop/[temp] results.json', 'r')
-    # )
-    # crunch_accuracy(_results_file, output_file='ardennes_results.csv')
+    _results_file = json.load(
+        open('/home/henry/Projects/ardennes/metadata/past_runs/j48/j48_results.json', 'r')
+    )
+    crunch_result_file(_results_file, output_file='j48_results.csv')
 
     # --------------------------------------------------- #
 

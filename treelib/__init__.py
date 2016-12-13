@@ -52,8 +52,8 @@ class Ardennes(object):
     gm = None
 
     def __init__(self,
-                 n_individuals=100, n_iterations=100, uncertainty=0.01,
-                 decile=0.9, max_height=3, distribution='multivariate',
+                 n_individuals=100, n_iterations=100, uncertainty=0.001,
+                 decile=0.9, max_height=3, distribution='univariate',
                  class_probability='declining'):
         """
         Default EDA class, with common code to all EDAs -- regardless
@@ -73,7 +73,7 @@ class Ardennes(object):
         self.decile = decile
         self.uncertainty = uncertainty
 
-        self.max_height = max_height
+        self.D = max_height - 1
         self.distribution = distribution
         self.n_iterations = n_iterations
 
@@ -155,7 +155,7 @@ class Ardennes(object):
             pred_attr=self.pred_attr,
             target_attr=self.target_attr,
             class_labels=self.class_labels,
-            max_depth=self.max_height - 1,  # since last level must be all leafs
+            max_depth=self.D,  # since last level must be all leafs
             distribution=self.distribution
         )
 
@@ -165,7 +165,7 @@ class Ardennes(object):
         )
 
         population = sample_func(
-            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.max_height, sets=sets,
+            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.D, sets=sets,
             pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
         )
 
@@ -198,16 +198,16 @@ class Ardennes(object):
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, graphical_model=gm, max_height=self.max_height,
+                    ind_id=to_replace_index, graphical_model=gm, max_height=self.D,
                     sets=self.__get_local_sets__(sets),
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
             fitness = np.array([x.fitness for x in population])
 
-            warnings.warn('WARNING: Plotting best individual!')
-            # TODO remove me!
-            population[np.argmax(fitness)].plot(savepath='/home/henry/Desktop/plots/%03.d.pdf' % iteration, test_set=sets['test'])
+            # warnings.warn('WARNING: Plotting best individual!')
+            # # TODO remove me!
+            # population[np.argmax(fitness)].plot(savepath='/home/henry/Desktop/plots/%03.d.pdf' % iteration, test_set=sets['test'])
 
             if self.__early_stop__(fitness, self.uncertainty):
                 break
@@ -356,9 +356,10 @@ class Ardennes(object):
             median = np.median(fitness)  # type: float
             max_fitness = np.max(fitness)  # type: float
             elapsed_time = kwargs['elapsed_time']
-            best_test_fitness = population[np.argmax(fitness)].validate(test_set)
+            if test_set is not None:
+                best_test_fitness = population[np.argmax(fitness)].validate(test_set)
 
-            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %02.2fsec' % (iteration, mean, median, max_fitness, elapsed_time) + ' Max test: %0.6f' % best_test_fitness if test_set is not None else ''
+            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %02.2fsec' % (iteration, mean, median, max_fitness, elapsed_time) + (' Max test: %0.6f' % best_test_fitness if test_set is not None else '')
 
         if output_file is not None:
             if iteration == 0:  # resets file

@@ -129,7 +129,7 @@ class Individual(object):
                 self.tree.node[p]['label'] not in self.class_labels else
                 self.target_attr
             ) for p in parents
-        }
+            }
         return parent_labels
 
     def depth_of(self, node_id):
@@ -255,7 +255,9 @@ class Individual(object):
         # 2. there is only one class coming to this node;
         # then set this as a terminal node
         try:
-            label = graphical_model.sample(node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0))
+            label = graphical_model.sample(
+                node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0)
+            )
         except KeyError as ke:
             if level >= self.max_height:
                 label = self.target_attr
@@ -263,10 +265,10 @@ class Individual(object):
                 raise ke
 
         if any((
-            subset.empty,
-            subset[subset.columns[-1]].unique().shape[0] == 1,
-            level >= self.max_height,
-            label == self.target_attr
+                subset.empty,
+                subset[subset.columns[-1]].unique().shape[0] == 1,
+                level >= self.max_height,
+                label == self.target_attr
         )):
             meta, subset_left, subset_right = self.__set_terminal__(
                 node_label=None,
@@ -298,18 +300,32 @@ class Individual(object):
                         parent_labels=parent_labels + [label]
                     )
 
-                if isinstance(meta['threshold'], float):
-                    attr_dicts = [
-                        {'threshold': '< %0.2f' % meta['threshold']},
-                        {'threshold': '>= %0.2f' % meta['threshold']}
-                    ]
-                elif isinstance(meta['threshold'], collections.Iterable):
-                    attr_dicts = [{'threshold': t} for t in meta['threshold']]
-                else:
-                    raise TypeError('invalid type for threshold!')
+                if all([tree.node[child_id]['label'] in self.class_labels for child_id in children_id]) \
+                        and tree.node[children_id[0]]['label'] == tree.node[children_id[1]]['label']:
+                    for child_id in children_id:
+                        tree.remove_node(child_id)
 
-                for child_id, attr_dict in it.izip(children_id, attr_dicts):
-                    tree.add_edge(node_id, child_id, attr_dict=attr_dict)
+                    meta, subset_left, subset_right = self.__set_terminal__(
+                        node_label=None,
+                        parent_labels=parent_labels,
+                        level=level,
+                        subset=subset,
+                        node_id=node_id
+                    )
+
+                else:
+                    if isinstance(meta['threshold'], float):
+                        attr_dicts = [
+                            {'threshold': '< %0.2f' % meta['threshold']},
+                            {'threshold': '>= %0.2f' % meta['threshold']}
+                        ]
+                    elif isinstance(meta['threshold'], collections.Iterable):
+                        attr_dicts = [{'threshold': t} for t in meta['threshold']]
+                    else:
+                        raise TypeError('invalid type for threshold!')
+
+                    for child_id, attr_dict in it.izip(children_id, attr_dicts):
+                        tree.add_edge(node_id, child_id, attr_dict=attr_dict)
 
         tree.add_node(node_id, attr_dict=meta)
         return tree
@@ -321,7 +337,7 @@ class Individual(object):
         si = self.__split_info__(subset, subset_left, subset_right)
 
         try:
-            gr = ig/si
+            gr = ig / si
         except RuntimeWarning as rw:
             if si == 0:
                 gr = 0.
@@ -519,9 +535,9 @@ class Individual(object):
             unique_vals = [float(x) for x in sorted(subset[node_label].unique())]
 
             candidates = [
-                (unique_vals[i] + unique_vals[i + 1]) / 2.
-                if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
-            ][:-1]
+                             (unique_vals[i] + unique_vals[i + 1]) / 2.
+                             if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
+                             ][:-1]
 
             candidates += unique_vals
 
@@ -695,6 +711,6 @@ class Individual(object):
             ops = [op.lt, op.ge]  # <, >=
             subsets = [
                 subset.loc[x(subset[node_label], threshold)] for x in ops
-            ]
+                ]
 
         return meta, subsets

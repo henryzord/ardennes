@@ -1,8 +1,8 @@
 {
   "random_state": null,
-  "n_individuals": 10,
-  "n_iterations": 20,
-  "tree_height": 7,
+  "n_individuals": 100,
+  "n_iterations": 100,
+  "tree_height": 6,
   "distribution": "univariate",
   "decile": 0.75,
   "uncertainty": 0.001,
@@ -10,7 +10,7 @@
   "n_runs": 10,
   "verbose": true,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/subsample/winequality-red.arff",
   "folds_path": "datasets/folds",
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

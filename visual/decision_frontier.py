@@ -60,49 +60,52 @@ for ds_cnt, ds in enumerate(datasets):
         np.arange(y_min, y_max, h)
     )
 
-    max_height = get_max_height((X_train, y_train))
+    with Ardennes(
+        n_individuals=100,
+        decile=0.75,
+        max_height=7,
+        n_iterations=100
+    ) as clf:
+        _test_acc = clf.fit(
+            train=(X_train, y_train),
+            verbose=True
+        )
 
-    clf = Ardennes(
-        n_individuals=100, n_iterations=100,
-        max_height=max_height, distribution='univariate',
-        class_probability='declining'
-    )
-    clf.fit(train=(X_train, y_train), verbose=True)
-    print '-- training complete --'
+        print '-- training complete --'
 
-    # iterate over classifiers
-    for name, ensemble in classifiers:
-        ax = plt.subplot(len(datasets), len(classifiers), i)
+        # iterate over classifiers
+        for name, ensemble in classifiers:
+            ax = plt.subplot(len(datasets), len(classifiers), i)
 
-        score = clf.validate(X_test=X_test, y_test=y_test, ensemble=ensemble)
+            score = clf.validate(X_test=X_test, y_test=y_test, ensemble=ensemble)
 
-        # Plot the decision boundary. For that, we will assign a color to each
-        # point in the mesh [x_min, x_max]x[y_min, y_max].
-        if not ensemble:
-            Z = clf.predict(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)
-        else:
-            Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)[:, 1]
+            # Plot the decision boundary. For that, we will assign a color to each
+            # point in the mesh [x_min, x_max]x[y_min, y_max].
+            if not ensemble:
+                Z = clf.predict(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)
+            else:
+                Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()], ensemble=ensemble)[:, 1]
 
-        # Put the result into a color plot
-        Z = Z.reshape(xx.shape)
-        ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
+            # Put the result into a color plot
+            Z = Z.reshape(xx.shape)
+            ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
 
-        # training points
-        ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright, s=45, linewidth=0., label='train')
-        # testing points
-        ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, s=45, linewidth=1., label='test')
+            # training points
+            ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright, s=45, linewidth=0., label='train')
+            # testing points
+            ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, s=45, linewidth=1., label='test')
 
-        ax.set_xlim(xx.min(), xx.max())
-        ax.set_ylim(yy.min(), yy.max())
-        ax.set_xticks(())
-        ax.set_yticks(())
-        if ds_cnt == 0:
-            ax.set_title(name)
-        ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'), size=15, horizontalalignment='right')
+            ax.set_xlim(xx.min(), xx.max())
+            ax.set_ylim(yy.min(), yy.max())
+            ax.set_xticks(())
+            ax.set_yticks(())
+            if ds_cnt == 0:
+                ax.set_title(name)
+            ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'), size=15, horizontalalignment='right')
 
-        ax.legend(loc=3)
+            ax.legend(loc=3)
 
-        i += 1
+            i += 1
 
 plt.tight_layout()
 plt.show()
