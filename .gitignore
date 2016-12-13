@@ -1,11 +1,12 @@
 # my additions
 *.html
 *.pyc
-metadata/*
+metadata/
 
 # folders
 datasets/subsample
 intermediary
+
 
 # Distribution / packaging
 .Python
@@ -25,3 +26,4 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+metadata/
