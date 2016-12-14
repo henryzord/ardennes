@@ -1,21 +1,19 @@
 # coding=utf-8
 import json
+import os
 import random
 import warnings
-
 from datetime import datetime as dt
+from multiprocessing import Process, Manager
+import itertools as it
 
 import numpy as np
-import os
-
+import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
 from treelib import get_max_height
-import pandas as pd
-
-from multiprocessing import Process, Manager
 
 __author__ = 'Henry Cagnini'
 
@@ -133,6 +131,11 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         processes = []
 
         for i, (train_s, val_s, test_s) in enumerate(folds):
+            warnings.warn('WARNING: appending train and val sets!')
+
+            train_s = train_s.append(val_s, ignore_index=True)
+            val_s = train_s
+
             p = Process(
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
@@ -238,24 +241,155 @@ def crunch_population_data(path_results):
     best_tree_height(dirs)
     plt.show()
 
+
+def optimize_params(config_file, n_tries=10):
+    config_file['verbose'] = False
+
+    best_mean_acc = -np.inf
+    best_std_acc = None
+    best_mean_dict = None
+
+    dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
+
+    params = pd.DataFrame(index=np.arange(n_tries), columns=['n_individuals', 'n_iterations', 'tree_height', 'decile', 'acc mean', 'acc std'])
+
+    for some_try in xrange(n_tries):
+        config_file['n_individuals'] = np.random.randint(100, 200 + 1)
+        config_file['n_iterations'] = np.random.randint(10, 50 + 1)
+        config_file['tree_height'] = np.random.randint(5, 7 + 1)
+        config_file['decile'] = np.random.randint(50, 90 + 1) / 100.
+
+        params.iloc[some_try]['n_individuals', 'n_iterations', 'tree_height', 'decile'] = [
+            config_file['n_individuals'],
+            config_file['n_iterations'],
+            config_file['tree_height'],
+            config_file['decile']
+        ]
+
+        print 'n_individuals: %d n_iterations: %d tree_height: %d decile: %.2f' % \
+              tuple(params.iloc[some_try][['n_individuals', 'n_iterations', 'tree_height', 'decile']])
+
+        dict_results = do_train(config_file=config_file, n_run=0, evaluation_mode='cross-validation')
+        accs = np.array(dict_results['folds'].values(), dtype=np.float32)
+        print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
+
+        params.iloc[some_try]['acc mean', 'acc std'] = [accs.mean(), accs.std()]
+
+    params.to_csv('parametrization_%s.csv' % dataset_name, index=False)
+
+
+def crunch_parametrization(path_file):
+    import plotly.graph_objs as go
+    from plotly.offline import plot
+
+    full = pd.read_csv(path_file)  # type: pd.DataFrame
+
+    # df = full.loc[full['tree_height'] == 7]
+
+    df = full
+
+    attrX = 'n_individuals'
+    # attrY = 'decile'
+    attrZ = 'n_iterations'
+
+    trace2 = go.Scatter3d(
+        x=df[attrX],
+        y=df[attrY],
+        z=df[attrZ],
+        mode='markers',
+        text=['%s: %2.2f<br>%s: %2.2f<br>%s: %2.2f<br>mean acc: %0.2f' %
+              (attrX, info[attrX], attrY, info[attrY], attrZ, info[attrZ], info['acc mean']) for (index, info) in df.iterrows()
+              ],
+        hoverinfo='text',
+        marker=dict(
+            color=df['acc mean'],
+            colorscale='RdBu',
+            colorbar=dict(
+                title='Mean accuracy',
+            ),
+            # cmin=0.,  # minimum color value
+            # cmax=1.,  # maximum color value
+            # cauto=False,  # do not automatically fit color values
+            size=12,
+            symbol='circle',
+            line=dict(
+                color='rgb(204, 204, 204)',
+                width=1
+            ),
+            opacity=0.9
+        )
+    )
+    layout = go.Layout(
+        margin=dict(
+            l=0,
+            r=0,
+            b=0,
+            t=0
+        ),
+        scene=dict(
+           xaxis=dict(title=attrX),
+           yaxis=dict(title=attrY),
+           zaxis=dict(title=attrZ)
+        )
+    )
+    fig = go.Figure(data=[trace2], layout=layout)
+    plot(fig, filename='.parametrization.html')
+
+
+# def crunch_parametrization(path_file):
+#     from matplotlib import pyplot as plt
+#     from mpl_toolkits.mplot3d import Axes3D
+#
+#     df = pd.read_csv(path_file)  # type: pd.DataFrame
+#
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+#     n = 100
+#
+#     attrX = 'n_individuals'
+#     attrY = 'n_iterations'
+#     attrZ = 'decile'
+#
+#     p = ax.scatter(
+#         df[attrX], df[attrY], df[attrZ], c=df['acc mean']  # , marker='o'
+#     )
+#
+#     ax.set_xlabel(attrX)
+#     ax.set_ylabel(attrY)
+#     ax.set_zlabel(attrZ)
+#
+#     fig.colorbar(p)
+#
+#     plt.show()
+
+
 if __name__ == '__main__':
-    # _config_file = json.load(open('config.json', 'r'))
-    # evaluation_mode = 'holdout'
-    # dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=evaluation_mode)
-    #
-    # if evaluation_mode == 'cross-validation':
-    #     accs = np.array(dict_results['folds'].values(), dtype=np.float32)
-    #
-    #     for k, v in dict_results['folds'].iteritems():
-    #         print k, ':', v
-    #     print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
+    _config_file = json.load(open('config.json', 'r'))
+
+    # --------------------------------------------------- #
+    # optimize_params(_config_file, 50)
+    # --------------------------------------------------- #
+    # crunch_parametrization('parametrization_hayes-roth-full.csv')
+    # --------------------------------------------------- #
+
+    for i in xrange(10):
+
+        _evaluation_mode = 'cross-validation'
+        _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+        if _evaluation_mode == 'cross-validation':
+            _accs = np.array(_dict_results['folds'].values(), dtype=np.float32)
+
+            for _k, _v in _dict_results['folds'].iteritems():
+                print _k, ':', _v
+            print 'acc: %02.2f +- %02.2f' % (_accs.mean(), _accs.std())
 
     # --------------------------------------------------- #
 
-    _results_file = json.load(
-        open('/home/henry/Projects/ardennes/metadata/past_runs/j48/j48_results.json', 'r')
-    )
-    crunch_result_file(_results_file, output_file='j48_results.csv')
+    # _results_file = json.load(
+    #     open('/home/henry/Projects/ardennes/metadata/past_runs/j48/j48_results.json', 'r')
+    # )
+    # crunch_result_file(_results_file, output_file='j48_results.csv')
 
     # --------------------------------------------------- #
 

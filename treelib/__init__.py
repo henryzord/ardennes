@@ -199,7 +199,7 @@ class Ardennes(object):
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
                     ind_id=to_replace_index, graphical_model=gm, max_height=self.D,
-                    sets=self.__get_local_sets__(sets),
+                    sets=sets, # self.__get_local_sets__(sets),
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 

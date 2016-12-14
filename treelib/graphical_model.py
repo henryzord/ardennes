@@ -70,15 +70,12 @@ class GraphicalModel(object):
 
         n_variables = get_total_nodes(max_depth)
 
-        warnings.warn('WARNING: using a single pandas.DataFrame for attributes!')
-
         attributes = pd.DataFrame(
             index=self.pred_attr + [self.target_attr], columns=range(n_variables)
         ).apply(set_probability, axis=0)
 
         # sample_values = self.pred_attr + [self.target_attr]
         #
-        # # TODO reduce!
         #
         # warnings.warn('WARNING: not using a linear progression!')
         # class_prob = 2. ** depth / 2. ** (max_depth + 1)  # power of 2 progression
