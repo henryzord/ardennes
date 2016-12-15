@@ -84,6 +84,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
         )
 
         _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
+        _tree_height = inst.tree_height
 
         t2 = dt.now()
 
@@ -92,7 +93,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
     )
 
     if 'dict_manager' in kwargs:
-        kwargs['dict_manager'][n_fold] = _test_acc
+        kwargs['dict_manager'][n_fold] = dict(acc=_test_acc, height=_tree_height)
 
     return _test_acc
 
@@ -245,10 +246,6 @@ def crunch_population_data(path_results):
 def optimize_params(config_file, n_tries=10):
     config_file['verbose'] = False
 
-    best_mean_acc = -np.inf
-    best_std_acc = None
-    best_mean_dict = None
-
     dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
 
     params = pd.DataFrame(index=np.arange(n_tries), columns=['n_individuals', 'n_iterations', 'tree_height', 'decile', 'acc mean', 'acc std'])
@@ -282,14 +279,10 @@ def crunch_parametrization(path_file):
     import plotly.graph_objs as go
     from plotly.offline import plot
 
-    full = pd.read_csv(path_file)  # type: pd.DataFrame
-
-    # df = full.loc[full['tree_height'] == 7]
-
-    df = full
+    df = pd.read_csv(path_file)  # type: pd.DataFrame
 
     attrX = 'n_individuals'
-    # attrY = 'decile'
+    attrY = 'decile'
     attrZ = 'n_iterations'
 
     trace2 = go.Scatter3d(
@@ -336,33 +329,6 @@ def crunch_parametrization(path_file):
     plot(fig, filename='.parametrization.html')
 
 
-# def crunch_parametrization(path_file):
-#     from matplotlib import pyplot as plt
-#     from mpl_toolkits.mplot3d import Axes3D
-#
-#     df = pd.read_csv(path_file)  # type: pd.DataFrame
-#
-#     fig = plt.figure()
-#     ax = fig.add_subplot(111, projection='3d')
-#     n = 100
-#
-#     attrX = 'n_individuals'
-#     attrY = 'n_iterations'
-#     attrZ = 'decile'
-#
-#     p = ax.scatter(
-#         df[attrX], df[attrY], df[attrZ], c=df['acc mean']  # , marker='o'
-#     )
-#
-#     ax.set_xlabel(attrX)
-#     ax.set_ylabel(attrY)
-#     ax.set_zlabel(attrZ)
-#
-#     fig.colorbar(p)
-#
-#     plt.show()
-
-
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
 
@@ -372,17 +338,18 @@ if __name__ == '__main__':
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
 
-    for i in xrange(10):
+    global_accs = np.empty(10 * 10, dtype=np.float)
 
-        _evaluation_mode = 'cross-validation'
-        _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    _evaluation_mode = 'cross-validation'
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
 
-        if _evaluation_mode == 'cross-validation':
-            _accs = np.array(_dict_results['folds'].values(), dtype=np.float32)
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
 
-            for _k, _v in _dict_results['folds'].iteritems():
-                print _k, ':', _v
-            print 'acc: %02.2f +- %02.2f' % (_accs.mean(), _accs.std())
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
 
     # --------------------------------------------------- #
 

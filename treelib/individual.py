@@ -34,11 +34,11 @@ class Individual(object):
     \'shortest path\' from the node to the root.
     """
 
-    def __init__(self, graphical_model, max_height, sets, pred_attr, target_attr, class_labels, **kwargs):
+    def __init__(self, gm, max_height, sets, pred_attr, target_attr, class_labels, **kwargs):
         """
         
-        :type graphical_model: treelib.graphical_model.GraphicalModel
-        :param graphical_model:
+        :type gm: treelib.graphical_model.GraphicalModel
+        :param gm:
         :type sets: dict
         :param sets:
         """
@@ -60,7 +60,7 @@ class Individual(object):
 
         self.max_height = max_height
 
-        self.sample(graphical_model, sets['train'], sets['val'])
+        self.sample(gm, sets['train'], sets['val'])
 
     @classmethod
     def clean(cls):
@@ -220,17 +220,17 @@ class Individual(object):
     # sampling and related methods #
     # ############################ #
 
-    def sample(self, graphical_model, loc_train_set, loc_val_set):
-        self.tree = self.__set_tree__(graphical_model, loc_train_set)  # type: nx.DiGraph
+    def sample(self, gm, loc_train_set, loc_val_set):
+        self.tree = self.__set_tree__(gm, loc_train_set)  # type: nx.DiGraph
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
         self.acc = self.validate(loc_val_set)
 
-    def __set_tree__(self, graphical_model, subset):
+    def __set_tree__(self, gm, subset):
         tree = nx.DiGraph()
 
         tree = self.__set_node__(
             node_id=0,
-            graphical_model=graphical_model,
+            gm=gm,
             tree=tree,
             subset=subset,
             level=0,
@@ -238,10 +238,10 @@ class Individual(object):
         )
         return tree
 
-    def __set_node__(self, node_id, graphical_model, tree, subset, level, parent_labels):
+    def __set_node__(self, node_id, gm, tree, subset, level, parent_labels):
         """
 
-        :param graphical_model:
+        :param gm:
         :type tree: networkx.DiGraph
         :param tree:
         :param subset:
@@ -255,7 +255,7 @@ class Individual(object):
         # 2. there is only one class coming to this node;
         # then set this as a terminal node
         try:
-            label = graphical_model.sample(
+            label = gm.sample(
                 node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0)
             )
         except KeyError as ke:
@@ -282,7 +282,7 @@ class Individual(object):
                 label=label,
                 parent_labels=parent_labels,
                 node_level=level,
-                graphical_model=graphical_model,
+                gm=gm,
                 subset=subset,
                 node_id=node_id
             )
@@ -294,7 +294,7 @@ class Individual(object):
                     tree = self.__set_node__(
                         node_id=child_id,
                         tree=tree,
-                        graphical_model=graphical_model,
+                        gm=gm,
                         subset=child_subset,
                         level=level + 1,
                         parent_labels=parent_labels + [label]

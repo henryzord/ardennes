@@ -10,7 +10,7 @@
   "n_runs": 10,
   "verbose": false,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds",
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

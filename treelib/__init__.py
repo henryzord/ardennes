@@ -165,7 +165,7 @@ class Ardennes(object):
         )
 
         population = sample_func(
-            ind_id=range(self.n_individuals), graphical_model=gm, max_height=self.D, sets=sets,
+            ind_id=range(self.n_individuals), gm=gm, max_height=self.D, sets=sets,
             pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
         )
 
@@ -190,24 +190,18 @@ class Ardennes(object):
             borderline = np.partition(fitness, integer_threshold)[integer_threshold]
 
             fittest_pop = population[fitness > borderline]
-            # to_replace_index = np.arange(self.n_individuals)
-            # warnings.warn('WARNING: replacing whole population!')
             to_replace_index = np.flatnonzero(fitness < borderline)
 
             gm.update(fittest_pop)
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, graphical_model=gm, max_height=self.D,
-                    sets=sets, # self.__get_local_sets__(sets),
+                    ind_id=to_replace_index, gm=gm, max_height=self.D,
+                    sets=sets,  # self.__get_local_sets__(sets),
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
                 )
 
             fitness = np.array([x.fitness for x in population])
-
-            # warnings.warn('WARNING: Plotting best individual!')
-            # # TODO remove me!
-            # population[np.argmax(fitness)].plot(savepath='/home/henry/Desktop/plots/%03.d.pdf' % iteration, test_set=sets['test'])
 
             if self.__early_stop__(fitness, self.uncertainty):
                 break
@@ -223,6 +217,11 @@ class Ardennes(object):
         self.best_individual = np.argmax(fitness)
         self.last_population = population
         self.trained = True
+
+    @property
+    def tree_height(self):
+        if self.trained:
+            return self.last_population[self.best_individual].height
 
     def __get_local_sets__(self, sets):
         warnings.warn('WARNING: using a subset of train for induction!')
