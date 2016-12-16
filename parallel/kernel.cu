@@ -118,8 +118,8 @@ __device__ float device_gain_ratio(
 
             subset_size += (float)(subset_index[j]);
         }
-        left_entropy += (left_branch_size > 0 && left_count_class > 0)*((left_count_class / left_branch_size) * log2f(left_count_class / left_branch_size));
-        right_entropy += (right_branch_size > 0 && right_count_class > 0)*((right_count_class / right_branch_size) * log2f(right_count_class / right_branch_size));
+        left_entropy += ((left_branch_size > 0) && (left_count_class > 0))*((left_count_class / left_branch_size) * log2f(left_count_class / left_branch_size));
+        right_entropy += ((right_branch_size > 0) && (right_count_class > 0))*((right_count_class / right_branch_size) * log2f(right_count_class / right_branch_size));
     }
 
     sum_term =
