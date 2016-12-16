@@ -32,18 +32,16 @@ class CudaHandler(object):
 
         self._func_gain_ratio = mod.get_function("gain_ratio")
 
-        self.class_labels = np.array(dataset[dataset.columns[-1]].unique())
+        self.class_labels = np.array(dataset[dataset.columns[-1]].unique()).astype(np.float32)
 
         self._mem_dataset = cuda.mem_alloc(dataset.values.nbytes)
         self._mem_class_labels = cuda.mem_alloc(self.class_labels.nbytes)
-        cuda.memcpy_htod(self._mem_dataset, dataset.values)
+        cuda.memcpy_htod(self._mem_dataset, dataset.values.astype(np.float32))
         cuda.memcpy_htod(self._mem_class_labels, self.class_labels)
 
         self.attribute_index = {k: x for x, k in enumerate(dataset.columns)}
         self._mem_candidates = None
         self.n_objects, self.n_attributes = dataset.shape
-
-        # self._mem_labels = cuda.mem_alloc(self._n_objects * np.float32(1).itemsize)
 
     def device_gain_ratio(self, subset, attribute, candidates):
         """
@@ -56,6 +54,8 @@ class CudaHandler(object):
         """
 
         n_candidates = candidates.shape[0]
+        candidates = candidates.astype(np.float32)
+        subset = subset.astype(np.int32)
 
         _threads_per_block = ((n_candidates / CudaHandler._MIN_N_THREADS) + 1) * CudaHandler._MIN_N_THREADS
         if _threads_per_block > CudaHandler._MAX_N_THREADS:
@@ -71,35 +71,34 @@ class CudaHandler(object):
 
         _mem_candidates = cuda.mem_alloc(candidates.nbytes)
         cuda.memcpy_htod(_mem_candidates, candidates)  # send info to gpu memory
-        ratios = np.empty(candidates.shape[0], dtype=np.float32)
 
         self._func_gain_ratio(
             self._mem_dataset,
             np.int32(self.n_objects),
             np.int32(self.n_attributes),
-            cuda.In(subset),
+            cuda.In(subset.astype(np.int32)),
             np.int32(self.attribute_index[attribute]),
             np.int32(n_candidates),
             _mem_candidates,
-            self._mem_class_labels,
             np.int32(self.class_labels.shape[0]),
+            self._mem_class_labels,
             block=(_threads_per_block, 1, 1),  # block size
             grid=_grid_size
         )
 
-        cuda.memcpy_dtoh(ratios, _mem_candidates)  # send info to gpu memory
-        return ratios
+        cuda.memcpy_dtoh(candidates, _mem_candidates)  # send info to gpu memory
+        return candidates
 
-    def gain_ratio(self, subset, subset_left, subset_right, target_attr):
+    def host_gain_ratio(self, subset, subset_left, subset_right, target_attr):
         warnings.filterwarnings('error')
 
         ig = self.host_information_gain(subset, subset_left, subset_right, target_attr)
-        si = self.__split_info__(subset, subset_left, subset_right)
+        si = self.__host_split_info__(subset, subset_left, subset_right)
 
         try:
             gr = ig / si
         except RuntimeWarning as rw:
-            if si == 0:
+            if si <= 0:
                 gr = 0.
             else:
                 raise rw
@@ -109,7 +108,7 @@ class CudaHandler(object):
         return gr
 
     @staticmethod
-    def __split_info__(subset, subset_left, subset_right):
+    def __host_split_info__(subset, subset_left, subset_right):
         sum_term = 0.
         for child_subset in [subset_left, subset_right]:
             temp = (child_subset.shape[0] / float(subset.shape[0]))
@@ -155,12 +154,16 @@ def main():
     inst = CudaHandler(df)
 
     attr = df.columns[0]
+    class_attribute = df.columns[-1]
+
     candidates = df[attr].unique()
 
     ratios = inst.device_gain_ratio(np.ones(df.shape[0], dtype=np.int32), attr, candidates)
-    print ratios
-    print candidates
+    # print ratios
 
+    for i, candidate in enumerate(candidates):
+        host_gain = inst.host_gain_ratio(df, df.loc[df[attr] < candidate], df.loc[df[attr] >= candidate], class_attribute)
+        print 'host/device:', np.float32(host_gain), ratios[i]
 
 if __name__ == '__main__':
     main()
