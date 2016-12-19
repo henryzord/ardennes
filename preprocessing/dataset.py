@@ -96,15 +96,9 @@ def get_fold_iter(df, fold):
     else:
         raise TypeError('Invalid type for fold! Must be either a dictionary or a path to a json file!')
 
-    # warnings.warn('WARNING: using 4.5 folds for train and 4.5 for validation!')
-
     for i in sorted(f.keys()):
         train_s = df.loc[f[i]['train']]
         val_s = df.loc[f[i]['val']]
-
-        # concat = pd.concat([train_s, val_s], ignore_index=True)
-        # train_s, val_s = train_test_split(concat, train_size=0.5)
-
         test_s = df.loc[f[i]['test']]
 
         yield train_s, test_s, val_s

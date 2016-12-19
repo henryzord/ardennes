@@ -12,8 +12,6 @@ from matplotlib import pyplot as plt
 
 from treelib.node import *
 
-from parallel import AvailableHandler
-
 __author__ = 'Henry Cagnini'
 
 
@@ -30,21 +28,14 @@ class Individual(object):
     thresholds = dict()
     max_height = -1
 
-    shortest_path = dict()  # type: dict
-
     handler = None
 
     n_objects = None
     n_attributes = None
 
-    seq_handler = None
+    shortest_path = dict()  # type: dict
 
-    """
-    A dictionary where each key is the node's name, and each value a list of integers denoting the
-    \'shortest path\' from the node to the root.
-    """
-
-    def __init__(self, gm, max_height, sets, pred_attr, target_attr, class_labels, **kwargs):
+    def __init__(self, gm, max_height, sets, pred_attr, target_attr, class_labels, handler, **kwargs):
         """
         
         :type gm: treelib.graphical_model.GraphicalModel
@@ -61,20 +52,9 @@ class Individual(object):
         else:
             self.ind_id = None
 
-        # if Individual.handler is None:
-        #     full_set = sets['train']  # type: pd.DataFrame
-        #
-        #     for set in sets.itervalues():
-        #         full_set = full_set.append(set, ignore_index=False)
-        #     full_set = full_set.groupby(full_set.index).last()
-        #
-        #     Individual.n_objects, Individual.n_attributes = full_set.shape
-        #     Individual.handler = AvailableHandler(full_set)
-        #     warnings.warn('WARNING: getting SequentialHandler!')
-        #     from parallel.sequential import SequentialHandler
-        #     Individual.seq_handler = SequentialHandler(full_set)
-        # self.handler = Individual.handler
-        # self.n_objects, self.n_attributes = Individual.n_objects, Individual.n_attributes
+        if Individual.handler is None:
+            Individual.handler = handler
+        self.handler = Individual.handler
 
         if Individual.column_types is None:
             Individual.column_types = {
@@ -246,22 +226,17 @@ class Individual(object):
     # ############################ #
 
     def sample(self, gm, loc_train_set, loc_val_set):
-        self.tree = self.__set_tree__(gm, loc_train_set)  # type: nx.DiGraph
-        self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-        self.acc = self.validate(loc_val_set)
-
-    def __set_tree__(self, gm, subset):
-        tree = nx.DiGraph()
-
-        tree = self.__set_node__(
+        self.tree = self.tree = self.__set_node__(
             node_id=0,
             gm=gm,
-            tree=tree,
-            subset=subset,
+            tree=nx.DiGraph(),
+            subset=loc_train_set,
             level=0,
             parent_labels=[]
-        )
-        return tree
+        )  # type: nx.DiGraph
+
+        self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
+        self.acc = self.validate(loc_val_set)
 
     def __set_node__(self, node_id, gm, tree, subset, level, parent_labels):
         """
@@ -559,32 +534,29 @@ class Individual(object):
         except KeyError as ke:
             unique_vals = [float(x) for x in sorted(subset[node_label].unique())]
 
-            candidates = [
+            candidates = np.array(unique_vals + [
                 (unique_vals[i] + unique_vals[i + 1]) / 2.
                 if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
-            ][:-1]
+            ][:-1])
 
-            # subset_index = np.zeros(self.n_objects)
-            # subset_index[subset.index] = 1
-            # ratios = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
-            # seq_ratios = Individual.seq_handler.batch_gain_ratio(subset_index, node_label, candidates)
+            subset_index = np.zeros(self.handler.n_objects)
+            subset_index[subset.index] = 1
+            ratios = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
 
-            # best_threshold = candidates[np.argmax(ratios)]
+            best_threshold = candidates[np.argmax(ratios)]
 
-            candidates += unique_vals
-
-            best_threshold = -np.inf
-            best_gr = -np.inf
-            for cand in candidates:
-                gr = self.gain_ratio(
-                    subset,
-                    subset.loc[subset[node_label] < cand],
-                    subset.loc[subset[node_label] >= cand],
-                    self.target_attr
-                )
-                if gr > best_gr:
-                    best_gr = gr
-                    best_threshold = cand
+            # best_threshold = -np.inf
+            # best_gr = -np.inf
+            # for cand in candidates:
+            #     gr = self.gain_ratio(
+            #         subset,
+            #         subset.loc[subset[node_label] < cand],
+            #         subset.loc[subset[node_label] >= cand],
+            #         self.target_attr
+            #     )
+            #     if gr > best_gr:
+            #         best_gr = gr
+            #         best_threshold = cand
 
             self.__store_threshold__(node_label, subset, best_threshold)
 

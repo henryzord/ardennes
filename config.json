@@ -8,9 +8,9 @@
   "uncertainty": 0.001,
   "train_size": 0.80,
   "n_runs": 10,
-  "verbose": false,
+  "verbose": true,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/iris.arff",
+  "dataset_path": "datasets/numerical/kdd_synthetic_control.arff",
   "folds_path": "datasets/folds",
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

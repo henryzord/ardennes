@@ -1,3 +1,4 @@
+# noinspection PyUnresolvedReferences
 import pycuda.autoinit
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule

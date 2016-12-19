@@ -87,6 +87,8 @@ class Ardennes(object):
         self.target_attr = None
         self.class_labels = None
 
+        self.handler = None
+
     def __enter__(self):
         return self
 
@@ -134,6 +136,12 @@ class Ardennes(object):
 
         sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
 
+        if 'handler' in kwargs and kwargs['handler'] is not None:
+            self.handler = kwargs['handler']
+        else:
+            from parallel import Handler
+            self.handler = Handler(sets['train'])
+
         # from now on, considers only a dictionary 'sets' with train and val subsets
 
         class_values = {
@@ -161,12 +169,12 @@ class Ardennes(object):
 
         sample_func = np.vectorize(
             Individual,
-            excluded=['graphical_model', 'max_height', 'sets', 'pred_attr', 'target_attr', 'class_labels']
+            excluded=['graphical_model', 'max_height', 'sets', 'pred_attr', 'target_attr', 'class_labels', 'handler']
         )
 
         population = sample_func(
             ind_id=range(self.n_individuals), gm=gm, max_height=self.D, sets=sets,
-            pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
+            pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
         )
 
         fitness = np.array([x.fitness for x in population])
@@ -197,8 +205,8 @@ class Ardennes(object):
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
                     ind_id=to_replace_index, gm=gm, max_height=self.D,
-                    sets=sets,  # self.__get_local_sets__(sets),
-                    pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
+                    sets=sets,
+                    pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
                 )
 
             fitness = np.array([x.fitness for x in population])
@@ -222,18 +230,6 @@ class Ardennes(object):
     def tree_height(self):
         if self.trained:
             return self.last_population[self.best_individual].height
-
-    def __get_local_sets__(self, sets):
-        warnings.warn('WARNING: using a subset of train for induction!')
-        train_set = sets['train']
-        val_set = sets['val']
-
-        train_train_index = np.random.choice(train_set.index, size=int(train_set.shape[0] * 0.5), replace=False)
-        train_test_index = list(set(train_set.index) - set(train_train_index))
-
-        cpy = val_set.append(train_set.loc[train_test_index])
-
-        return {'train': train_set.loc[train_train_index], 'val': cpy}
 
     def predict_proba(self, samples, ensemble=False):
         raise NotImplementedError('not implemented yet!')

@@ -5,15 +5,15 @@ import random
 import warnings
 from datetime import datetime as dt
 from multiprocessing import Process, Manager
-import itertools as it
 
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
-from treelib import Ardennes
-from treelib import get_max_height
+from treelib import Ardennes, get_max_height
+
+from parallel import Handler
 
 __author__ = 'Henry Cagnini'
 
@@ -80,7 +80,8 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
             dataset_name=config_file['dataset_name'],
             output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
-            run=n_run
+            run=n_run,
+            handler=kwargs['handler'] if 'handler' in kwargs else None
         )
 
         _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
@@ -116,6 +117,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
+    handler = Handler(df)
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -134,17 +136,20 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         for i, (train_s, val_s, test_s) in enumerate(folds):
             warnings.warn('WARNING: appending train and val sets!')
 
-            train_s = train_s.append(val_s, ignore_index=True)
+            train_s = train_s.append(val_s, ignore_index=False)
             val_s = train_s
 
             p = Process(
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
-                    test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state
+                    test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state,
+                    handler=handler
                 )
             )
             p.start()
             processes.append(p)
+            warnings.warn('WARNING: breaking loop!')
+            break
 
         for p in processes:
             p.join()
@@ -156,7 +161,12 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         train_s, val_s, test_s = get_batch(
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
-        run_fold(n_fold=0, n_run=0, train_s=train_s, val_s=val_s, test_s=test_s, config_file=config_file, random_state=random_state)
+
+        run_fold(
+            n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
+            test_s=test_s, config_file=config_file, random_state=random_state,
+            handler=handler
+        )
 
 
 def crunch_result_file(results_file, output_file=None):
