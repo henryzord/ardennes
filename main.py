@@ -349,9 +349,9 @@ if __name__ == '__main__':
     #     )
     # --------------------------------------------------- #
     _results_file = json.load(
-        open('/home/henry/Projects/ardennes/metadata/past_runs/1000i_100g_8h_80d_[halfval_halftrain]/results.json', 'r')
+        open('/home/henry/Projects/ardennes/metadata/results.json', 'r')
     )
-    crunch_result_file(_results_file, output_file='1000i_100g_8h_80d_[halfval_halftrain]_results.csv')
+    crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)

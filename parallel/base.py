@@ -45,18 +45,15 @@ class Handler(object):
 
     @staticmethod
     def __split_info__(subset, subset_left, subset_right):
-        sum_term = 0.
+        split_info = 0.
         for child_subset in [subset_left, subset_right]:
-            temp = (child_subset.shape[0] / float(subset.shape[0]))
-            try:
-                sum_term += temp * np.log2(temp)
-            except RuntimeWarning as rw:
-                if temp == 0:
-                    pass
-                else:
-                    raise rw
+            if child_subset.shape[0] <= 0 or subset.shape[0] <= 0:
+                pass
+            else:
+                share = (child_subset.shape[0] / float(subset.shape[0]))
+                split_info += share * np.log2(share)
 
-        return -sum_term
+        return -split_info
 
     def information_gain(self, subset, subset_left, subset_right, target_attr):
         sum_term = 0.

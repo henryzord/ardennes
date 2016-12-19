@@ -2,25 +2,24 @@
 //    return dataset[object_index * n_attributes + attribute_index];
 //}
 
-__device__ float entropy_by_index(float *dataset, int n_objects, int n_attributes, int *subset_index, float *class_labels, int n_classes) {
+__device__ float entropy_by_index(float *dataset, int n_objects, int n_attributes, int *subset_index, int n_classes, float *class_labels) {
     const int class_index = n_attributes - 1;
 
     int i, j;
 
-    float l_entropy = 0;
+    float l_entropy = 0, subset_size = 0, count_class = 0;
 
-    float subset_size = 0;
     for(j = 0; j < n_objects; j++) {
-        subset_size += (float)subset_index[i];
+        subset_size += (float)subset_index[j];
     }
 
     for(i = 0; i < n_classes; i++) {
-        float count_class = 0;
+        count_class = 0;
         for(j = 0; j < n_objects; j++) {
-            count_class += (float)(class_labels[i] == dataset[j * n_attributes + class_index]);
+            count_class += (float)(subset_index[j] * (class_labels[i] == dataset[j * n_attributes + class_index]));
 
         }
-        l_entropy += (count_class / subset_size) * log2f(count_class / subset_size);
+        l_entropy += ((count_class > 0) && (subset_size > 0)) * ((count_class / subset_size) * log2f(count_class / subset_size));
     }
 
     return -l_entropy;
@@ -36,7 +35,7 @@ __device__ float information_gain(
     __shared__ float subset_entropy;
     // only one thread must compute the subset entropy, since its value is shared across every other calculation
     if(idx == 0) {
-        subset_entropy = entropy_by_index(dataset, n_objects, n_attributes, subset_index, class_labels, n_classes);
+        subset_entropy = entropy_by_index(dataset, n_objects, n_attributes, subset_index, n_classes, class_labels);
     }
    __syncthreads();
 
@@ -88,7 +87,7 @@ __device__ float device_gain_ratio(
     // only one thread must compute the subset entropy, since
     // its value is shared across every other calculation
     if(idx == 0) {
-        subset_entropy = entropy_by_index(dataset, n_objects, n_attributes, subset_index, class_labels, n_classes);
+        subset_entropy = entropy_by_index(dataset, n_objects, n_attributes, subset_index, n_classes, class_labels);
     }
    __syncthreads();
 
@@ -104,17 +103,17 @@ __device__ float device_gain_ratio(
     for(k = 0; k < n_classes; k++) {
         left_count_class = 0; right_count_class = 0;
         left_branch_size = 0; right_branch_size = 0;
-        subset_size = 0, is_from_class =0, is_left = 0;
+        subset_size = 0, is_from_class = 0, is_left = 0;
 
         for(j = 0; j < n_objects; j++) {
-            is_left = (float)(dataset[j * n_attributes + attribute_index] < candidate);
+            is_left = (float)dataset[j * n_attributes + attribute_index] < candidate;
             is_from_class = (float)(abs(dataset[j * n_attributes + class_index] - class_labels[k]) < 0.01);
 
-            left_branch_size += is_left;
-            right_branch_size += !is_left;
+            left_branch_size += is_left * subset_index[j];
+            right_branch_size += !is_left * subset_index[j];
 
-            left_count_class += is_left * is_from_class;
-            right_count_class += !is_left * is_from_class;
+            left_count_class += is_left * subset_index[j] * is_from_class;
+            right_count_class += !is_left * subset_index[j] * is_from_class;
 
             subset_size += (float)(subset_index[j]);
         }
@@ -132,6 +131,7 @@ __device__ float device_gain_ratio(
             (left_branch_size > 0)*((left_branch_size / subset_size)*log2f(left_branch_size / subset_size)) +
             (right_branch_size > 0)*((right_branch_size / subset_size)*log2f(right_branch_size / subset_size))
         );
+
     return (split_info > 0) * (info_gain / split_info);
 }
 

@@ -32,15 +32,16 @@ def __main__():
         if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
     ][:-1])
 
-    subset_index = np.random.randint(2, size=df.shape[0])
-    # subset_index = np.ones(df.shape[0])
+    subset_index = np.random.randint(2, size=df.shape[0])  # only a subset
+    # subset_index = np.ones(df.shape[0])  # full dataset
 
     seq_ratios = seq.batch_gain_ratio(subset_index, attr, candidates)
     cuda_ratios = cuda.batch_gain_ratio(subset_index, attr, candidates)
 
     for i, candidate in enumerate(candidates):
-        host_gain = seq.gain_ratio(df, df.loc[df[attr] < candidate], df.loc[df[attr] >= candidate], class_attribute)
-        print 'host/seq/device:', np.float32(host_gain), np.float32(seq_ratios[i]), np.float32(cuda_ratios[i])
+        # _subset = df.loc[subset_index.astype(np.bool)]
+        # host_gain = seq.gain_ratio(_subset, _subset.loc[_subset[attr] < candidate], _subset.loc[_subset[attr] >= candidate], class_attribute)
+        print 'seq/prl:', np.float32(seq_ratios[i]), np.float32(cuda_ratios[i])
 
 if __name__ == '__main__':
     __main__()
