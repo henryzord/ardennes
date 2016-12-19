@@ -337,21 +337,21 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
-    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-    #
-    # if _evaluation_mode == 'cross-validation':
-    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #
-    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-    #     )
+    _evaluation_mode = 'cross-validation'
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
     # --------------------------------------------------- #
-    _results_file = json.load(
-        open('/home/henry/Projects/ardennes/metadata/results.json', 'r')
-    )
-    crunch_result_file(_results_file, output_file='results.csv')
+    # _results_file = json.load(
+    #     open('/home/henry/Projects/ardennes/metadata/results.json', 'r')
+    # )
+    # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)

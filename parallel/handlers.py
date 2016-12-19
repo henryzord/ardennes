@@ -24,6 +24,13 @@ class Handler(object):
             dataset[column] = dataset[column].astype(np.float32)
 
         self.dataset = dataset
+        self.n_objects, self.n_attributes = dataset.shape
+
+        try:
+            from cuda import CudaMaster
+            self.master = CudaMaster(dataset)
+        except ImportError:
+            self.master = None
 
     def gain_ratio(self, subset, subset_left, subset_right, target_attr):
         warnings.filterwarnings('error')
@@ -77,4 +84,18 @@ class Handler(object):
         return -1. * _entropy
 
     def batch_gain_ratio(self, subset_index, attribute, candidates):
-        pass
+        if self.master is not None:
+            return self.master.queue_execution(subset_index, attribute, candidates)
+        else:
+            proper_subset = self.dataset.loc[subset_index.astype(np.bool)]
+
+            ratios = map(
+                lambda c: self.gain_ratio(
+                    proper_subset,
+                    proper_subset.loc[proper_subset[attribute] < c],
+                    proper_subset.loc[proper_subset[attribute] >= c],
+                    self.target_attr
+                ),
+                candidates
+            )
+            return ratios
