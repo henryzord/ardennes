@@ -31,21 +31,13 @@ class Handler(object):
             self.master = None
 
     def gain_ratio(self, subset, subset_left, subset_right, target_attr):
-        warnings.filterwarnings('error')
-
         ig = self.information_gain(subset, subset_left, subset_right, target_attr)
         si = self.__split_info__(subset, subset_left, subset_right)
 
-        try:
+        if ig > 0 and si > 0:
             gr = ig / si
-        except RuntimeWarning as rw:
-            if si <= 0:
-                gr = 0.
-            else:
-                raise rw
-
-        warnings.filterwarnings('default')
-
+        else:
+            gr = 0
         return gr
 
     @staticmethod
@@ -90,8 +82,8 @@ class Handler(object):
             ratios = map(
                 lambda c: self.gain_ratio(
                     proper_subset,
-                    proper_subset.loc[proper_subset[attribute] < c],
-                    proper_subset.loc[proper_subset[attribute] >= c],
+                    proper_subset.loc[proper_subset[attribute] <= c],
+                    proper_subset.loc[proper_subset[attribute] > c],
                     self.target_attr
                 ),
                 candidates
