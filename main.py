@@ -13,7 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes, get_max_height
 
-from parallel import Handler
+from sklearn.metrics import *
 
 __author__ = 'Henry Cagnini'
 
@@ -81,10 +81,16 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
             output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
             run=n_run,
-            handler=kwargs['handler'] if 'handler' in kwargs else None
+            full=kwargs['full'] if 'full' in kwargs else None
         )
 
-        _test_acc = inst.validate(test_s, ensemble=config_file['ensemble'])
+        y_true = test_s[test_s.columns[-1]]
+        y_pred = inst.predict(test_s, ensemble=config_file['ensemble'])
+
+        _test_acc = accuracy_score(y_true, y_pred)  # accuracy
+        _test_prc = precision_score(y_true, y_pred, average='micro')  # precision
+        _test_f1s = f1_score(y_true, y_pred, average='micro')  # f1 measure
+
         _tree_height = inst.tree_height
 
         t2 = dt.now()
@@ -94,7 +100,12 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
     )
 
     if 'dict_manager' in kwargs:
-        kwargs['dict_manager'][n_fold] = dict(acc=_test_acc, height=_tree_height)
+        kwargs['dict_manager'][n_fold] = dict(
+            acc=_test_acc,
+            f1_score=_test_f1s,
+            precision=_test_prc,
+            height=_tree_height
+        )
 
     return _test_acc
 
@@ -117,7 +128,6 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
-    handler = Handler(df)
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -143,13 +153,11 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
                     test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state,
-                    handler=handler
+                    full=df
                 )
             )
             p.start()
             processes.append(p)
-            warnings.warn('WARNING: breaking loop!')
-            break
 
         for p in processes:
             p.join()
@@ -162,10 +170,15 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
 
+        warnings.warn('WARNING: appending train and val sets!')
+
+        train_s = train_s.append(val_s, ignore_index=False)
+        val_s = train_s
+
         run_fold(
             n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
             test_s=test_s, config_file=config_file, random_state=random_state,
-            handler=handler
+            full=df
         )
 
 
@@ -262,9 +275,9 @@ def optimize_params(config_file, n_tries=10):
 
     for some_try in xrange(n_tries):
         config_file['n_individuals'] = np.random.randint(100, 200 + 1)
-        config_file['n_iterations'] = np.random.randint(10, 50 + 1)
-        config_file['tree_height'] = np.random.randint(5, 7 + 1)
-        config_file['decile'] = np.random.randint(50, 90 + 1) / 100.
+        config_file['n_iterations'] = np.random.randint(10, 100 + 1)
+        config_file['tree_height'] = np.random.randint(5, 8 + 1)
+        config_file['decile'] = np.random.randint(50, 95 + 1) / 100.
 
         params.iloc[some_try]['n_individuals', 'n_iterations', 'tree_height', 'decile'] = [
             config_file['n_individuals'],
@@ -277,7 +290,15 @@ def optimize_params(config_file, n_tries=10):
               tuple(params.iloc[some_try][['n_individuals', 'n_iterations', 'tree_height', 'decile']])
 
         dict_results = do_train(config_file=config_file, n_run=0, evaluation_mode='cross-validation')
-        accs = np.array(dict_results['folds'].values(), dtype=np.float32)
+
+        # kwargs['dict_manager'][n_fold] = dict(
+        #     acc=_test_acc,
+        #     f1_score=_test_f1s,
+        #     precision=_test_prc,
+        #     height=_tree_height
+        # )
+
+        accs = np.array([x['acc'] for x in dict_results['folds'].itervalues()], dtype=np.float32)
         print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
 
         params.iloc[some_try]['acc mean', 'acc std'] = [accs.mean(), accs.std()]
@@ -343,20 +364,20 @@ if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
 
     # --------------------------------------------------- #
-    # optimize_params(_config_file, 50)
+    optimize_params(_config_file, 100)
     # --------------------------------------------------- #
-    # crunch_parametrization('parametrization_hayes-roth-full.csv')
+    # crunch_parametrization('parametrization_balance-scale.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'cross-validation'
-    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-
-    if _evaluation_mode == 'cross-validation':
-        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-
-        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-        )
+    # _evaluation_mode = 'cross-validation'
+    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    #
+    # if _evaluation_mode == 'cross-validation':
+    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #
+    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+    #     )
     # --------------------------------------------------- #
     # _results_file = json.load(
     #     open('/home/henry/Projects/ardennes/metadata/results.json', 'r')

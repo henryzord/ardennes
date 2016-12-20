@@ -1,19 +1,16 @@
 # coding=utf-8
-import warnings
 
-from graphical_model import *
-from classes import type_check, value_check
-from individual import Individual
+import csv
+import os
+from datetime import datetime as dt
+
+import pandas
 from sklearn.tree.tree import DecisionTreeClassifier
 
-from collections import Counter
-from datetime import datetime as dt
-import os
-
-import numpy as np
-import pandas
-import csv
-import copy
+from classes import type_check, value_check
+from graphical_model import *
+from individual import Individual
+from parallel import Handler
 
 __author__ = 'Henry Cagnini'
 
@@ -136,10 +133,9 @@ class Ardennes(object):
 
         sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
 
-        if 'handler' in kwargs and kwargs['handler'] is not None:
-            self.handler = kwargs['handler']
+        if 'full' in kwargs and kwargs['full'] is not None:
+            self.handler = Handler(kwargs['full'])
         else:
-            from parallel import Handler
             self.handler = Handler(sets['train'])
 
         # from now on, considers only a dictionary 'sets' with train and val subsets

@@ -12,6 +12,8 @@ from matplotlib import pyplot as plt
 
 from treelib.node import *
 
+from sklearn.metrics import *
+
 __author__ = 'Henry Cagnini'
 
 
@@ -236,7 +238,14 @@ class Individual(object):
         )  # type: nx.DiGraph
 
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-        self.acc = self.validate(loc_val_set)
+
+        y_true = loc_val_set[loc_val_set.columns[-1]]
+        y_pred = self.predict(loc_val_set)
+
+        # acc_score = accuracy_score(y_true, y_pred)
+        _f1_score = f1_score(y_true, y_pred, average='micro')
+
+        self.acc = _f1_score
 
     def __set_node__(self, node_id, gm, tree, subset, level, parent_labels):
         """
@@ -534,10 +543,13 @@ class Individual(object):
         except KeyError as ke:
             unique_vals = [float(x) for x in sorted(subset[node_label].unique())]
 
-            candidates = np.array(unique_vals + [
-                (unique_vals[i] + unique_vals[i + 1]) / 2.
-                if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
-            ][:-1])
+            if self.handler.max_n_candidates is None:
+                candidates = np.array(unique_vals + [
+                    (unique_vals[i] + unique_vals[i + 1]) / 2.
+                    if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
+                ][:-1])
+            else:
+                candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
 
             subset_index = np.zeros(self.handler.n_objects)
             subset_index[subset.index] = 1

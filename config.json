@@ -1,16 +1,16 @@
 {
   "random_state": null,
-  "n_individuals": 152,
-  "n_iterations": 22,
-  "tree_height": 7,
+  "n_individuals": 200,
+  "n_iterations": 50,
+  "tree_height": 8,
   "distribution": "univariate",
-  "decile": 0.59,
+  "decile": 0.80,
   "uncertainty": 0.001,
   "train_size": 0.80,
   "n_runs": 10,
-  "verbose": true,
+  "verbose": false,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/kdd_synthetic_control.arff",
+  "dataset_path": "datasets/numerical/balance-scale.arff",
   "folds_path": "datasets/folds",
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }

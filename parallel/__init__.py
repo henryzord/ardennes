@@ -4,6 +4,8 @@ from collections import Counter
 
 
 class Handler(object):
+    max_n_candidates = 1024
+
     def __init__(self, dataset):
         def get_number(x):
             new_label = np.float32(self.class_label_index[x['class']])
@@ -27,8 +29,10 @@ class Handler(object):
         try:
             from cuda import CudaMaster
             self.master = CudaMaster(dataset)
+            self.max_n_candidates = self.master.MAX_N_THREADS
         except ImportError:
             self.master = None
+            self.max_n_candidates = None
 
     def gain_ratio(self, subset, subset_left, subset_right, target_attr):
         warnings.filterwarnings('error')
@@ -127,15 +131,18 @@ def __main__():
 
     for i, candidate in enumerate(candidates):
         _subset = df.loc[subset_index.astype(np.bool)]
-        host_gain = handler.gain_ratio(_subset, _subset.loc[_subset[attr] < candidate], _subset.loc[_subset[attr] >= candidate], class_attribute)
+        host_gain = handler.gain_ratio(
+            _subset, _subset.loc[_subset[attr] < candidate],
+            _subset.loc[_subset[attr] >= candidate],
+            class_attribute
+        )
         print 'seq/prl:', np.float32(host_gain), np.float32(ratios[i])
     print '-------------------'
 
 if __name__ == '__main__':
-    from multiprocessing import Process
+    # from multiprocessing import Process
+    # for i in xrange(2):
+    #     p = Process(target=__main__)
+    #     p.start()
 
-    for i in xrange(2):
-        p = Process(target=__main__)
-        p.start()
-
-    # __main__()
+    __main__()

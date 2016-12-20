@@ -5,14 +5,14 @@ from pycuda.compiler import SourceModule
 
 import os
 import warnings
+import math
 
 import numpy as np
 
 
 class CudaMaster(object):
-    _MIN_N_THREADS = 32
-    _MAX_N_THREADS = 1024
-    _N_OUTPUT = 3
+    MIN_N_THREADS = 32
+    MAX_N_THREADS = 1024
 
     def __init__(self, dataset):
         sep = '\\' if os.name == 'nt' else '/'
@@ -42,17 +42,14 @@ class CudaMaster(object):
         n_candidates = candidates.shape[0]
         candidates = candidates.astype(np.float32)
 
-        _threads_per_block = ((n_candidates / CudaMaster._MIN_N_THREADS) + 1) * CudaMaster._MIN_N_THREADS
-        if _threads_per_block > CudaMaster._MAX_N_THREADS:
-            warnings.warn(
-                'Warning: using more threads per GPU than allowed! Rolling back to ' + str(self._MAX_N_THREADS) + '.')
-            _threads_per_block = CudaMaster._MAX_N_THREADS
+        if n_candidates > CudaMaster.MAX_N_THREADS:
+            raise NotImplementedError('Support for higher than %d threads per kernel launch not implemented!' % CudaMaster.MAX_N_THREADS)
 
-        n_blocks = (n_candidates / _threads_per_block) + 1
-        _grid_size = (
-            int(np.sqrt(n_blocks)),
-            int(np.sqrt(n_blocks))
-        )
+        # _threads_per_block = ((n_candidates / CudaMaster.MIN_N_THREADS) + 1) * CudaMaster.MIN_N_THREADS
+        # n_blocks = math.ceil(np.log10(n_candidates) / np.log10(CudaMaster.MIN_N_THREADS))
+        n_blocks = 1
+        n_threads_per_block = CudaMaster.MAX_N_THREADS
+        grid_size = (1, 1)
 
         _mem_candidates = cuda.mem_alloc(candidates.nbytes)
         cuda.memcpy_htod(_mem_candidates, candidates)  # send info to gpu memory
@@ -67,8 +64,8 @@ class CudaMaster(object):
             _mem_candidates,
             np.int32(self.class_labels.shape[0]),
             self.mem_class_labels,
-            block=(_threads_per_block, 1, 1),  # block size
-            grid=_grid_size
+            block=(n_threads_per_block, 1, 1),  # block size
+            grid=grid_size
         )
 
         cuda.memcpy_dtoh(candidates, _mem_candidates)  # send info to gpu memory
