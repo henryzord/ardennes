@@ -8,33 +8,12 @@ from multiprocessing import Process, Manager
 
 import numpy as np
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
-
-from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
-from treelib import Ardennes, get_max_height
-
 from sklearn.metrics import *
 
+from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
+from treelib import Ardennes
+
 __author__ = 'Henry Cagnini'
-
-
-def __get_tree_height__(_train, **kwargs):
-    random_state = kwargs['random_state'] if 'random_state' in kwargs else None
-    max_height = get_max_height(_train, random_state)
-
-    if 'tree_height' not in kwargs or kwargs['tree_height'] is None:
-        tree_height = max_height
-    else:
-        c_tree_height = kwargs['tree_height']
-
-        if isinstance(c_tree_height, int):
-            tree_height = c_tree_height
-        elif isinstance(c_tree_height, str) or isinstance(c_tree_height, unicode):
-            tree_height = eval(c_tree_height % max_height)
-        else:
-            raise TypeError('\'tree_height\' must be either a string, None or an int!')
-
-    return tree_height
 
 
 def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
@@ -49,7 +28,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
     random.seed(random_state)
     np.random.seed(random_state)
 
-    tree_height = __get_tree_height__(train_s, **config_file)
+    tree_height = config_file['tree_height']
 
     t1 = dt.now()
 
@@ -141,7 +120,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
         return train_s, val_s
 
-    if evaluation_mode == 'holdout':
+    if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
@@ -370,7 +349,7 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'cross-validation'
+    _evaluation_mode = 'holdout'
 
     _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
 

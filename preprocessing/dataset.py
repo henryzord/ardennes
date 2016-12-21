@@ -79,16 +79,6 @@ def get_batch(dataset, train_size=0.8, random_state=None):
 
 
 def get_fold_iter(df, fold):
-    """
-    Given a dataset and a file with its folds, returns a iterator to iterate over such folds.
-
-    :type df: pandas.DataFrame
-    :param df: The full dataset.
-    :param fold: Either a string that leads to a json file, or a json file itself.
-    :return: A iterator which iterates over the folds, from the first to the last, return a tuple in the format
-        (train_set, test_set, validation_set).
-    """
-
     if isinstance(fold, str) or isinstance(fold, unicode):
         f = json.load(open(fold, 'r'))  # type: dict
     elif isinstance(fold, dict):

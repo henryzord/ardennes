@@ -395,28 +395,29 @@ class Individual(object):
         node = tree.node[arg_node]
 
         while not node['terminal']:
-            if isinstance(node['threshold'], float):
-                go_left = obj[node['label']] <= node['threshold']
-                successors = tree.successors(arg_node)
-                arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
-            elif isinstance(node['threshold'], collections.Iterable):
-                edges = self.tree.edge[arg_node]
-                neither_case = None
-                was_set = False
-                for v, d in edges.iteritems():
-                    if d['threshold'] == 'None':
-                        neither_case = v
-
-                    if obj[node['label']] == d['threshold']:
-                        arg_node = v
-                        was_set = True
-                        break
-
-                # next node is the one which the category is neither one of the seen ones in the training phase
-                if not was_set:
-                    arg_node = neither_case
-            else:
-                raise TypeError('invalid type for threshold!')
+            # if isinstance(node['threshold'], float):
+            go_left = obj[node['label']] <= node['threshold']
+            successors = tree.successors(arg_node)
+            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
+            # elif isinstance(node['threshold'], collections.Iterable):
+            #     raise StandardError('not valid!')
+            #     edges = self.tree.edge[arg_node]
+            #     neither_case = None
+            #     was_set = False
+            #     for v, d in edges.iteritems():
+            #         if d['threshold'] == 'None':
+            #             neither_case = v
+            #
+            #         if obj[node['label']] == d['threshold']:
+            #             arg_node = v
+            #             was_set = True
+            #             break
+            #
+            #     # next node is the one which the category is neither one of the seen ones in the training phase
+            #     if not was_set:
+            #         arg_node = neither_case
+            # else:
+            #     raise TypeError('invalid type for threshold!')
 
             node = tree.node[arg_node]
 
@@ -480,7 +481,7 @@ class Individual(object):
         )
         return out
 
-    def __store_threshold__(self, node_label, subset, threshold):
+    def __store_threshold__(self, node_label, parent_labels, threshold):
         """
 
         :type node_label: str
@@ -489,22 +490,23 @@ class Individual(object):
         :param subset:
         :param threshold:
         """
-        column_type = subset.dtypes[node_label]
+        # column_type = subset.dtypes[node_label]
+        #
+        # if column_type in [np.float32, np.float64, np.int32, np.int64]:
+        #     _mean = subset[node_label].mean()
+        #     _std = subset[node_label].std()
+        # elif column_type == object:
+        #     counts = subset[node_label].apply(len)
+        #     _mean = counts.mean()
+        #     _std = counts.std()
+        # else:
+        #     raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
+        # key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
 
-        if column_type in [np.float32, np.float64, np.int32, np.int64]:
-            _mean = subset[node_label].mean()
-            _std = subset[node_label].std()
-        elif column_type == object:
-            counts = subset[node_label].apply(len)
-            _mean = counts.mean()
-            _std = counts.std()
-        else:
-            raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
-
-        key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
+        key = ','.join(parent_labels + [node_label])
         self.__class__.thresholds[key] = threshold
 
-    def __retrieve_threshold__(self, node_label, subset):
+    def __retrieve_threshold__(self, node_label, parent_labels):
         """
 
         :param node_label:
@@ -513,24 +515,25 @@ class Individual(object):
         :return:
         """
 
-        column_type = subset.dtypes[node_label]
-
-        if column_type in [np.float32, np.float64, np.int32, np.int64]:
-            _mean = subset[node_label].mean()
-            _std = subset[node_label].std()
-        elif column_type == object:
-            counts = subset[node_label].apply(len)
-            _mean = counts.mean()
-            _std = counts.std()
-        else:
-            raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
-
-        key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
+        # column_type = subset.dtypes[node_label]
+        #
+        # if column_type in [np.float32, np.float64, np.int32, np.int64]:
+        #     _mean = subset[node_label].mean()
+        #     _std = subset[node_label].std()
+        # elif column_type == object:
+        #     counts = subset[node_label].apply(len)
+        #     _mean = counts.mean()
+        #     _std = counts.std()
+        # else:
+        #     raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
+        #
+        # key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
+        key = ','.join(parent_labels + [node_label])
         return self.__class__.thresholds[key]
 
     def __set_numerical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
         try:
-            best_threshold = self.__retrieve_threshold__(node_label, subset)
+            best_threshold = self.__retrieve_threshold__(node_label, parent_labels)
             meta, subsets = self.__subsets_and_meta__(
                 node_label, best_threshold, subset, node_id, node_level
             )
@@ -571,7 +574,7 @@ class Individual(object):
                 #         best_gr = gr
                 #         best_threshold = cand
 
-                self.__store_threshold__(node_label, subset, best_threshold)
+                self.__store_threshold__(node_label, parent_labels, best_threshold)
 
                 meta, subsets = self.__subsets_and_meta__(
                     node_label, best_threshold, subset, node_id, node_level
@@ -603,7 +606,7 @@ class Individual(object):
             'color': Individual._terminal_node_color
         }
 
-        return meta, pd.DataFrame([]), pd.DataFrame([])
+        return meta, None, None  # pd.DataFrame([]), pd.DataFrame([])
 
     def __set_categorical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
         # adds an option where the category is neither one of the found in the training set
