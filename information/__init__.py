@@ -97,7 +97,7 @@ class Handler(object):
             return ratios
 
 
-def __main__():
+def __test_gain_ratio__():
     from sklearn import datasets
     import pandas as pd
 
@@ -134,4 +134,4 @@ def __main__():
     print '-------------------'
 
 if __name__ == '__main__':
-    __main__()
+    __test_gain_ratio__()

@@ -560,20 +560,6 @@ class Individual(object):
                 subsets = [subset_left, subset_right]
             else:
                 best_threshold = candidates[argmax]
-
-                # best_threshold = -np.inf
-                # best_gr = -np.inf
-                # for cand in candidates:
-                #     gr = self.gain_ratio(
-                #         subset,
-                #         subset.loc[subset[node_label] < cand],
-                #         subset.loc[subset[node_label] >= cand],
-                #         self.target_attr
-                #     )
-                #     if gr > best_gr:
-                #         best_gr = gr
-                #         best_threshold = cand
-
                 self.__store_threshold__(node_label, parent_labels, best_threshold)
 
                 meta, subsets = self.__subsets_and_meta__(
@@ -700,14 +686,10 @@ class Individual(object):
             node_level == 0 else Individual._inner_node_color
         }
 
-        if isinstance(threshold, collections.Iterable):
-            subsets = [subset.loc[subset[node_label] == x] for x in threshold]
-
-        else:
-            import operator as op
-            ops = [op.le, op.gt]  # <=, >
-            subsets = [
-                subset.loc[x(subset[node_label], threshold)] for x in ops
-                ]
+        import operator as op
+        ops = [op.le, op.gt]  # <=, >
+        subsets = [
+            subset.loc[x(subset[node_label], threshold)] for x in ops
+            ]
 
         return meta, subsets
