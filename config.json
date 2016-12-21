@@ -1,7 +1,7 @@
 {
   "random_state": null,
   "n_individuals": 200,
-  "n_iterations": 100,
+  "n_iterations": 50,
   "tree_height": 7,
   "distribution": "univariate",
   "decile": 0.50,
@@ -10,7 +10,6 @@
   "n_runs": 10,
   "verbose": true,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/sonar.arff",
-  "folds_path": "datasets/folds",
-  "baseline_algorithms": ["DecisionTreeClassifier"]
+  "dataset_path": "datasets/numerical/iris.arff",
+  "folds_path": "datasets/folds"
 }

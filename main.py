@@ -37,17 +37,6 @@ def __get_tree_height__(_train, **kwargs):
     return tree_height
 
 
-def get_baseline_algorithms(names):
-    # valid = ['DecisionTreeClassifier']
-
-    algorithms = dict()
-    for name in names:
-        if name == 'DecisionTreeClassifier':
-            algorithms[name] = DecisionTreeClassifier(criterion='entropy')
-
-    return algorithms
-
-
 def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
     try:
         random_state = kwargs['random_state']
@@ -143,16 +132,16 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     random_state = config_file['random_state']
 
     def __append__(train_s, val_s):
-        from sklearn.model_selection import train_test_split
         warnings.warn('WARNING: not using canonical train and validation sets!')
 
         train_s = train_s.append(val_s, ignore_index=False)
-
-        train_s, val_s = train_test_split(train_s, train_size=0.5)
+        val_s = train_s
+        # from sklearn.model_selection import train_test_split
+        # train_s, val_s = train_test_split(train_s, train_size=0.5)
 
         return train_s, val_s
 
-    if evaluation_mode == 'cross-validation':
+    if evaluation_mode == 'holdout':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
@@ -381,7 +370,7 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'holdout'
+    _evaluation_mode = 'cross-validation'
 
     _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
 
@@ -394,7 +383,7 @@ if __name__ == '__main__':
         )
     # --------------------------------------------------- #
     # _results_file = json.load(
-    #     open('/home/henry/Projects/ardennes/metadata/results.json', 'r')
+    #     open('/home/henry/Projects/ardennes/metadata/j48_results.json', 'r')
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #

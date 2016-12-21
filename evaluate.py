@@ -60,12 +60,12 @@ def evaluate_j48(datasets_path, intermediary_path):
                     test_s = loader.load_file(os.path.join(intermediary_path, '%s_fold_%d_test.arff' % (dataset_name, n_fold)))
 
                     train_s.relationname = dataset_name
-                    test_s.relationname = dataset_name
                     val_s.relationname = dataset_name
+                    test_s.relationname = dataset_name
 
                     train_s.class_is_last()
-                    test_s.class_is_last()
                     val_s.class_is_last()
+                    test_s.class_is_last()
 
                     warnings.warn('WARNING: appending validation set in training set.')
 
@@ -175,7 +175,7 @@ def evaluate_ardennes(datasets_path, output_path, validation_mode='cross-validat
                 print(e.message, e.args)
 
 if __name__ == '__main__':
-    _datasets_path = 'datasets/numerical'
+    _datasets_path = 'datasets/__big_error__'
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
