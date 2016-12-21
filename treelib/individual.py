@@ -24,7 +24,7 @@ class Individual(object):
     column_types = None  # type: dict
     sets = None  # type: dict
     tree = None  # type: nx.DiGraph
-    acc = None  # type: float
+    quality = None  # type: float
     ind_id = None
 
     thresholds = dict()
@@ -36,6 +36,10 @@ class Individual(object):
     n_attributes = None
 
     shortest_path = dict()  # type: dict
+
+    height = None
+
+    rtol = 1e-3
 
     def __init__(self, gm, max_height, sets, pred_attr, target_attr, class_labels, handler, **kwargs):
         """
@@ -81,8 +85,10 @@ class Individual(object):
         return self.ind_id
 
     @property
-    def height(self):
-        return max(map(len, self.shortest_path.itervalues()))
+    def inverse_height(self):
+        height = self.height
+        inv_height = self.max_height - height
+        return inv_height
 
     @property
     def fitness(self):
@@ -90,7 +96,7 @@ class Individual(object):
         :rtype: float
         :return: Fitness of this individual.
         """
-        return self.acc
+        return self.quality
 
     def nodes_at_depth(self, depth):
         """
@@ -151,8 +157,47 @@ class Individual(object):
 
         return len(self.shortest_path[node_id]) - 1
 
+    def __isclose__(self, other):
+        quality_diff = abs(self.quality - other.quality)
+        return quality_diff <= Individual.rtol
+
+    def __le__(self, other):  # less or equal
+        if self.__isclose__(other):
+            return self.height <= other.height
+        return self.quality < other.quality
+
+    def __lt__(self, other):  # less than
+        if self.__isclose__(other):
+            return self.height < other.height
+        else:
+            return self.quality < other.quality
+
+    def __ge__(self, other):  # greater or equal
+        if self.__isclose__(other):
+            return self.height >= other.height
+        else:
+            return self.quality >= other.quality
+
+    def __gt__(self, other):  # greater than
+        if self.__isclose__(other):
+            return self.height > other.height
+        else:
+            return self.quality > other.quality
+
+    def __eq__(self, other):  # equality
+        if self.__isclose__(other):
+            return self.height == other.height
+        else:
+            return False
+
+    def __ne__(self, other):  # inequality
+        if self.__isclose__(other):
+            return self.height != other.height
+        else:
+            return True
+
     def __str__(self):
-        return 'fitness: %0.2f' % self.acc
+        return 'fitness: %0.2f height: %d' % (self.quality, self.height)
 
     def plot(self, savepath=None, test_set=None):
         """
@@ -196,7 +241,7 @@ class Individual(object):
         plt.text(
             0.8,
             0.94,
-            'val accuracy: %0.4f' % self.acc,
+            'val accuracy: %0.4f' % self.quality,
             fontsize=15,
             horizontalalignment='left',
             verticalalignment='center',
@@ -242,10 +287,11 @@ class Individual(object):
         y_true = loc_val_set[loc_val_set.columns[-1]]
         y_pred = self.predict(loc_val_set)
 
-        # acc_score = accuracy_score(y_true, y_pred)
-        _f1_score = f1_score(y_true, y_pred, average='micro')
+        acc_score = accuracy_score(y_true, y_pred)
+        # _f1_score = f1_score(y_true, y_pred, average='micro')
 
-        self.acc = _f1_score
+        self.quality = acc_score
+        self.height = max(map(len, self.shortest_path.itervalues()))
 
     def __set_node__(self, node_id, gm, tree, subset, level, parent_labels):
         """
@@ -274,19 +320,21 @@ class Individual(object):
                 raise ke
 
         if any((
-                subset.empty,
-                subset[subset.columns[-1]].unique().shape[0] == 1,
-                level >= self.max_height,
-                label == self.target_attr
+                subset.empty,  # empty subset
+                subset[subset.columns[-1]].unique().shape[0] == 1,  # only one class
+                level >= self.max_height,  # level deeper than maximum depth
+                label == self.target_attr   # was sampled to be a class
         )):
             meta, subset_left, subset_right = self.__set_terminal__(
                 node_label=None,
                 parent_labels=parent_labels,
-                level=level,
+                node_level=level,
                 subset=subset,
                 node_id=node_id
             )
         else:
+            # TODO try/except here for when a node must be a leaf!
+
             meta, subsets = self.__set_inner_node__(
                 label=label,
                 parent_labels=parent_labels,
@@ -317,7 +365,7 @@ class Individual(object):
                     meta, subset_left, subset_right = self.__set_terminal__(
                         node_label=None,
                         parent_labels=parent_labels,
-                        level=level,
+                        node_level=level,
                         subset=subset,
                         node_id=node_id
                     )
@@ -325,8 +373,8 @@ class Individual(object):
                 else:
                     if isinstance(meta['threshold'], float):
                         attr_dicts = [
-                            {'threshold': '< %0.2f' % meta['threshold']},
-                            {'threshold': '>= %0.2f' % meta['threshold']}
+                            {'threshold': '<= %0.2f' % meta['threshold']},
+                            {'threshold': '> %0.2f' % meta['threshold']}
                         ]
                     elif isinstance(meta['threshold'], collections.Iterable):
                         attr_dicts = [{'threshold': t} for t in meta['threshold']]
@@ -339,60 +387,6 @@ class Individual(object):
         tree.add_node(node_id, attr_dict=meta)
         return tree
 
-    def gain_ratio(self, subset, subset_left, subset_right, target_attr):
-        warnings.filterwarnings('error')
-
-        ig = self.information_gain(subset, subset_left, subset_right, target_attr)
-        si = self.__split_info__(subset, subset_left, subset_right)
-
-        try:
-            gr = ig / si
-        except RuntimeWarning as rw:
-            if si == 0:
-                gr = 0.
-            else:
-                raise rw
-
-        warnings.filterwarnings('default')
-
-        return gr
-
-    @staticmethod
-    def __split_info__(subset, subset_left, subset_right):
-        sum_term = 0.
-        for child_subset in [subset_left, subset_right]:
-            temp = (child_subset.shape[0] / float(subset.shape[0]))
-            try:
-                sum_term += temp * np.log2(temp)
-            except RuntimeWarning as rw:
-                if temp == 0:
-                    pass
-                else:
-                    raise rw
-
-        return -sum_term
-
-    def information_gain(self, subset, subset_left, subset_right, target_attr):
-        sum_term = 0.
-        for child_subset in [subset_left, subset_right]:
-            sum_term += (child_subset.shape[0] / float(subset.shape[0])) * self.entropy(child_subset, target_attr)
-
-        ig = self.entropy(subset, target_attr) - sum_term
-        return ig
-
-    @staticmethod
-    def entropy(subset, target_attr):
-        # the smaller, the better
-        size = float(subset.shape[0])
-
-        counter = Counter(subset[target_attr])
-
-        _entropy = 0.
-        for c, q in counter.iteritems():
-            _entropy += (q / size) * np.log2(q / size)
-
-        return -1. * _entropy
-
     def __predict_object__(self, obj):
         arg_node = 0  # always start with root
 
@@ -402,7 +396,7 @@ class Individual(object):
 
         while not node['terminal']:
             if isinstance(node['threshold'], float):
-                go_left = obj[node['label']] < node['threshold']
+                go_left = obj[node['label']] <= node['threshold']
                 successors = tree.successors(arg_node)
                 arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
             elif isinstance(node['threshold'], collections.Iterable):
@@ -553,28 +547,35 @@ class Individual(object):
 
             subset_index = np.zeros(self.handler.n_objects)
             subset_index[subset.index] = 1
-            ratios = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
+            gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
 
-            best_threshold = candidates[np.argmax(ratios)]
+            argmax = np.argmax(gains)
+            if gains[argmax] <= 0:
+                meta, subset_left, subset_right = self.__set_terminal__(
+                    node_label, parent_labels, node_level, subset, node_id
+                )
+                subsets = [subset_left, subset_right]
+            else:
+                best_threshold = candidates[argmax]
 
-            # best_threshold = -np.inf
-            # best_gr = -np.inf
-            # for cand in candidates:
-            #     gr = self.gain_ratio(
-            #         subset,
-            #         subset.loc[subset[node_label] < cand],
-            #         subset.loc[subset[node_label] >= cand],
-            #         self.target_attr
-            #     )
-            #     if gr > best_gr:
-            #         best_gr = gr
-            #         best_threshold = cand
+                # best_threshold = -np.inf
+                # best_gr = -np.inf
+                # for cand in candidates:
+                #     gr = self.gain_ratio(
+                #         subset,
+                #         subset.loc[subset[node_label] < cand],
+                #         subset.loc[subset[node_label] >= cand],
+                #         self.target_attr
+                #     )
+                #     if gr > best_gr:
+                #         best_gr = gr
+                #         best_threshold = cand
 
-            self.__store_threshold__(node_label, subset, best_threshold)
+                self.__store_threshold__(node_label, subset, best_threshold)
 
-            meta, subsets = self.__subsets_and_meta__(
-                node_label, best_threshold, subset, node_id, node_level
-            )
+                meta, subsets = self.__subsets_and_meta__(
+                    node_label, best_threshold, subset, node_id, node_level
+                )
         except Exception as e:
             raise e
 
@@ -583,7 +584,7 @@ class Individual(object):
         else:
             return meta, subsets
 
-    def __set_terminal__(self, node_label, parent_labels, level, subset, node_id, **kwargs):
+    def __set_terminal__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
         # node_label in this case is probably the self.target_attr; so it
         # is not significant for the **real** label of the terminal node.
 
@@ -597,7 +598,7 @@ class Individual(object):
             'label': label,
             'threshold': None,
             'terminal': True,
-            'level': level,
+            'level': node_level,
             'node_id': node_id,
             'color': Individual._terminal_node_color
         }
@@ -685,29 +686,6 @@ class Individual(object):
             raise TypeError('Unsupported column type! Column type is: %s' % dtype)
 
     @staticmethod
-    def __get_entropy__(node_label, threshold, subset):
-        """
-        Gets entropy for a given threshold.
-
-        :type subset: pandas.DataFrame
-        :param subset: data coming to this node.
-        :type node_label: int
-        :param node_label: for picking the attribute in the subset.
-        :param threshold: Threshold value. May be a floating (for numerical attributes) or string (categorical).
-        :rtype: float
-        :return: the entropy.
-        """
-
-        subset_left = subset.loc[subset[node_label] < threshold]
-        subset_right = subset.loc[subset[node_label] >= threshold]
-
-        entropy = \
-            Individual.entropy(subset_left, Individual.target_attr) + \
-            Individual.entropy(subset_right, Individual.target_attr)
-
-        return entropy
-
-    @staticmethod
     def __subsets_and_meta__(node_label, threshold, subset, node_id, node_level):
         meta = {
             'label': node_label,
@@ -724,7 +702,7 @@ class Individual(object):
 
         else:
             import operator as op
-            ops = [op.lt, op.ge]  # <, >=
+            ops = [op.le, op.gt]  # <=, >
             subsets = [
                 subset.loc[x(subset[node_label], threshold)] for x in ops
                 ]

@@ -10,7 +10,7 @@ from sklearn.tree.tree import DecisionTreeClassifier
 from classes import type_check, value_check
 from graphical_model import *
 from individual import Individual
-from parallel import Handler
+from information import Handler
 
 __author__ = 'Henry Cagnini'
 
@@ -173,7 +173,10 @@ class Ardennes(object):
             pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
         )
 
+        population = np.array(sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True))  # TODO added
         fitness = np.array([x.fitness for x in population])
+
+        to_replace_index = np.arange(integer_threshold, population.shape[0], dtype=np.int32)  # TODO modified
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
@@ -191,10 +194,10 @@ class Ardennes(object):
             )
             t1 = t2
 
-            borderline = np.partition(fitness, integer_threshold)[integer_threshold]
-
-            fittest_pop = population[fitness > borderline]
-            to_replace_index = np.flatnonzero(fitness < borderline)
+            # borderline = np.partition(fitness, integer_threshold)[integer_threshold]  # TODO sort by fitness AND height!
+            # fittest_pop = population[fitness > borderline]
+            # to_replace_index = np.flatnonzero(fitness < borderline)
+            fittest_pop = population[:integer_threshold]  # TODO modified
 
             gm.update(fittest_pop)
 
@@ -204,7 +207,9 @@ class Ardennes(object):
                     sets=sets,
                     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
                 )
-
+                population = np.array(
+                    sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True)
+                )  # TODO added
             fitness = np.array([x.fitness for x in population])
 
             if self.__early_stop__(fitness, self.uncertainty):
@@ -343,14 +348,20 @@ class Ardennes(object):
             output_file = None
 
         if kwargs['verbose']:
+            argmax = np.argmax(fitness)
+
             mean = np.mean(fitness)  # type: float
             median = np.median(fitness)  # type: float
-            max_fitness = np.max(fitness)  # type: float
+            max_fitness = fitness[argmax]  # type: float
+            max_height = population[argmax].height
+            max_nodes = len(population[argmax].tree)
             elapsed_time = kwargs['elapsed_time']
             if test_set is not None:
                 best_test_fitness = population[np.argmax(fitness)].validate(test_set)
 
-            print 'iter: %03.d\tmean: %0.6f\tmedian: %0.6f\tmax: %0.6f\tET: %02.2fsec' % (iteration, mean, median, max_fitness, elapsed_time) + (' Max test: %0.6f' % best_test_fitness if test_set is not None else '')
+            print 'iter: %03.d  mean: %0.6f  median: %0.6f  max: %0.6f  ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
+                iteration, mean, median, max_fitness, elapsed_time, max_height, max_nodes
+            ) + ('test acc: %0.6f' % best_test_fitness if test_set is not None else '')
 
         if output_file is not None:
             if iteration == 0:  # resets file

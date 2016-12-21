@@ -8,8 +8,10 @@ class Handler(object):
 
     def __init__(self, dataset):
         def get_number(x):
-            new_label = np.float32(self.class_label_index[x['class']])
-            x['class'] = new_label
+            class_label = x.axes[0][-1]
+
+            new_label = np.float32(self.class_label_index[x[class_label]])
+            x[class_label] = new_label
             return x
 
         self.target_attr = dataset.columns[-1]
@@ -132,9 +134,4 @@ def __main__():
     print '-------------------'
 
 if __name__ == '__main__':
-    # from multiprocessing import Process
-    # for i in xrange(2):
-    #     p = Process(target=__main__)
-    #     p.start()
-
     __main__()

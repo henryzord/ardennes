@@ -142,6 +142,16 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
 
+    def __append__(train_s, val_s):
+        from sklearn.model_selection import train_test_split
+        warnings.warn('WARNING: not using canonical train and validation sets!')
+
+        train_s = train_s.append(val_s, ignore_index=False)
+
+        train_s, val_s = train_test_split(train_s, train_size=0.5)
+
+        return train_s, val_s
+
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
@@ -157,10 +167,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         processes = []
 
         for i, (train_s, val_s, test_s) in enumerate(folds):
-            warnings.warn('WARNING: appending train and val sets!')
-
-            train_s = train_s.append(val_s, ignore_index=False)
-            val_s = train_s
+            train_s, val_s = __append__(train_s, val_s)
 
             p = Process(
                 target=run_fold, kwargs=dict(
@@ -183,10 +190,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
 
-        warnings.warn('WARNING: appending train and val sets!')
-
-        train_s = train_s.append(val_s, ignore_index=False)
-        val_s = train_s
+        train_s, val_s = __append__(train_s, val_s)
 
         run_fold(
             n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
@@ -377,7 +381,8 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'cross-validation'
+    _evaluation_mode = 'holdout'
+
     _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
 
     if _evaluation_mode == 'cross-validation':

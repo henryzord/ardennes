@@ -5,7 +5,7 @@ import numpy as np
 from preprocessing.dataset import read_dataset
 from matplotlib import pyplot as plt
 
-from parallel import Handler
+from information import Handler
 import networkx as nx
 from networkx.drawing.nx_agraph import graphviz_layout
 from itertools import count
@@ -15,14 +15,7 @@ def plot(tree):
     """
     Draw this individual.
     """
-
-    # from wand.image import Image
-    # from wand import display
-    # img = Image(filename='.temp.pdf')
-    # display.display(img)
-
-    # fig = plt.figure(figsize=(40, 30))
-    fig = plt.figure()
+    # fig = plt.figure()
 
     pos = graphviz_layout(tree, root=0, prog='dot')
 
@@ -42,9 +35,6 @@ def plot(tree):
 
 
 def hunt(subset, tree, handler, n_instances, node_id):
-    if node_id == 37:
-        z = 0
-
     if len(subset[subset.columns[-1]].unique()) == 1:
         tree.add_node(node_id,
                       attr_dict={'label': subset[subset.columns[-1]].unique()[0], 'node_id': node_id}
@@ -85,10 +75,7 @@ def hunt(subset, tree, handler, n_instances, node_id):
             best_attribute = attribute
 
     if best_gain <= 0.:
-        # TODO set as most frequent!!!
         most_frequent = Counter(subset[subset.columns[-1]]).most_common()[0][0]
-
-        # plot(tree)
 
         tree.add_node(node_id,
                       attr_dict={'label': most_frequent, 'node_id': node_id}
@@ -100,8 +87,6 @@ def hunt(subset, tree, handler, n_instances, node_id):
 
         subset_left, subset_right = subset.loc[subset[best_attribute] <= best_threshold], \
                                     subset.loc[subset[best_attribute] > best_threshold]
-
-        print 'subset: %d left: %d right: %d' % (subset.shape[0], subset_left.shape[0], subset_right.shape[0])
 
         if subset_left.shape[0] <= 0 or subset_right.shape[0] <= 0:
             tree.add_node(node_id,

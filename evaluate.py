@@ -67,6 +67,8 @@ def evaluate_j48(datasets_path, intermediary_path):
                     test_s.class_is_last()
                     val_s.class_is_last()
 
+                    warnings.warn('WARNING: appending validation set in training set.')
+
                     for inst in val_s:
                         train_s.add_instance(inst)
 
@@ -179,10 +181,10 @@ if __name__ == '__main__':
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
 
-    evaluate_ardennes(
-        datasets_path=_datasets_path,
-        output_path=_output_path,
-        validation_mode=_validation_mode
-    )
+    # evaluate_ardennes(
+    #     datasets_path=_datasets_path,
+    #     output_path=_output_path,
+    #     validation_mode=_validation_mode
+    # )
 
-    # evaluate_j48(_datasets_path, _intermediary_sets)
+    evaluate_j48(_datasets_path, _intermediary_sets)

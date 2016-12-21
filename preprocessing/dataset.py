@@ -224,14 +224,6 @@ def main():
         print 'Genering folds for dataset %s' % name
         generate_folds(df, dataset_name=name, output_folder=_folds_path, n_folds=n_folds)
 
-        # verifies distribution
-        # it = get_fold_iter(df, os.path.join(output_folder, name + '.json'))
-        # for train_s, test_s, val_s in it:
-        #     class_a = train_s.columns[-1]
-        #
-        #     dist_train, dist_test, dist_val = Counter(train_s[class_a]), Counter(test_s[class_a]), Counter(val_s[class_a])
-        #     print [[x / float(sum(dist.values())) for x in dist.itervalues()] for dist in [dist_train, dist_test, dist_val]]
-
     __generate_intermediary_datasets__(_datasets_path, _folds_path, output_path='../intermediary')
 
 if __name__ == '__main__':

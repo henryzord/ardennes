@@ -51,7 +51,7 @@ __device__ float device_gain_ratio(
         subset_size = 0, is_from_class = 0, is_left = 0;
 
         for(j = 0; j < n_objects; j++) {
-            is_left = (float)dataset[j * n_attributes + attribute_index] < candidate;
+            is_left = (float)dataset[j * n_attributes + attribute_index] <= candidate;
             is_from_class = (float)(abs(dataset[j * n_attributes + class_index] - class_labels[k]) < 0.01);
 
             left_branch_size += is_left * subset_index[j];
