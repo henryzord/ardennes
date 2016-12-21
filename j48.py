@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pandas as pd
 import numpy as np
 from preprocessing.dataset import read_dataset
@@ -20,6 +22,7 @@ def plot(tree):
     # display.display(img)
 
     # fig = plt.figure(figsize=(40, 30))
+    fig = plt.figure()
 
     pos = graphviz_layout(tree, root=0, prog='dot')
 
@@ -38,14 +41,14 @@ def plot(tree):
     plt.show()
 
 
-def hunt(subset, tree, parent, handler, n_instances):
-    node_id = next(counter)
+def hunt(subset, tree, handler, n_instances, node_id):
+    if node_id == 37:
+        z = 0
 
     if len(subset[subset.columns[-1]].unique()) == 1:
         tree.add_node(node_id,
-                      attr_dict={'label': subset[subset.columns[-1]].unique(), 'node_id': node_id}
+                      attr_dict={'label': subset[subset.columns[-1]].unique()[0], 'node_id': node_id}
                       )
-        tree.add_edge(parent, node_id, attr_dict={'threshold': tree.node[parent]['threshold']})
         return tree
 
     if subset.shape[0] == 1:
@@ -53,7 +56,6 @@ def hunt(subset, tree, parent, handler, n_instances):
         tree.add_node(node_id,
                       attr_dict={'label': subset.loc[subset.index[0], subset.columns[-1]], 'node_id': node_id}
                       )
-        tree.add_edge(parent, node_id, attr_dict={'threshold': tree.node[parent]['threshold']})
         return tree
 
     best_gain = -np.inf
@@ -78,30 +80,43 @@ def hunt(subset, tree, parent, handler, n_instances):
 
         argmax = np.argmax(gains)
         if gains[argmax] > best_gain:
-            best_candidates = candidates
-            best_gains = gains
             best_gain = gains[argmax]
             best_threshold = candidates[argmax]
             best_attribute = attribute
 
-    tree.add_node(node_id, attr_dict={'label': best_attribute, 'threshold': best_threshold, 'node_id': node_id})
-    if parent is not None:
-        tree.add_edge(parent, node_id, attr_dict={'threshold': tree.node[parent]['threshold']})
+    if best_gain <= 0.:
+        # TODO set as most frequent!!!
+        most_frequent = Counter(subset[subset.columns[-1]]).most_common()[0][0]
 
-    subset_left, subset_right = subset.loc[subset[best_attribute] <= best_threshold], \
-                                subset.loc[subset[best_attribute] > best_threshold]
+        # plot(tree)
 
-    print 'subset: %d left: %d right: %d' % (subset.shape[0], subset_left.shape[0], subset_right.shape[0])
-
-    if subset_left.shape[0] <= 0 or subset_right.shape[0] <= 0:
         tree.add_node(node_id,
-                      attr_dict={'label': subset.loc[subset.index[0], subset.columns[-1]], 'node_id': node_id}
+                      attr_dict={'label': most_frequent, 'node_id': node_id}
                       )
         return tree
+    else:
 
-    tree = hunt(subset_left, tree, node_id, handler, n_instances)
-    tree = hunt(subset_right, tree, node_id, handler, n_instances)
-    return tree
+        tree.add_node(node_id, attr_dict={'label': best_attribute, 'threshold': best_threshold, 'node_id': node_id})
+
+        subset_left, subset_right = subset.loc[subset[best_attribute] <= best_threshold], \
+                                    subset.loc[subset[best_attribute] > best_threshold]
+
+        print 'subset: %d left: %d right: %d' % (subset.shape[0], subset_left.shape[0], subset_right.shape[0])
+
+        if subset_left.shape[0] <= 0 or subset_right.shape[0] <= 0:
+            tree.add_node(node_id,
+                          attr_dict={'label': subset.loc[subset.index[0], subset.columns[-1]], 'node_id': node_id}
+                          )
+            return tree
+
+        left_id = next(counter)
+        right_id = next(counter)
+        tree.add_edge(node_id, left_id, attr_dict={'threshold': '<= %2.2f' % best_threshold})
+        tree.add_edge(node_id, right_id, attr_dict={'threshold': '> %2.2f' % best_threshold})
+
+        tree = hunt(subset_left, tree, handler, n_instances, left_id)
+        tree = hunt(subset_right, tree, handler, n_instances, right_id)
+        return tree
 
 
 def main():
@@ -109,7 +124,8 @@ def main():
     n_instances = _dataset.shape[0]
     _handler = Handler(_dataset)
     _tree = nx.DiGraph()
-    _tree = hunt(_dataset, _tree, None, _handler, n_instances)
+
+    _tree = hunt(_dataset, _tree, _handler, n_instances, next(counter))
     plot(_tree)
 
 if __name__ == '__main__':

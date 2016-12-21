@@ -84,12 +84,20 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
             full=kwargs['full'] if 'full' in kwargs else None
         )
 
-        y_true = test_s[test_s.columns[-1]]
-        y_pred = inst.predict(test_s, ensemble=config_file['ensemble'])
+        y_train_true = train_s[train_s.columns[-1]]
+        y_val_true = val_s[val_s.columns[-1]]
+        y_test_true = test_s[test_s.columns[-1]]
 
-        _test_acc = accuracy_score(y_true, y_pred)  # accuracy
-        _test_prc = precision_score(y_true, y_pred, average='micro')  # precision
-        _test_f1s = f1_score(y_true, y_pred, average='micro')  # f1 measure
+        y_pred_train = inst.predict(train_s, ensemble=config_file['ensemble'])
+        y_pred_val = inst.predict(val_s, ensemble=config_file['ensemble'])
+        y_pred_test = inst.predict(test_s, ensemble=config_file['ensemble'])
+
+        _train_acc = accuracy_score(y_train_true, y_pred_train)
+        _val_acc = accuracy_score(y_val_true, y_pred_val)
+        _test_acc = accuracy_score(y_test_true, y_pred_test)  # accuracy
+
+        _test_prc = precision_score(y_test_true, y_pred_test, average='micro')  # precision
+        _test_f1s = f1_score(y_test_true, y_pred_test, average='micro')  # f1 measure
 
         _tree_height = inst.tree_height
 
@@ -101,10 +109,15 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
 
     if 'dict_manager' in kwargs:
         kwargs['dict_manager'][n_fold] = dict(
+            train_acc=_train_acc,
+            val_acc=_val_acc,
             acc=_test_acc,
             f1_score=_test_f1s,
             precision=_test_prc,
-            height=_tree_height
+            height=_tree_height,
+            y_pred_test=list(y_pred_test),
+            y_pred_train=list(y_pred_train),
+            y_pred_val=list(y_pred_val)
         )
 
     return _test_acc
@@ -291,30 +304,26 @@ def optimize_params(config_file, n_tries=10):
 
         dict_results = do_train(config_file=config_file, n_run=0, evaluation_mode='cross-validation')
 
-        # kwargs['dict_manager'][n_fold] = dict(
-        #     acc=_test_acc,
-        #     f1_score=_test_f1s,
-        #     precision=_test_prc,
-        #     height=_tree_height
-        # )
+        val_accs = np.array([x['val_acc'] for x in dict_results['folds'].itervalues()], dtype=np.float32)
+        print 'acc: %02.2f +- %02.2f' % (val_accs.mean(), val_accs.std())
 
-        accs = np.array([x['acc'] for x in dict_results['folds'].itervalues()], dtype=np.float32)
-        print 'acc: %02.2f +- %02.2f' % (accs.mean(), accs.std())
+        params.iloc[some_try]['acc mean', 'acc std'] = [val_accs.mean(), val_accs.std()]
 
-        params.iloc[some_try]['acc mean', 'acc std'] = [accs.mean(), accs.std()]
-
-    params.to_csv('parametrization_%s.csv' % dataset_name, index=False)
+        params.to_csv('parametrization_%s.csv' % dataset_name, index=False)
 
 
 def crunch_parametrization(path_file):
     import plotly.graph_objs as go
     from plotly.offline import plot
 
-    df = pd.read_csv(path_file)  # type: pd.DataFrame
+    full = pd.read_csv(path_file)  # type: pd.DataFrame
+    df = full
 
     attrX = 'n_individuals'
     attrY = 'decile'
     attrZ = 'n_iterations'
+
+    print 'attributes (x, y, z): (%s, %s, %s)' % (attrX, attrY, attrZ)
 
     trace2 = go.Scatter3d(
         x=df[attrX],
@@ -357,27 +366,27 @@ def crunch_parametrization(path_file):
         )
     )
     fig = go.Figure(data=[trace2], layout=layout)
-    plot(fig, filename='.parametrization.html')
+    plot(fig, filename='parametrization.html')
 
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
 
     # --------------------------------------------------- #
-    optimize_params(_config_file, 100)
+    # optimize_params(_config_file, 50)
     # --------------------------------------------------- #
-    # crunch_parametrization('parametrization_balance-scale.csv')
+    # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
-    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-    #
-    # if _evaluation_mode == 'cross-validation':
-    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #
-    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-    #     )
+    _evaluation_mode = 'cross-validation'
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
     # --------------------------------------------------- #
     # _results_file = json.load(
     #     open('/home/henry/Projects/ardennes/metadata/results.json', 'r')

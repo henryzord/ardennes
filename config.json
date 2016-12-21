@@ -1,16 +1,16 @@
 {
   "random_state": null,
   "n_individuals": 200,
-  "n_iterations": 50,
-  "tree_height": 8,
+  "n_iterations": 100,
+  "tree_height": 7,
   "distribution": "univariate",
-  "decile": 0.80,
+  "decile": 0.50,
   "uncertainty": 0.001,
   "train_size": 0.80,
   "n_runs": 10,
   "verbose": false,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/balance-scale.arff",
+  "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds",
   "baseline_algorithms": ["DecisionTreeClassifier"]
 }
