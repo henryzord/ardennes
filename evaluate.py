@@ -175,16 +175,16 @@ def evaluate_ardennes(datasets_path, output_path, validation_mode='cross-validat
                 print(e.message, e.args)
 
 if __name__ == '__main__':
-    _datasets_path = 'datasets/__big_error__'
+    _datasets_path = 'datasets/numerical'
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
 
-    # evaluate_ardennes(
-    #     datasets_path=_datasets_path,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode
-    # )
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )
 
-    evaluate_j48(_datasets_path, _intermediary_sets)
+    # evaluate_j48(_datasets_path, _intermediary_sets)

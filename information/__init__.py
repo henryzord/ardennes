@@ -32,7 +32,8 @@ class Handler(object):
             from cuda import CudaMaster
             self.master = CudaMaster(dataset)
             self.max_n_candidates = self.master.MAX_N_THREADS
-        except ImportError:
+        except ImportError as ie:
+            warnings.warn('Warning: GPU not available. Defaulting to CPU for calculating thresholds.')
             self.master = None
             self.max_n_candidates = None
 
@@ -83,6 +84,8 @@ class Handler(object):
         if self.master is not None:
             return self.master.queue_execution(subset_index, attribute, candidates)
         else:
+            raise NotImplementedError('not implemented yet!')
+
             proper_subset = self.dataset.loc[subset_index.astype(np.bool)]
 
             ratios = map(

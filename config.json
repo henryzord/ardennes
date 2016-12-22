@@ -8,8 +8,8 @@
   "uncertainty": 0.001,
   "train_size": 0.80,
   "n_runs": 10,
-  "verbose": true,
+  "verbose": false,
   "ensemble": false,
-  "dataset_path": "datasets/numerical/iris.arff",
+  "dataset_path": "datasets/numerical/sonar.arff",
   "folds_path": "datasets/folds"
 }

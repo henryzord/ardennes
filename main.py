@@ -83,9 +83,9 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
             f1_score=_test_f1s,
             precision=_test_prc,
             height=_tree_height,
-            y_pred_test=list(y_pred_test),
-            y_pred_train=list(y_pred_train),
-            y_pred_val=list(y_pred_val)
+            # y_pred_test=list(y_pred_test),
+            # y_pred_train=list(y_pred_train),
+            # y_pred_val=list(y_pred_val)
         )
 
     return _test_acc
@@ -362,7 +362,7 @@ if __name__ == '__main__':
         )
     # --------------------------------------------------- #
     # _results_file = json.load(
-    #     open('/home/henry/Projects/ardennes/metadata/j48_results.json', 'r')
+    #     open('/home/henry/Desktop/results.json', 'r')
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
