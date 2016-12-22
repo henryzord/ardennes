@@ -401,6 +401,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
             name='gen %d' % _generation,
             text=[x[1]['probs'] for x in nodes],
             mode='markers',
+            visible=True if _generation == 0 else 'legendonly',
             hoverinfo='text',
             marker=go.Marker(
                 showscale=True,
@@ -408,6 +409,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
                 colorscale='RdBu',
                 colorbar=dict(
                     title='Assurance',
+                    xpad=100,
                 ),
                 cmin=0.,  # minimum color value
                 cmax=1.,  # maximum color value
@@ -447,21 +449,18 @@ def crunch_graphical_model(pgm_path, path_datasets):
             node_trace = build_nodes(G, generation)
             data += [node_trace]
 
-            if generation == 1:
-                break
-
         fig = go.Figure(
             data=go.Data(data),
             layout=go.Layout(
-                title='Probabilistic Graphical Model',
+                title='Probabilistic Graphical Model<br>Dataset %s' % dataset_name,
                 titlefont=dict(size=16),
                 showlegend=True,
-                width=1500,
-                height=1000,
+                # width=1500,
+                # height=1000,
                 hovermode='closest',
-                margin=dict(b=20, l=5, r=5, t=40),
+                # margin=dict(b=20, l=5, r=5, t=40),
                 xaxis=go.XAxis(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=go.YAxis(showgrid=False, zeroline=False, showticklabels=False)
+                yaxis=go.YAxis(showgrid=False, zeroline=False, showticklabels=False),
             )
         )
 
@@ -472,11 +471,11 @@ if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
 
     # --------------------------------------------------- #
-    _datasets_path = 'datasets/numerical'
-    crunch_graphical_model(
-        '/home/henry/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
-        _datasets_path
-    )
+    # _datasets_path = 'datasets/numerical'
+    # crunch_graphical_model(
+    #     '/home/henryzord/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
+    #     _datasets_path
+    # )
     # --------------------------------------------------- #
     # optimize_params(_config_file, 50)
     # --------------------------------------------------- #
@@ -490,15 +489,15 @@ if __name__ == '__main__':
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    # _evaluation_mode = 'holdout'
-    #
-    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-    #
-    # if _evaluation_mode == 'cross-validation':
-    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #
-    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-    #     )
+    _evaluation_mode = 'holdout'
+
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
     # --------------------------------------------------- #

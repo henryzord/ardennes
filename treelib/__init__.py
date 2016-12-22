@@ -142,7 +142,7 @@ class Ardennes(object):
             pred_attr=self.pred_attr,
             target_attr=self.target_attr,
             class_labels=self.class_labels,
-            max_depth=self.D,  # since last level must be all leafs
+            D=self.D,  # since last level must be all leafs
             distribution=self.distribution
         )
 

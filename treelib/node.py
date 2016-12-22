@@ -34,7 +34,7 @@ def get_depth(id_node):
     return int(np.log2(id_node + 1))
 
 
-def get_total_nodes(depth):
+def get_total_nodes(max_depth):
     """
     Get number of total nodes from a tree with given depth.
 
@@ -43,7 +43,7 @@ def get_total_nodes(depth):
     :rtype: int
     :return: The number of nodes in this tree.
     """
-    return np.power(2, depth + 1) - 1
+    return np.power(2, max_depth + 1) - 1
 
 
 def nodes_at_level(level):

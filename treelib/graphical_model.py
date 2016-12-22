@@ -19,16 +19,16 @@ class GraphicalModel(object):
     attributes = None  # tensor is a dependency graph
     
     def __init__(
-            self, pred_attr, target_attr, class_labels, max_depth=3, distribution='multivariate'
+            self, pred_attr, target_attr, class_labels, D, distribution='multivariate'
     ):
 
         self.class_labels = class_labels
         self.pred_attr = pred_attr
         self.target_attr = target_attr
         self.distribution = distribution
-        self.max_depth = max_depth
+        self.D = D
 
-        self.attributes = self.__init_attributes__(max_depth, distribution)
+        self.attributes = self.__init_attributes__(D, distribution)
 
     @classmethod
     def clean(cls):
@@ -36,7 +36,7 @@ class GraphicalModel(object):
         cls.target_attr = None
         cls.class_labels = None
 
-    def __init_attributes__(self, max_depth, distribution='univariate'):
+    def __init_attributes__(self, D, distribution='univariate'):
         def get_parents(_id, _distribution):
             if _distribution == 'multivariate':
                 raise NotImplementedError('not implemented yet!')
@@ -57,7 +57,7 @@ class GraphicalModel(object):
             depth = get_depth(column.name)
 
             # class_prob = (1. / (max_depth + 1)) * float(depth)  # linear progression
-            class_prob = 2. ** depth / 2. ** (max_depth + 1)  # power of 2 progression
+            class_prob = 2. ** depth / 2. ** (D + 1)  # power of 2 progression
             pred_prob = (1. - class_prob) / (n_attributes - 1.)
 
             column[-1] = class_prob
@@ -68,7 +68,7 @@ class GraphicalModel(object):
 
             return column
 
-        n_variables = get_total_nodes(max_depth)
+        n_variables = get_total_nodes(D - 1)  # since the probability of generating the class at D is 100%
 
         attributes = pd.DataFrame(
             index=self.pred_attr + [self.target_attr], columns=range(n_variables)
