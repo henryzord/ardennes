@@ -10,6 +10,7 @@ from classes import type_check, value_check
 from graphical_model import *
 from individual import Individual
 from information import Handler
+from sklearn.metrics import accuracy_score
 
 __author__ = 'Henry Cagnini'
 
@@ -69,50 +70,66 @@ class Ardennes(object):
         cls.target_attr = None
         cls.class_labels = None
 
-    def fit(self, train, val=None, verbose=True, output_path=None, **kwargs):
-        def __treat__(_train, _val, _test=None):
-            type_check(_train, [pd.DataFrame, tuple])
-
-            _sets = dict()
-
-            if isinstance(_train, tuple):
-                _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])), columns=self.__generate_columns__(_train[0].shape[1], make_class=True))
-            elif isinstance(_train, pd.DataFrame):
-                _sets['train'] = _train
+    def fit(self, full, train, val=None, test=None, verbose=True, **kwargs):
+        def __initialize_argsets__(_train, _val, _test):
+            _arg_sets = dict()
+            train_index = np.zeros(full.shape[0], dtype=np.bool)
+            train_index[_train.index] = 1
+            _arg_sets['train_index'] = train_index
 
             if _val is not None:
-                type_check(_val, [pd.DataFrame, tuple])
-
-                if isinstance(_val, tuple):
-                    _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])), columns=self.__generate_columns__(_val[0].shape[1], make_class=True))
-                else:
-                    _sets['val'] = _val
+                val_index = np.zeros(full.shape[0], dtype=np.bool)
+                val_index[_val.index] = 1
+                _arg_sets['val_index'] = val_index
             else:
-                _sets['val'] = _sets['train']
+                _arg_sets['val_index'] = _arg_sets['train_index']
 
             if _test is not None:
-                type_check(_test, [pd.DataFrame, tuple])
+                test_index = np.zeros(full.shape[0], dtype=np.bool)
+                test_index[_test.index] = 1
+                _arg_sets['test_index'] = test_index
 
-                if isinstance(_test, tuple):
-                    _sets['test'] = pd.DataFrame(np.hstack((_test[0], _test[1][:, np.newaxis])), columns=self.__generate_columns__(_test[0].shape[1], make_class=True))
-                else:
-                    _sets['test'] = _test
+            return _arg_sets
 
-            return _sets
-
-        sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
-
-        if 'full' in kwargs and kwargs['full'] is not None:
-            self.handler = Handler(kwargs['full'])
-        else:
-            self.handler = Handler(sets['train'])
+        # def __treat__(_train, _val, _test=None):
+        #     type_check(_train, [pd.DataFrame, tuple])
+        #
+        #     _sets = dict()
+        #
+        #     if isinstance(_train, tuple):
+        #         _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])), columns=self.__generate_columns__(_train[0].shape[1], make_class=True))
+        #     elif isinstance(_train, pd.DataFrame):
+        #         _sets['train'] = _train
+        #
+        #     if _val is not None:
+        #         type_check(_val, [pd.DataFrame, tuple])
+        #
+        #         if isinstance(_val, tuple):
+        #             _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])), columns=self.__generate_columns__(_val[0].shape[1], make_class=True))
+        #         else:
+        #             _sets['val'] = _val
+        #     else:
+        #         _sets['val'] = _sets['train']
+        #
+        #     if _test is not None:
+        #         type_check(_test, [pd.DataFrame, tuple])
+        #
+        #         if isinstance(_test, tuple):
+        #             _sets['test'] = pd.DataFrame(np.hstack((_test[0], _test[1][:, np.newaxis])), columns=self.__generate_columns__(_test[0].shape[1], make_class=True))
+        #         else:
+        #             _sets['test'] = _test
+        #
+        #     return _sets
+        # sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
+        self.handler = Handler(full)
+        arg_sets = __initialize_argsets__(train, val, test)
 
         # from now on, considers only a dictionary 'sets' with train and val subsets
 
         class_values = {
-            'pred_attr': list(sets['train'].columns[:-1]),
-            'target_attr': sets['train'].columns[-1],
-            'class_labels': np.sort(sets['train'][sets['train'].columns[-1]].unique()).tolist()
+            'pred_attr': list(full.columns[:-1]),
+            'target_attr': full.columns[-1],
+            'class_labels': np.sort(full[full.columns[-1]].unique()).tolist()
         }
 
         self.pred_attr = class_values['pred_attr']
@@ -122,7 +139,17 @@ class Ardennes(object):
         # threshold where individuals will be picked for PMF updating/replacing
         integer_threshold = int(self.decile * self.n_individuals)
 
-        t1 = dt.now()  # starts measuring time
+        Individual.set_values(
+            handler=self.handler,
+            column_types={
+                x: Individual.raw_type_dict[str(full[x].dtype)] for x in full.columns
+            },
+            pred_attr=self.pred_attr,
+            target_attr=self.target_attr,
+            class_labels=self.class_labels,
+            max_height=self.D,
+            full=full
+        )
 
         gm = GraphicalModel(
             pred_attr=self.pred_attr,
@@ -134,12 +161,13 @@ class Ardennes(object):
 
         sample_func = np.vectorize(
             Individual,
-            excluded=['graphical_model', 'max_height', 'sets', 'pred_attr', 'target_attr', 'class_labels', 'handler']
+            excluded=['gm', 'arg_sets']
         )
 
+        t1 = dt.now()  # starts measuring time
+
         population = sample_func(
-            ind_id=range(self.n_individuals), gm=gm, max_height=self.D, sets=sets,
-            pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
+            ind_id=range(self.n_individuals), gm=gm, arg_sets=arg_sets,
         )
 
         population = np.array(sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True))  # TODO added
@@ -156,9 +184,8 @@ class Ardennes(object):
                 fitness=fitness,
                 population=population,
                 verbose=verbose,
-                output_path=output_path,
                 elapsed_time=(t2-t1).total_seconds(),
-                test_set=sets['test'] if 'test' in sets else None,
+                test_index=arg_sets['test_index'] if 'test_index' in arg_sets else None,
                 **kwargs
             )
             t1 = t2
@@ -172,10 +199,9 @@ class Ardennes(object):
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=to_replace_index, gm=gm, max_height=self.D,
-                    sets=sets,
-                    pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels, handler=self.handler
+                    ind_id=range(self.n_individuals), gm=gm, arg_sets=arg_sets,
                 )
+
                 population = np.array(
                     sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True)
                 )  # TODO added
@@ -200,35 +226,6 @@ class Ardennes(object):
     def tree_height(self):
         if self.trained:
             return self.last_population[self.best_individual].height
-
-    def predict_proba(self, samples, ensemble=False):
-        raise NotImplementedError('not implemented yet!')
-
-        df = self.__to_dataframe__(samples)
-
-        if not ensemble:
-            # using predict_proba with a single tree has the same effect as simply using predict
-            predictor = self.last_population[self.best_individual]
-            all_preds = predictor.predict(df)
-        else:
-            predictor = self.last_population
-
-            labels = {label: i for i, label in enumerate(self.class_labels)}
-
-            def sample_prob(sample):
-                preds = np.empty(len(self.class_labels), dtype=np.float32)
-
-                sample_predictions = map(lambda x: x.predict(sample), predictor)
-                count = Counter(sample_predictions)
-                count_probs = {k: v / float(len(predictor)) for k, v in count.iteritems()}
-                for k, v in count_probs.items():  # TODO wrong!
-                    preds[labels[k]] = v
-
-                return preds
-
-            all_preds = df.apply(sample_prob, axis=1).as_matrix()
-
-        return all_preds
 
     def predict(self, samples, ensemble=False):
         df = self.__to_dataframe__(samples)
@@ -302,7 +299,7 @@ class Ardennes(object):
         iteration = kwargs['iteration']  # type: int
         fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
-        test_set = kwargs['test_set'] if 'test_set' in kwargs else None
+        test_index = kwargs['test_index'] if 'test_index' in kwargs else None
 
         if 'output_path' in kwargs:
             if kwargs['output_path'] is not None and 'fold' in kwargs and 'run' in kwargs:
@@ -325,12 +322,14 @@ class Ardennes(object):
             max_height = population[argmax].height
             max_nodes = len(population[argmax].tree)
             elapsed_time = kwargs['elapsed_time']
-            if test_set is not None:
-                best_test_fitness = population[np.argmax(fitness)].validate(test_set)
+            if test_index is not None:
+                y_true = Individual.full.loc[test_index, Individual.target_attr]
+                y_pred = population[argmax].predict(Individual.full.loc[test_index])
+                best_test_fitness = accuracy_score(y_true, y_pred)
 
             print 'iter: %03.d  mean: %0.6f  median: %0.6f  max: %0.6f  ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
                 iteration, mean, median, max_fitness, elapsed_time, max_height, max_nodes
-            ) + ('test acc: %0.6f' % best_test_fitness if test_set is not None else '')
+            ) + ('test acc: %0.6f' % best_test_fitness if test_index is not None else '')
 
         if output_file is not None:
             if iteration == 0:  # resets file
@@ -341,19 +340,19 @@ class Ardennes(object):
                 finally:
                     with open(output_file, 'w') as f:
                         csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                        add = [] if test_set is None else ['test accuracy']
+                        add = [] if test_index is None else ['test accuracy']
 
                         csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + add)
 
             with open(output_file, 'a') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
                 for ind in population:
-                    add = [] if test_set is None else [ind.validate(test_set)]
+                    add = [] if test_index is None else [ind.validate(test_index)]
                     csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height] + add)
 
             population[np.argmax(fitness)].plot(
                 savepath=output_file.split('.')[0].strip() + '.pdf',
-                test_set=test_set
+                test_set=test_index
             )
 
     @staticmethod

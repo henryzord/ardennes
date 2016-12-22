@@ -16,7 +16,7 @@ from treelib import Ardennes
 __author__ = 'Henry Cagnini'
 
 
-def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
+def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs):
     try:
         random_state = kwargs['random_state']
     except KeyError:
@@ -41,6 +41,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
         n_iterations=config_file['n_iterations']
     ) as inst:
         inst.fit(
+            full=full,
             train=train_s,
             val=val_s,
             test=test_s,
@@ -48,8 +49,7 @@ def run_fold(n_fold, n_run, train_s, val_s, test_s, config_file, **kwargs):
             dataset_name=config_file['dataset_name'],
             output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
-            run=n_run,
-            full=kwargs['full'] if 'full' in kwargs else None
+            run=n_run
         )
 
         y_train_true = train_s[train_s.columns[-1]]

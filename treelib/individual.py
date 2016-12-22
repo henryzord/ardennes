@@ -18,6 +18,7 @@ __author__ = 'Henry Cagnini'
 
 
 class Individual(object):
+    target_attr = None
     _terminal_node_color = '#98FB98'
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
@@ -38,10 +39,11 @@ class Individual(object):
     shortest_path = dict()  # type: dict
 
     height = None
+    full = None
 
     rtol = 1e-3
 
-    def __init__(self, gm, max_height, sets, pred_attr, target_attr, class_labels, handler, **kwargs):
+    def __init__(self, gm, arg_sets, **kwargs):
         """
         
         :type gm: treelib.graphical_model.GraphicalModel
@@ -49,29 +51,19 @@ class Individual(object):
         :type sets: dict
         :param sets:
         """
-        self.pred_attr = pred_attr
-        self.target_attr = target_attr
-        self.class_labels = class_labels
-
         if 'ind_id' in kwargs:
             self.ind_id = kwargs['ind_id']
         else:
             self.ind_id = None
 
-        if Individual.handler is None:
-            Individual.handler = handler
-        self.handler = Individual.handler
+        self.sample(gm, arg_sets['train_index'], arg_sets['val_index'])
 
-        if Individual.column_types is None:
-            Individual.column_types = {
-                x: self.raw_type_dict[str(sets['train'][x].dtype)] for x in sets['train'].columns
-                }  # type: dict
-            Individual.column_types['class'] = 'class'
-        self.column_types = Individual.column_types
+    @classmethod
+    def set_values(cls, **kwargs):
+        for k, v in kwargs.iteritems():
+            setattr(cls, k, v)
 
-        self.max_height = max_height
-
-        self.sample(gm, sets['train'], sets['val'])
+        Individual.column_types['class'] = 'class'
 
     @classmethod
     def clean(cls):
@@ -272,20 +264,20 @@ class Individual(object):
     # sampling and related methods #
     # ############################ #
 
-    def sample(self, gm, loc_train_set, loc_val_set):
+    def sample(self, gm, arg_train, arg_val):
         self.tree = self.tree = self.__set_node__(
             node_id=0,
             gm=gm,
             tree=nx.DiGraph(),
-            subset=loc_train_set,
+            subset_index=arg_train,
             level=0,
             parent_labels=[]
         )  # type: nx.DiGraph
 
         self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        y_true = loc_val_set[loc_val_set.columns[-1]]
-        y_pred = self.predict(loc_val_set)
+        y_true = Individual.full.loc[arg_val, self.target_attr]
+        y_pred = self.predict(Individual.full.loc[arg_val])  # TODO optimize!
 
         acc_score = accuracy_score(y_true, y_pred)
         # _f1_score = f1_score(y_true, y_pred, average='micro')
@@ -293,13 +285,13 @@ class Individual(object):
         self.quality = acc_score
         self.height = max(map(len, self.shortest_path.itervalues()))
 
-    def __set_node__(self, node_id, gm, tree, subset, level, parent_labels):
+    def __set_node__(self, node_id, gm, tree, subset_index, level, parent_labels):
         """
 
         :param gm:
         :type tree: networkx.DiGraph
         :param tree:
-        :param subset:
+        :param subset_index:
         :param level:
         :param parent_labels:
         :return:
@@ -320,8 +312,8 @@ class Individual(object):
                 raise ke
 
         if any((
-                subset.empty,  # empty subset
-                subset[subset.columns[-1]].unique().shape[0] == 1,  # only one class
+                np.sum(subset_index) <= 1,  # empty subset
+                Individual.full.loc[subset_index, self.target_attr].unique().shape[0] == 1,  # only one class
                 level >= self.max_height,  # level deeper than maximum depth
                 label == self.target_attr   # was sampled to be a class
         )):
@@ -329,7 +321,7 @@ class Individual(object):
                 node_label=None,
                 parent_labels=parent_labels,
                 node_level=level,
-                subset=subset,
+                subset_index=subset_index,
                 node_id=node_id
             )
         else:
@@ -340,7 +332,7 @@ class Individual(object):
                 parent_labels=parent_labels,
                 node_level=level,
                 gm=gm,
-                subset=subset,
+                subset_index=subset_index,
                 node_id=node_id
             )
 
@@ -352,7 +344,7 @@ class Individual(object):
                         node_id=child_id,
                         tree=tree,
                         gm=gm,
-                        subset=child_subset,
+                        subset_index=child_subset,
                         level=level + 1,
                         parent_labels=parent_labels + [label]
                     )
@@ -366,7 +358,7 @@ class Individual(object):
                         node_label=None,
                         parent_labels=parent_labels,
                         node_level=level,
-                        subset=subset,
+                        subset_index=subset_index,
                         node_id=node_id
                     )
 
@@ -467,7 +459,7 @@ class Individual(object):
         acc = hit_count / float(test_set.shape[0])
         return acc
 
-    def __set_inner_node__(self, label, parent_labels, node_level, subset, node_id, **kwargs):
+    def __set_inner_node__(self, label, parent_labels, node_level, subset_index, node_id, **kwargs):
         attr_type = Individual.column_types[label]
 
         out = self.handler_dict[attr_type](
@@ -475,7 +467,7 @@ class Individual(object):
             node_label=label,
             parent_labels=parent_labels,
             node_level=node_level,
-            subset=subset,
+            subset_index=subset_index,
             node_id=node_id,
             **kwargs
         )
@@ -531,14 +523,14 @@ class Individual(object):
         key = ','.join(parent_labels + [node_label])
         return self.__class__.thresholds[key]
 
-    def __set_numerical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
+    def __set_numerical__(self, node_label, parent_labels, node_level, subset_index, node_id, **kwargs):
         try:
             best_threshold = self.__retrieve_threshold__(node_label, parent_labels)
             meta, subsets = self.__subsets_and_meta__(
-                node_label, best_threshold, subset, node_id, node_level
+                node_label, best_threshold, subset_index, node_id, node_level
             )
         except KeyError as ke:
-            unique_vals = [float(x) for x in sorted(subset[node_label].unique())]
+            unique_vals = sorted(Individual.full.loc[subset_index, node_label])
 
             if self.handler.max_n_candidates is None:
                 candidates = np.array(unique_vals + [
@@ -548,14 +540,12 @@ class Individual(object):
             else:
                 candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
 
-            subset_index = np.zeros(self.handler.n_objects)
-            subset_index[subset.index] = 1
             gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
 
             argmax = np.argmax(gains)
             if gains[argmax] <= 0:
                 meta, subset_left, subset_right = self.__set_terminal__(
-                    node_label, parent_labels, node_level, subset, node_id
+                    node_label, parent_labels, node_level, subset_index, node_id
                 )
                 subsets = [subset_left, subset_right]
             else:
@@ -563,7 +553,7 @@ class Individual(object):
                 self.__store_threshold__(node_label, parent_labels, best_threshold)
 
                 meta, subsets = self.__subsets_and_meta__(
-                    node_label, best_threshold, subset, node_id, node_level
+                    node_label, best_threshold, subset_index, node_id, node_level
                 )
         except Exception as e:
             raise e
@@ -573,14 +563,14 @@ class Individual(object):
         else:
             return meta, subsets
 
-    def __set_terminal__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
+    def __set_terminal__(self, node_label, parent_labels, node_level, subset_index, node_id, **kwargs):
         # node_label in this case is probably the self.target_attr; so it
         # is not significant for the **real** label of the terminal node.
 
-        if not subset.empty:
-            label = Counter(subset[self.target_attr]).most_common()[0][0]
+        if np.sum(subset_index) > 0:
+            label = Counter(Individual.full.loc[subset_index, self.target_attr]).most_common()[0][0]
         else:
-            # if there's no data to train, how can I know which class is it? Simply pick one and throw at the user!
+            raise NotImplementedError('empty subset!')
             label = np.random.choice(self.class_labels)
 
         meta = {
@@ -675,7 +665,7 @@ class Individual(object):
             raise TypeError('Unsupported column type! Column type is: %s' % dtype)
 
     @staticmethod
-    def __subsets_and_meta__(node_label, threshold, subset, node_id, node_level):
+    def __subsets_and_meta__(node_label, threshold, subset_index, node_id, node_level):
         meta = {
             'label': node_label,
             'threshold': threshold,
@@ -685,11 +675,9 @@ class Individual(object):
             'color': Individual._root_node_color if
             node_level == 0 else Individual._inner_node_color
         }
-
-        import operator as op
-        ops = [op.le, op.gt]  # <=, >
         subsets = [
-            subset.loc[x(subset[node_label], threshold)] for x in ops
-            ]
+            np.array(Individual.full.loc[subset_index, node_label] <= threshold, dtype=np.bool),
+            np.array(Individual.full.loc[subset_index, node_label] > threshold, dtype=np.bool)
+        ]
 
         return meta, subsets
