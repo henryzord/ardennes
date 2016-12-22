@@ -3,47 +3,51 @@
 import collections
 import copy
 import itertools as it
-import warnings
 from collections import Counter
 
 import networkx as nx
 import pandas as pd
 from matplotlib import pyplot as plt
+from sklearn.metrics import *
 
 from treelib.node import *
-
-from sklearn.metrics import *
 
 __author__ = 'Henry Cagnini'
 
 
 class Individual(object):
-    target_attr = None
     _terminal_node_color = '#98FB98'
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
     column_types = None  # type: dict
-    sets = None  # type: dict
-    tree = None  # type: nx.DiGraph
-    quality = None  # type: float
-    ind_id = None
 
-    thresholds = dict()
-    max_height = -1
-
-    handler = None
-
+    target_attr = None
+    pred_attr = None
+    class_labels = None
     n_objects = None
     n_attributes = None
 
-    shortest_path = dict()  # type: dict
+    handler = None
 
+    ind_id = None
+    fitness = None  # type: float
     height = None
+    max_height = -1
+    tree = None  # type: nx.DiGraph
+
+    thresholds = dict()  # thresholds for nodes
+
+    _shortest_path = dict()  # type: dict
+
     full = None
+    sets = None
+    arg_sets = None
+    y_test_true = None
+    y_val_true = None
 
     rtol = 1e-3
 
-    def __init__(self, gm, arg_sets, **kwargs):
+    def __init__(self, gm, **kwargs):
         """
         
         :type gm: treelib.graphical_model.GraphicalModel
@@ -56,7 +60,7 @@ class Individual(object):
         else:
             self.ind_id = None
 
-        self.sample(gm, arg_sets['train_index'], arg_sets['val_index'])
+        self.sample(gm, Individual.arg_sets['train_index'])
 
     @classmethod
     def set_values(cls, **kwargs):
@@ -72,24 +76,6 @@ class Individual(object):
         cls.class_labels = None
         cls.column_types = None
 
-    @property
-    def id_ind(self):
-        return self.ind_id
-
-    @property
-    def inverse_height(self):
-        height = self.height
-        inv_height = self.max_height - height
-        return inv_height
-
-    @property
-    def fitness(self):
-        """
-        :rtype: float
-        :return: Fitness of this individual.
-        """
-        return self.quality
-
     def nodes_at_depth(self, depth):
         """
         Picks all nodes which are in the given level.
@@ -99,7 +85,7 @@ class Individual(object):
         :rtype: list of dict
         :return: A list of the nodes at the given level.
         """
-        depths = {k: self.depth_of(k) for k in self.shortest_path.iterkeys()}
+        depths = {k: self.depth_of(k) for k in self._shortest_path.iterkeys()}
         at_level = []
         for k, d in depths.iteritems():
             if d == depth:
@@ -115,7 +101,7 @@ class Individual(object):
         :rtype: list of int
         :return: A list of parents of this node, excluding the node itself.
         """
-        parents = copy.deepcopy(self.shortest_path[node_id])
+        parents = copy.deepcopy(self._shortest_path[node_id])
         parents.remove(node_id)
         return parents
 
@@ -147,51 +133,262 @@ class Individual(object):
         :return: Depth of the node, starting with zero (root).
         """
 
-        return len(self.shortest_path[node_id]) - 1
+        return len(self._shortest_path[node_id]) - 1
 
-    def __isclose__(self, other):
-        quality_diff = abs(self.quality - other.quality)
-        return quality_diff <= Individual.rtol
+    # ############################ #
+    # sampling and related methods #
+    # ############################ #
 
-    def __le__(self, other):  # less or equal
-        if self.__isclose__(other):
-            return self.height <= other.height
-        return self.quality < other.quality
+    def sample(self, gm, arg_train):
+        self.tree = self.tree = self.__set_node__(
+            node_id=0,
+            gm=gm,
+            tree=nx.DiGraph(),
+            subset_index=arg_train,
+            level=0,
+            parent_labels=[],
+            coordinates=[],
+        )  # type: nx.DiGraph
 
-    def __lt__(self, other):  # less than
-        if self.__isclose__(other):
-            return self.height < other.height
+        self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
+
+        y_pred = self.predict(Individual.sets['val'])
+        acc_score = accuracy_score(Individual.y_val_true, y_pred)
+        # _f1_score = f1_score(y_true, y_pred, average='micro')
+
+        self.fitness = acc_score
+        self.height = max(map(len, self._shortest_path.itervalues()))
+
+    def __set_node__(self, node_id, gm, tree, subset_index, level, parent_labels, coordinates):
+        try:
+            label = gm.sample(
+                node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0)
+            )
+        except KeyError as ke:
+            if level >= self.max_height:
+                label = self.target_attr
+            else:
+                raise ke
+
+        if any((
+                Individual.full.loc[subset_index, self.target_attr].unique().shape[0] == 1,  # only one class
+                level >= self.max_height,  # level deeper than maximum depth
+                label == self.target_attr   # was sampled to be a class
+        )):
+            meta, subsets = self.__set_terminal__(
+                node_label=None,
+                node_id=node_id,
+                node_level=level,
+                subset_index=subset_index,
+                parent_labels=parent_labels,
+                coordinates=coordinates
+            )
         else:
-            return self.quality < other.quality
+            meta, subsets = self.__set_inner_node__(
+                node_label=label,
+                parent_labels=parent_labels,
+                coordinates=coordinates,
+                node_level=level,
+                gm=gm,
+                subset_index=subset_index,
+                node_id=node_id
+            )
 
-    def __ge__(self, other):  # greater or equal
-        if self.__isclose__(other):
-            return self.height >= other.height
+            if meta['threshold'] is not None:
+                children_id = [get_left_child(node_id), get_right_child(node_id)]
+
+                for c, child_id, child_subset in it.izip(range(len(children_id)), children_id, subsets):
+                    tree = self.__set_node__(
+                        node_id=child_id,
+                        tree=tree,
+                        gm=gm,
+                        subset_index=child_subset,
+                        level=level + 1,
+                        parent_labels=parent_labels + [label],
+                        coordinates=coordinates + [c]
+                    )
+
+                if all([tree.node[child_id]['label'] in self.class_labels for child_id in children_id]) \
+                        and tree.node[children_id[0]]['label'] == tree.node[children_id[1]]['label']:
+                    for child_id in children_id:
+                        tree.remove_node(child_id)
+
+                    meta, subsets = self.__set_terminal__(
+                        node_label=None,
+                        node_id=node_id,
+                        node_level=level,
+                        subset_index=subset_index,
+                        parent_labels=parent_labels,
+                        coordinates=coordinates
+                    )
+
+                else:
+                    if isinstance(meta['threshold'], float):
+                        attr_dicts = [
+                            {'threshold': '<= %0.2f' % meta['threshold']},
+                            {'threshold': '> %0.2f' % meta['threshold']}
+                        ]
+                    elif isinstance(meta['threshold'], collections.Iterable):
+                        attr_dicts = [{'threshold': t} for t in meta['threshold']]
+                    else:
+                        raise TypeError('invalid type for threshold!')
+
+                    for child_id, attr_dict in it.izip(children_id, attr_dicts):
+                        tree.add_edge(node_id, child_id, attr_dict=attr_dict)
+
+        tree.add_node(node_id, attr_dict=meta)
+        return tree
+
+    def predict(self, samples):
+        """
+        Makes predictions for unseen samples.
+
+        :param samples: Either a pandas.DataFrame (for multiple samples)or pandas.Series (for a single object).
+        :rtype: numpy.ndarray
+        :return: The predicted class for each sample.
+        """
+        def __predict_object__(obj):
+            arg_node = 0  # always start with root
+
+            tree = self.tree  # type: nx.DiGraph
+
+            node = tree.node[arg_node]
+
+            while not node['terminal']:
+                go_left = obj[node['label']] <= node['threshold']
+                successors = tree.successors(arg_node)
+                arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
+
+                node = tree.node[arg_node]
+
+            return node['label']
+
+        if isinstance(samples, pd.DataFrame):
+            preds = samples.apply(__predict_object__, axis=1).as_matrix()
+        elif isinstance(samples, pd.Series):
+            preds = __predict_object__(samples)
         else:
-            return self.quality >= other.quality
+            raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
+        return preds
 
-    def __gt__(self, other):  # greater than
-        if self.__isclose__(other):
-            return self.height > other.height
+    def __set_inner_node__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+        attr_type = Individual.column_types[node_label]
+
+        out = self.handler_dict[attr_type](
+            self,
+            node_label=node_label,
+            node_id=node_id,
+            node_level=node_level,
+            subset_index=subset_index,
+            parent_labels=parent_labels,
+            coordinates=coordinates,
+            **kwargs
+        )
+        return out
+
+    def __store_threshold__(self, node_label, parent_labels, coordinates, threshold):
+        key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
+        self.__class__.thresholds[key] = threshold
+
+    def __retrieve_threshold__(self, node_label, parent_labels, coordinates):
+        key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
+        return self.__class__.thresholds[key]
+
+    def __set_numerical__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+        try:
+            best_threshold = self.__retrieve_threshold__(node_label, parent_labels, coordinates)
+            meta, subsets = self.__subsets_and_meta__(
+                node_label=node_label,
+                node_id=node_id,
+                node_level=node_level,
+                subset_index=subset_index,
+                threshold=best_threshold,
+            )
+        except KeyError as ke:
+            unique_vals = sorted(Individual.full.loc[subset_index, node_label])
+
+            if self.handler.max_n_candidates is None:
+                candidates = np.array(unique_vals + [
+                    (unique_vals[i] + unique_vals[i + 1]) / 2.
+                    if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
+                ][:-1])
+            else:
+                candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
+
+            gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
+
+            argmax = np.argmax(gains)
+            if gains[argmax] <= 0:
+                meta, subsets = self.__set_terminal__(
+                    node_label=node_label,
+                    node_id=node_id,
+                    node_level=node_level,
+                    subset_index=subset_index,
+                    parent_labels=parent_labels,
+                    coordinates=coordinates,
+                    **kwargs
+                )
+            else:
+                best_threshold = candidates[argmax]
+                self.__store_threshold__(node_label, parent_labels, coordinates, best_threshold)
+
+                meta, subsets = self.__subsets_and_meta__(
+                    node_label=node_label,
+                    node_id=node_id,
+                    node_level=node_level,
+                    subset_index=subset_index,
+                    threshold=best_threshold,
+                )
+        except Exception as e:
+            raise e
+
+        if 'get_meta' in kwargs and kwargs['get_meta'] == False:
+            return subsets
         else:
-            return self.quality > other.quality
+            return meta, subsets
 
-    def __eq__(self, other):  # equality
-        if self.__isclose__(other):
-            return self.height == other.height
-        else:
-            return False
+    def __set_terminal__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+        # node_label in this case is probably the self.target_attr; so it
+        # is not significant for the **real** label of the terminal node.
+        label = Counter(Individual.full.loc[subset_index, self.target_attr]).most_common()[0][0]
 
-    def __ne__(self, other):  # inequality
-        if self.__isclose__(other):
-            return self.height != other.height
-        else:
-            return True
+        meta = {
+            'label': label,
+            'threshold': None,
+            'terminal': True,
+            'level': node_level,
+            'node_id': node_id,
+            'color': Individual._terminal_node_color
+        }
 
-    def __str__(self):
-        return 'fitness: %0.2f height: %d' % (self.quality, self.height)
+        return meta, (None, None)
 
-    def plot(self, savepath=None, test_set=None):
+    def __set_categorical__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+        raise NotImplementedError('not implemented yet!')
+
+    @staticmethod
+    def __set_error__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+        raise TypeError('Unsupported data type for column %s!' % node_label)
+
+    @staticmethod
+    def __subsets_and_meta__(node_label, node_id, node_level, subset_index, threshold):
+        meta = {
+            'label': node_label,
+            'threshold': threshold,
+            'terminal': False,
+            'level': node_level,
+            'node_id': node_id,
+            'color': Individual._root_node_color if
+            node_level == 0 else Individual._inner_node_color
+        }
+
+        less_or_equal = (Individual.full[node_label] <= threshold).values.ravel()
+        subset_left = less_or_equal & subset_index
+        subset_right = np.invert(less_or_equal) & subset_index
+
+        return meta, (subset_left, subset_right)
+
+    def plot(self, savepath=None, test_acc=None):
         """
         Draw this individual.
         """
@@ -233,20 +430,18 @@ class Individual(object):
         plt.text(
             0.8,
             0.94,
-            'val accuracy: %0.4f' % self.quality,
+            'val accuracy: %0.4f' % self.fitness,
             fontsize=15,
             horizontalalignment='left',
             verticalalignment='center',
             transform=fig.transFigure
         )
 
-        if test_set is not None:
-            test_acc = self.validate(test_set)
-
+        if test_acc is not None:
             plt.text(
                 0.8,
                 0.98,
-                'test accuracy: %0.4f' % test_acc,
+                'test acc: %0.4f' % test_acc,
                 fontsize=15,
                 horizontalalignment='left',
                 verticalalignment='center',
@@ -260,350 +455,77 @@ class Individual(object):
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
 
-    # ############################ #
-    # sampling and related methods #
-    # ############################ #
+    @property
+    def inverse_height(self):
+        height = self.height
+        inv_height = self.max_height - height
+        return inv_height
 
-    def sample(self, gm, arg_train, arg_val):
-        self.tree = self.tree = self.__set_node__(
-            node_id=0,
-            gm=gm,
-            tree=nx.DiGraph(),
-            subset_index=arg_train,
-            level=0,
-            parent_labels=[]
-        )  # type: nx.DiGraph
+    @property
+    def n_nodes(self):
+        return len(self.tree)
 
-        self.shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
+    def __isclose__(self, other):
+        quality_diff = abs(self.fitness - other.quality)
+        return quality_diff <= Individual.rtol
 
-        y_true = Individual.full.loc[arg_val, self.target_attr]
-        y_pred = self.predict(Individual.full.loc[arg_val])  # TODO optimize!
+    def __le__(self, other):  # less or equal
+        if self.__isclose__(other):
+            return self.height <= other.height
+        return self.fitness < other.quality
 
-        acc_score = accuracy_score(y_true, y_pred)
-        # _f1_score = f1_score(y_true, y_pred, average='micro')
-
-        self.quality = acc_score
-        self.height = max(map(len, self.shortest_path.itervalues()))
-
-    def __set_node__(self, node_id, gm, tree, subset_index, level, parent_labels):
-        """
-
-        :param gm:
-        :type tree: networkx.DiGraph
-        :param tree:
-        :param subset_index:
-        :param level:
-        :param parent_labels:
-        :return:
-        """
-
-        # if:
-        # 1. there is only one instance (or none) coming to this node; or
-        # 2. there is only one class coming to this node;
-        # then set this as a terminal node
-        try:
-            label = gm.sample(
-                node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0)
-            )
-        except KeyError as ke:
-            if level >= self.max_height:
-                label = self.target_attr
-            else:
-                raise ke
-
-        if any((
-                np.sum(subset_index) <= 1,  # empty subset
-                Individual.full.loc[subset_index, self.target_attr].unique().shape[0] == 1,  # only one class
-                level >= self.max_height,  # level deeper than maximum depth
-                label == self.target_attr   # was sampled to be a class
-        )):
-            meta, subset_left, subset_right = self.__set_terminal__(
-                node_label=None,
-                parent_labels=parent_labels,
-                node_level=level,
-                subset_index=subset_index,
-                node_id=node_id
-            )
+    def __lt__(self, other):  # less than
+        if self.__isclose__(other):
+            return self.height < other.height
         else:
-            # TODO try/except here for when a node must be a leaf!
+            return self.fitness < other.quality
 
-            meta, subsets = self.__set_inner_node__(
-                label=label,
-                parent_labels=parent_labels,
-                node_level=level,
-                gm=gm,
-                subset_index=subset_index,
-                node_id=node_id
-            )
-
-            if meta['threshold'] is not None:
-                children_id = [get_left_child(node_id), get_right_child(node_id)]
-
-                for child_id, child_subset in it.izip(children_id, subsets):
-                    tree = self.__set_node__(
-                        node_id=child_id,
-                        tree=tree,
-                        gm=gm,
-                        subset_index=child_subset,
-                        level=level + 1,
-                        parent_labels=parent_labels + [label]
-                    )
-
-                if all([tree.node[child_id]['label'] in self.class_labels for child_id in children_id]) \
-                        and tree.node[children_id[0]]['label'] == tree.node[children_id[1]]['label']:
-                    for child_id in children_id:
-                        tree.remove_node(child_id)
-
-                    meta, subset_left, subset_right = self.__set_terminal__(
-                        node_label=None,
-                        parent_labels=parent_labels,
-                        node_level=level,
-                        subset_index=subset_index,
-                        node_id=node_id
-                    )
-
-                else:
-                    if isinstance(meta['threshold'], float):
-                        attr_dicts = [
-                            {'threshold': '<= %0.2f' % meta['threshold']},
-                            {'threshold': '> %0.2f' % meta['threshold']}
-                        ]
-                    elif isinstance(meta['threshold'], collections.Iterable):
-                        attr_dicts = [{'threshold': t} for t in meta['threshold']]
-                    else:
-                        raise TypeError('invalid type for threshold!')
-
-                    for child_id, attr_dict in it.izip(children_id, attr_dicts):
-                        tree.add_edge(node_id, child_id, attr_dict=attr_dict)
-
-        tree.add_node(node_id, attr_dict=meta)
-        return tree
-
-    def __predict_object__(self, obj):
-        arg_node = 0  # always start with root
-
-        tree = self.tree  # type: nx.DiGraph
-
-        node = tree.node[arg_node]
-
-        while not node['terminal']:
-            # if isinstance(node['threshold'], float):
-            go_left = obj[node['label']] <= node['threshold']
-            successors = tree.successors(arg_node)
-            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
-            # elif isinstance(node['threshold'], collections.Iterable):
-            #     raise StandardError('not valid!')
-            #     edges = self.tree.edge[arg_node]
-            #     neither_case = None
-            #     was_set = False
-            #     for v, d in edges.iteritems():
-            #         if d['threshold'] == 'None':
-            #             neither_case = v
-            #
-            #         if obj[node['label']] == d['threshold']:
-            #             arg_node = v
-            #             was_set = True
-            #             break
-            #
-            #     # next node is the one which the category is neither one of the seen ones in the training phase
-            #     if not was_set:
-            #         arg_node = neither_case
-            # else:
-            #     raise TypeError('invalid type for threshold!')
-
-            node = tree.node[arg_node]
-
-        return node['label']
-
-    def __validate_object__(self, obj):
-        """
-        
-        :type obj: pandas.Series
-        :param obj:
-        :return:
-        """
-        label = self.__predict_object__(obj)
-        return obj.iloc[-1] == label
-
-    def predict(self, samples):
-        """
-        Makes predictions for unseen samples.
-
-        :param samples: Either a pandas.DataFrame (for multiple samples)or pandas.Series (for a single object).
-        :rtype: numpy.ndarray
-        :return: The predicted class for each sample.
-        """
-        if isinstance(samples, pd.DataFrame):
-            preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
-        elif isinstance(samples, pd.Series):
-            preds = self.__predict_object__(samples)
+    def __ge__(self, other):  # greater or equal
+        if self.__isclose__(other):
+            return self.height >= other.height
         else:
-            raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
-        return preds
+            return self.fitness >= other.quality
 
-    def validate(self, test_set=None, X_test=None, y_test=None):
-        """
-        Assess the accuracy of this Individual against the provided set.
-        
-        :type test_set: pandas.DataFrame
-        :param test_set: a matrix with the class attribute in the last position (i.e, column).
-        :return: The accuracy of this model when testing with test_set.
-        """
-
-        if test_set is None:
-            test_set = pd.DataFrame(
-                np.hstack((X_test, y_test[:, np.newaxis]))
-            )
-
-        hit_count = test_set.apply(self.__validate_object__, axis=1).sum()
-        acc = hit_count / float(test_set.shape[0])
-        return acc
-
-    def __set_inner_node__(self, label, parent_labels, node_level, subset_index, node_id, **kwargs):
-        attr_type = Individual.column_types[label]
-
-        out = self.handler_dict[attr_type](
-            self,
-            node_label=label,
-            parent_labels=parent_labels,
-            node_level=node_level,
-            subset_index=subset_index,
-            node_id=node_id,
-            **kwargs
-        )
-        return out
-
-    def __store_threshold__(self, node_label, parent_labels, threshold):
-        """
-
-        :type node_label: str
-        :param node_label:
-        :type subset: pandas.DataFrame
-        :param subset:
-        :param threshold:
-        """
-        # column_type = subset.dtypes[node_label]
-        #
-        # if column_type in [np.float32, np.float64, np.int32, np.int64]:
-        #     _mean = subset[node_label].mean()
-        #     _std = subset[node_label].std()
-        # elif column_type == object:
-        #     counts = subset[node_label].apply(len)
-        #     _mean = counts.mean()
-        #     _std = counts.std()
-        # else:
-        #     raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
-        # key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
-
-        key = ','.join(parent_labels + [node_label])
-        self.__class__.thresholds[key] = threshold
-
-    def __retrieve_threshold__(self, node_label, parent_labels):
-        """
-
-        :param node_label:
-        :type subset: pandas.DataFrame
-        :param subset:
-        :return:
-        """
-
-        # column_type = subset.dtypes[node_label]
-        #
-        # if column_type in [np.float32, np.float64, np.int32, np.int64]:
-        #     _mean = subset[node_label].mean()
-        #     _std = subset[node_label].std()
-        # elif column_type == object:
-        #     counts = subset[node_label].apply(len)
-        #     _mean = counts.mean()
-        #     _std = counts.std()
-        # else:
-        #     raise TypeError('invalid type for threshold! Encountered %s' % str(column_type))
-        #
-        # key = '[%s][%05.8f][%05.8f]' % (str(node_label), _mean, _std)
-        key = ','.join(parent_labels + [node_label])
-        return self.__class__.thresholds[key]
-
-    def __set_numerical__(self, node_label, parent_labels, node_level, subset_index, node_id, **kwargs):
-        try:
-            best_threshold = self.__retrieve_threshold__(node_label, parent_labels)
-            meta, subsets = self.__subsets_and_meta__(
-                node_label, best_threshold, subset_index, node_id, node_level
-            )
-        except KeyError as ke:
-            unique_vals = sorted(Individual.full.loc[subset_index, node_label])
-
-            if self.handler.max_n_candidates is None:
-                candidates = np.array(unique_vals + [
-                    (unique_vals[i] + unique_vals[i + 1]) / 2.
-                    if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
-                ][:-1])
-            else:
-                candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
-
-            gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
-
-            argmax = np.argmax(gains)
-            if gains[argmax] <= 0:
-                meta, subset_left, subset_right = self.__set_terminal__(
-                    node_label, parent_labels, node_level, subset_index, node_id
-                )
-                subsets = [subset_left, subset_right]
-            else:
-                best_threshold = candidates[argmax]
-                self.__store_threshold__(node_label, parent_labels, best_threshold)
-
-                meta, subsets = self.__subsets_and_meta__(
-                    node_label, best_threshold, subset_index, node_id, node_level
-                )
-        except Exception as e:
-            raise e
-
-        if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-            return subsets
+    def __gt__(self, other):  # greater than
+        if self.__isclose__(other):
+            return self.height > other.height
         else:
-            return meta, subsets
+            return self.fitness > other.quality
 
-    def __set_terminal__(self, node_label, parent_labels, node_level, subset_index, node_id, **kwargs):
-        # node_label in this case is probably the self.target_attr; so it
-        # is not significant for the **real** label of the terminal node.
-
-        if np.sum(subset_index) > 0:
-            label = Counter(Individual.full.loc[subset_index, self.target_attr]).most_common()[0][0]
+    def __eq__(self, other):  # equality
+        if self.__isclose__(other):
+            return self.height == other.height
         else:
-            raise NotImplementedError('empty subset!')
-            label = np.random.choice(self.class_labels)
+            return False
 
-        meta = {
-            'label': label,
-            'threshold': None,
-            'terminal': True,
-            'level': node_level,
-            'node_id': node_id,
-            'color': Individual._terminal_node_color
-        }
-
-        return meta, None, None  # pd.DataFrame([]), pd.DataFrame([])
-
-    def __set_categorical__(self, node_label, parent_labels, node_level, subset, node_id, **kwargs):
-        # adds an option where the category is neither one of the found in the training set
-        categories = subset[node_label].unique().tolist() + ['None']
-
-        out = self.__subsets_and_meta__(
-            node_label=node_label,
-            threshold=categories,
-            subset=subset,
-            node_id=node_id,
-            node_level=node_level
-        )
-
-        if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-            return list(out)[1:]
+    def __ne__(self, other):  # inequality
+        if self.__isclose__(other):
+            return self.height != other.height
         else:
-            return out
+            return True
 
-    @staticmethod
-    def __set_error__(self, node_label, parent_label, subset, **kwargs):
-        raise TypeError('Unsupported data type for column %s!' % node_label)
+    def __str__(self):
+        return 'fitness: %0.2f height: %d' % (self.fitness, self.height)
+
+    def get_predictive_type(self, dtype):
+        """
+        Tells whether the attribute is categorical or numerical.
+
+        :type dtype: type
+        :param dtype: dtype of an attribute.
+        :rtype: str
+        :return: Whether this attribute is categorical or numerical.
+        """
+
+        raw_type = self.raw_type_dict[str(dtype)]
+        func = self.handler_dict[raw_type]
+
+        if func.__name__ == self.__set_categorical__.__name__:
+            return 'categorical'
+        elif func.__name__ == self.__set_numerical__.__name__:
+            return 'numerical'
+        else:
+            raise TypeError('Unsupported column type! Column type is: %s' % dtype)
 
     handler_dict = {
         'object': __set_categorical__,
@@ -643,41 +565,3 @@ class Individual(object):
         'bool': 'bool',
         'str': 'str',
     }
-
-    def get_predictive_type(self, dtype):
-        """
-        Tells whether the attribute is categorical or numerical.
-
-        :type dtype: type
-        :param dtype: dtype of an attribute.
-        :rtype: str
-        :return: Whether this attribute is categorical or numerical.
-        """
-
-        raw_type = self.raw_type_dict[str(dtype)]
-        func = self.handler_dict[raw_type]
-
-        if func.__name__ == self.__set_categorical__.__name__:
-            return 'categorical'
-        elif func.__name__ == self.__set_numerical__.__name__:
-            return 'numerical'
-        else:
-            raise TypeError('Unsupported column type! Column type is: %s' % dtype)
-
-    @staticmethod
-    def __subsets_and_meta__(node_label, threshold, subset_index, node_id, node_level):
-        meta = {
-            'label': node_label,
-            'threshold': threshold,
-            'terminal': False,
-            'level': node_level,
-            'node_id': node_id,
-            'color': Individual._root_node_color if
-            node_level == 0 else Individual._inner_node_color
-        }
-        subsets = [
-            np.array(Individual.full.loc[subset_index, node_label] <= threshold, dtype=np.bool),
-            np.array(Individual.full.loc[subset_index, node_label] > threshold, dtype=np.bool)
-        ]
-
-        return meta, subsets

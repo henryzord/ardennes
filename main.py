@@ -1,4 +1,5 @@
 # coding=utf-8
+import csv
 import json
 import os
 import random
@@ -6,12 +7,12 @@ import warnings
 from datetime import datetime as dt
 from multiprocessing import Process, Manager
 
-import numpy as np
 import pandas as pd
 from sklearn.metrics import *
 
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
+from treelib.node import *
 
 __author__ = 'Henry Cagnini'
 
@@ -284,6 +285,7 @@ def optimize_params(config_file, n_tries=10):
         params.to_csv('parametrization_%s.csv' % dataset_name, index=False)
 
 
+# noinspection PyUnresolvedReferences
 def crunch_parametrization(path_file):
     import plotly.graph_objs as go
     from plotly.offline import plot
@@ -341,30 +343,162 @@ def crunch_parametrization(path_file):
     plot(fig, filename='parametrization.html')
 
 
+def crunch_graphical_model(pgm_path, path_datasets):
+    from matplotlib import pyplot as plt
+    from networkx.drawing.nx_agraph import graphviz_layout
+    from networkx import nx
+    import itertools as it
+    import plotly.graph_objs as go
+    from plotly.offline import plot
+
+    def build_graph(series):
+        G = nx.DiGraph()
+
+        node_labels = dict()
+
+        for node_id in xrange(series.shape[1]):
+            probs = series[:, node_id]
+
+            G.add_node(
+                node_id,
+                attr_dict=dict(
+                    color=max(probs),
+                    probs='<br>'.join(['%2.3f : %s' % (y, x) for x, y in it.izip(columns, probs)])
+                )
+            )
+            parent = get_parent(node_id)
+            if parent is not None:
+                G.add_edge(parent, node_id)
+
+            node_labels[node_id] = node_id
+
+        return G
+
+    def build_edges(_G):
+        edge_trace = go.Scatter(
+            x=[],
+            y=[],
+            line=go.Line(width=0.5, color='#999'),
+            hoverinfo='none',
+            mode='lines',
+            name='edges'
+        )
+
+        for edge in _G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_trace['x'] += [x0, x1, None]
+            edge_trace['y'] += [y0, y1, None]
+
+        return edge_trace
+
+    def build_nodes(_G, _generation):
+        nodes = _G.nodes(data=True)
+
+        _node_trace = go.Scatter(
+            x=[pos[node[0]][0] for node in nodes],
+            y=[pos[node[0]][1] for node in nodes],
+            name='gen %d' % _generation,
+            text=[x[1]['probs'] for x in nodes],
+            mode='markers',
+            hoverinfo='text',
+            marker=go.Marker(
+                showscale=True,
+                color=[x[1]['color'] for x in nodes],
+                colorscale='RdBu',
+                colorbar=dict(
+                    title='Assurance',
+                ),
+                cmin=0.,  # minimum color value
+                cmax=1.,  # maximum color value
+                cauto=False,  # do not automatically fit color values
+                reversescale=False,
+                size=15,
+                line=dict(
+                    width=2
+                )
+            )
+        )
+        return _node_trace
+
+    sep = '\\' if os.name == 'nt' else '/'
+
+    dataset_name = pgm_path.split(sep)[-1].split('_')[0]
+
+    dataset = read_dataset(os.path.join(path_datasets, dataset_name + '.arff'))
+    columns = dataset.columns
+    n_columns = dataset.shape[1]
+    del dataset
+
+    data = []
+
+    with open(pgm_path, 'r') as f:
+        csv_w = csv.reader(f, delimiter=',', quotechar='\"')
+        for generation, line in enumerate(csv_w):
+            series = np.array(line, dtype=np.float).reshape(n_columns, -1)
+
+            G = build_graph(series)
+
+            pos = graphviz_layout(G, root=0, prog='dot')
+
+            if generation == 0:
+                data.append(build_edges(G))
+
+            node_trace = build_nodes(G, generation)
+            data += [node_trace]
+
+            if generation == 1:
+                break
+
+        fig = go.Figure(
+            data=go.Data(data),
+            layout=go.Layout(
+                title='Probabilistic Graphical Model',
+                titlefont=dict(size=16),
+                showlegend=True,
+                width=1500,
+                height=1000,
+                hovermode='closest',
+                margin=dict(b=20, l=5, r=5, t=40),
+                xaxis=go.XAxis(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=go.YAxis(showgrid=False, zeroline=False, showticklabels=False)
+            )
+        )
+
+        plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
+        # plot(data, filename=pgm_path.split(sep)[-1] + '.html')
+
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
 
+    # --------------------------------------------------- #
+    _datasets_path = 'datasets/numerical'
+    crunch_graphical_model(
+        '/home/henry/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
+        _datasets_path
+    )
     # --------------------------------------------------- #
     # optimize_params(_config_file, 50)
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'holdout'
-
-    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-
-    if _evaluation_mode == 'cross-validation':
-        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-
-        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-        )
-    # --------------------------------------------------- #
     # _results_file = json.load(
-    #     open('/home/henry/Desktop/results.json', 'r')
+    #     open('/home/henry/Desktop/del/results.json', 'r')
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
+    # --------------------------------------------------- #
+    # _evaluation_mode = 'holdout'
+    #
+    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    #
+    # if _evaluation_mode == 'cross-validation':
+    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #
+    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+    #     )
+    # --------------------------------------------------- #

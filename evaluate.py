@@ -68,7 +68,6 @@ def evaluate_j48(datasets_path, intermediary_path):
                     test_s.class_is_last()
 
                     warnings.warn('WARNING: appending validation set in training set.')
-
                     for inst in val_s:
                         train_s.add_instance(inst)
 

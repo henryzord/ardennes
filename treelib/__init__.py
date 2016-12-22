@@ -91,38 +91,21 @@ class Ardennes(object):
 
             return _arg_sets
 
-        # def __treat__(_train, _val, _test=None):
-        #     type_check(_train, [pd.DataFrame, tuple])
-        #
-        #     _sets = dict()
-        #
-        #     if isinstance(_train, tuple):
-        #         _sets['train'] = pd.DataFrame(np.hstack((_train[0], _train[1][:, np.newaxis])), columns=self.__generate_columns__(_train[0].shape[1], make_class=True))
-        #     elif isinstance(_train, pd.DataFrame):
-        #         _sets['train'] = _train
-        #
-        #     if _val is not None:
-        #         type_check(_val, [pd.DataFrame, tuple])
-        #
-        #         if isinstance(_val, tuple):
-        #             _sets['val'] = pd.DataFrame(np.hstack((_val[0], _val[1][:, np.newaxis])), columns=self.__generate_columns__(_val[0].shape[1], make_class=True))
-        #         else:
-        #             _sets['val'] = _val
-        #     else:
-        #         _sets['val'] = _sets['train']
-        #
-        #     if _test is not None:
-        #         type_check(_test, [pd.DataFrame, tuple])
-        #
-        #         if isinstance(_test, tuple):
-        #             _sets['test'] = pd.DataFrame(np.hstack((_test[0], _test[1][:, np.newaxis])), columns=self.__generate_columns__(_test[0].shape[1], make_class=True))
-        #         else:
-        #             _sets['test'] = _test
-        #
-        #     return _sets
-        # sets = __treat__(train, val, kwargs['test'] if 'test' in kwargs else None)
+        def __initialize_sets__(_train, _val, _test):
+            _sets = dict()
+            _sets['train'] = _train
+            if _val is not None:
+                _sets['val'] = _val
+            else:
+                _sets['val'] = _sets['train']
+            if _test is not None:
+                _sets['test'] = _test
+
+            return _sets
+
         self.handler = Handler(full)
         arg_sets = __initialize_argsets__(train, val, test)
+        sets = __initialize_sets__(train, val, test)
 
         # from now on, considers only a dictionary 'sets' with train and val subsets
 
@@ -140,6 +123,10 @@ class Ardennes(object):
         integer_threshold = int(self.decile * self.n_individuals)
 
         Individual.set_values(
+            sets=sets,
+            arg_sets=arg_sets,
+            y_val_true=sets['val'][self.target_attr],
+            y_test_true=sets['test'][self.target_attr] if 'test' in sets else None,
             handler=self.handler,
             column_types={
                 x: Individual.raw_type_dict[str(full[x].dtype)] for x in full.columns
@@ -161,19 +148,19 @@ class Ardennes(object):
 
         sample_func = np.vectorize(
             Individual,
-            excluded=['gm', 'arg_sets']
+            excluded=['gm']
         )
 
         t1 = dt.now()  # starts measuring time
 
         population = sample_func(
-            ind_id=range(self.n_individuals), gm=gm, arg_sets=arg_sets,
+            ind_id=range(self.n_individuals), gm=gm
         )
 
-        population = np.array(sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True))  # TODO added
+        population = np.array(sorted(population, key=lambda x: (x.fitness, x.inverse_height), reverse=True))
         fitness = np.array([x.fitness for x in population])
 
-        to_replace_index = np.arange(integer_threshold, population.shape[0], dtype=np.int32)  # TODO modified
+        to_replace_index = np.arange(integer_threshold, population.shape[0], dtype=np.int32)
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
@@ -185,26 +172,23 @@ class Ardennes(object):
                 population=population,
                 verbose=verbose,
                 elapsed_time=(t2-t1).total_seconds(),
-                test_index=arg_sets['test_index'] if 'test_index' in arg_sets else None,
+                gm=gm,
                 **kwargs
             )
             t1 = t2
 
-            # borderline = np.partition(fitness, integer_threshold)[integer_threshold]  # TODO sort by fitness AND height!
-            # fittest_pop = population[fitness > borderline]
-            # to_replace_index = np.flatnonzero(fitness < borderline)
-            fittest_pop = population[:integer_threshold]  # TODO modified
+            fittest_pop = population[:integer_threshold]
 
             gm.update(fittest_pop)
 
             if len(to_replace_index) > 0:
                 population[to_replace_index] = sample_func(
-                    ind_id=range(self.n_individuals), gm=gm, arg_sets=arg_sets,
+                    ind_id=range(self.n_individuals), gm=gm
                 )
 
                 population = np.array(
-                    sorted(population, key=lambda x: (x.quality, x.inverse_height), reverse=True)
-                )  # TODO added
+                    sorted(population, key=lambda x: (x.fitness, x.inverse_height), reverse=True)
+                )
             fitness = np.array([x.fitness for x in population])
 
             if self.__early_stop__(fitness, self.uncertainty):
@@ -296,63 +280,64 @@ class Ardennes(object):
 
     @staticmethod
     def __report__(**kwargs):
+
+        # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
         fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
-        test_index = kwargs['test_index'] if 'test_index' in kwargs else None
+        verbose = kwargs['verbose']
+        elapsed_time = kwargs['elapsed_time']
+        gm = kwargs['gm']
 
-        if 'output_path' in kwargs:
-            if kwargs['output_path'] is not None and 'fold' in kwargs and 'run' in kwargs:
-                output_file = os.path.join(
-                    kwargs['output_path'], kwargs['dataset_name'] + '_fold_%03.d_run_%03.d.csv' % (
-                        kwargs['fold'], kwargs['run']
-                    )
-                )
-            else:
-                output_file = None
+        best_individual = population[0]  # best individual in the population
+
+        # optional data
+        n_run = None if 'run' not in kwargs else kwargs['run']
+        n_fold = None if 'fold' not in kwargs else kwargs['fold']
+        dataset_name = None if 'dataset_name' not in kwargs else kwargs['dataset_name']
+        output_path = None if 'output_path' not in kwargs else kwargs['output_path']
+
+        if Individual.y_test_true is not None:
+            y_pred = best_individual.predict(Individual.sets['test'])
+            best_test_fitness = accuracy_score(Individual.y_test_true, y_pred)
         else:
-            output_file = None
+            best_test_fitness = None
 
-        if kwargs['verbose']:
-            argmax = np.argmax(fitness)
-
+        if verbose:
             mean = np.mean(fitness)  # type: float
             median = np.median(fitness)  # type: float
-            max_fitness = fitness[argmax]  # type: float
-            max_height = population[argmax].height
-            max_nodes = len(population[argmax].tree)
-            elapsed_time = kwargs['elapsed_time']
-            if test_index is not None:
-                y_true = Individual.full.loc[test_index, Individual.target_attr]
-                y_pred = population[argmax].predict(Individual.full.loc[test_index])
-                best_test_fitness = accuracy_score(y_true, y_pred)
 
             print 'iter: %03.d  mean: %0.6f  median: %0.6f  max: %0.6f  ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
-                iteration, mean, median, max_fitness, elapsed_time, max_height, max_nodes
-            ) + ('test acc: %0.6f' % best_test_fitness if test_index is not None else '')
+                iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
+            ) + ('test acc: %0.6f' % best_test_fitness if best_test_fitness is not None else '')
 
-        if output_file is not None:
-            if iteration == 0:  # resets file
-                try:
-                    os.remove(output_file)
-                except OSError as ose:
-                    pass
-                finally:
-                    with open(output_file, 'w') as f:
-                        csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                        add = [] if test_index is None else ['test accuracy']
+        if output_path is not None:
+            evo_file = os.path.join(output_path, dataset_name + '_evo_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
+            pgm_file = os.path.join(output_path, dataset_name + '_pgm_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
 
-                        csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + add)
-
-            with open(output_file, 'a') as f:
+            with open(pgm_file, 'a') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                for ind in population:
-                    add = [] if test_index is None else [ind.validate(test_index)]
-                    csv_w.writerow([ind.id_ind, iteration, ind.fitness, ind.height] + add)
+                csv_w.writerow(gm.attributes.values.ravel())
+
+            with open(evo_file, 'a') as f:
+                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
+
+                if iteration == 0:  # resets file
+                    header_add = [] if Individual.y_test_true is None else ['test accuracy']
+                    csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + header_add)
+
+                for ind in population:  # type: Individual
+                    if Individual.y_test_true is not None:
+                        y_pred = ind.predict(Individual.sets['test'])
+                        add = accuracy_score(Individual.y_test_true, y_pred)
+                    else:
+                        add = []
+
+                    csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height] + add)
 
             population[np.argmax(fitness)].plot(
-                savepath=output_file.split('.')[0].strip() + '.pdf',
-                test_set=test_index
+                savepath=evo_file.split('.')[0].strip() + '.pdf',
+                test_acc=best_test_fitness
             )
 
     @staticmethod

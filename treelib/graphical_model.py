@@ -74,23 +74,6 @@ class GraphicalModel(object):
             index=self.pred_attr + [self.target_attr], columns=range(n_variables)
         ).apply(set_probability, axis=0)
 
-        # sample_values = self.pred_attr + [self.target_attr]
-        #
-        #
-        # warnings.warn('WARNING: not using a linear progression!')
-        # class_prob = 2. ** depth / 2. ** (max_depth + 1)  # power of 2 progression
-
-        # attributes = map(
-        #     lambda i: Variable(
-        #         name=i,
-        #         values=sample_values,
-        #         parents=get_parents(i, distribution),
-        #         max_depth=max_depth,
-        #         target_attr=self.target_attr  # kwargs
-        #     ),
-        #     xrange(n_variables)
-        # )
-        
         return attributes
     
     def update(self, fittest):
