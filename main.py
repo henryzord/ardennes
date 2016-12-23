@@ -299,6 +299,7 @@ def grid_optimizer(config_file, datasets_path, output_path):
 
                     evaluate_ardennes(
                         datasets_path=_datasets_path,
+                        config_file=config_file,
                         output_path=_write_path,
                         validation_mode='cross-validation'
                     )

@@ -116,11 +116,9 @@ def evaluate_j48(datasets_path, intermediary_path):
         jvm.stop()
 
 
-def evaluate_ardennes(datasets_path, output_path, validation_mode='cross-validation'):
+def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='cross-validation'):
     datasets = os.listdir(datasets_path)
     np.random.shuffle(datasets)  # everyday I'm shuffling
-
-    config_file = json.load(open('config.json', 'r'))
 
     print 'configuration file:'
     print config_file
@@ -179,9 +177,11 @@ if __name__ == '__main__':
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
+    _config_file = json.load(open('config.json', 'r'))
 
     evaluate_ardennes(
         datasets_path=_datasets_path,
+        config_file=_config_file,
         output_path=_output_path,
         validation_mode=_validation_mode
     )
