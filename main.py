@@ -3,6 +3,7 @@ import csv
 import json
 import os
 import random
+import shutil
 import warnings
 from datetime import datetime as dt
 from multiprocessing import Process, Manager
@@ -13,6 +14,8 @@ from sklearn.metrics import *
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from treelib import Ardennes
 from treelib.node import *
+
+import operator as op
 
 __author__ = 'Henry Cagnini'
 
@@ -111,15 +114,14 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
 
-    def __append__(train_s, val_s):
-        warnings.warn('WARNING: not using canonical train and validation sets!')
+    def __append__(_train_s, _val_s, __config_file):
+        from sklearn.model_selection import train_test_split
+        warnings.warn('WARNING: Using %2.2f of data for training' % __config_file['train_size'])
 
-        train_s = train_s.append(val_s, ignore_index=False)
-        val_s = train_s
-        # from sklearn.model_selection import train_test_split
-        # train_s, val_s = train_test_split(train_s, train_size=0.5)
+        mass = _train_s.append(_val_s, ignore_index=False)
+        _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
 
-        return train_s, val_s
+        return _train_s, _val_s
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -136,7 +138,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         processes = []
 
         for i, (train_s, val_s, test_s) in enumerate(folds):
-            train_s, val_s = __append__(train_s, val_s)
+            train_s, val_s = __append__(train_s, val_s, config_file)
 
             p = Process(
                 target=run_fold, kwargs=dict(
@@ -159,7 +161,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             df, train_size=config_file['train_size'], random_state=config_file['random_state']
         )
 
-        train_s, val_s = __append__(train_s, val_s)
+        train_s, val_s = __append__(train_s, val_s, config_file)
 
         run_fold(
             n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
@@ -252,37 +254,58 @@ def crunch_population_data(path_results):
     plt.show()
 
 
-def optimize_params(config_file, n_tries=10):
+def grid_optimizer(config_file, datasets_path, output_path):
+    from evaluate import evaluate_ardennes
+
     config_file['verbose'] = False
 
-    dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
+    datasets = os.listdir(datasets_path)
 
-    params = pd.DataFrame(index=np.arange(n_tries), columns=['n_individuals', 'n_iterations', 'tree_height', 'decile', 'acc mean', 'acc std'])
+    range_individuals = [200]
+    range_tree_height = [7]
+    range_iterations = [50, 60, 70, 80, 90, 100]
+    range_decile = [.5, .55, .6, .65, .70, .75, .8, .85, .9, .95]
+    n_runs = 10
 
-    for some_try in xrange(n_tries):
-        config_file['n_individuals'] = np.random.randint(100, 200 + 1)
-        config_file['n_iterations'] = np.random.randint(10, 100 + 1)
-        config_file['tree_height'] = np.random.randint(5, 8 + 1)
-        config_file['decile'] = np.random.randint(50, 95 + 1) / 100.
+    n_opts = reduce(
+        op.mul, map(
+            len,
+            [range_individuals, range_tree_height, range_iterations, range_decile],
+        )
+    )
 
-        params.iloc[some_try]['n_individuals', 'n_iterations', 'tree_height', 'decile'] = [
-            config_file['n_individuals'],
-            config_file['n_iterations'],
-            config_file['tree_height'],
-            config_file['decile']
-        ]
+    count_row = 0
 
-        print 'n_individuals: %d n_iterations: %d tree_height: %d decile: %.2f' % \
-              tuple(params.iloc[some_try][['n_individuals', 'n_iterations', 'tree_height', 'decile']])
+    for n_individuals in range_individuals:
+        for tree_height in range_tree_height:
+            for n_iterations in range_iterations:
+                for decile in range_decile:
 
-        dict_results = do_train(config_file=config_file, n_run=0, evaluation_mode='cross-validation')
+                    _partial_str = '[n_individuals:%d][n_iterations:%d][tree_height:%d][decile:%d]' % \
+                                   (n_individuals, n_iterations, tree_height, int(decile * 100))
 
-        val_accs = np.array([x['val_acc'] for x in dict_results['folds'].itervalues()], dtype=np.float32)
-        print 'acc: %02.2f +- %02.2f' % (val_accs.mean(), val_accs.std())
+                    print 'opts: %02.d/%2.d' % (count_row, n_opts) + ' ' + _partial_str
 
-        params.iloc[some_try]['acc mean', 'acc std'] = [val_accs.mean(), val_accs.std()]
+                    _write_path = os.path.join(output_path, _partial_str)
+                    if os.path.exists(_write_path):
+                        shutil.rmtree(_write_path)
+                    os.mkdir(_write_path)
 
-        params.to_csv('parametrization_%s.csv' % dataset_name, index=False)
+                    config_file['n_individuals'] = n_individuals
+                    config_file['n_iterations'] = n_iterations
+                    config_file['tree_height'] = tree_height
+                    config_file['decile'] = decile
+                    config_file['n_runs'] = n_runs
+
+                    evaluate_ardennes(
+                        datasets_path=_datasets_path,
+                        output_path=_write_path,
+                        validation_mode='cross-validation'
+                    )
+
+                    count_row += 1
+
+                    print '%02.d/%02.d' % (count_row, n_opts)
 
 
 # noinspection PyUnresolvedReferences
@@ -469,15 +492,15 @@ def crunch_graphical_model(pgm_path, path_datasets):
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
+    _datasets_path = 'datasets/numerical'
 
     # --------------------------------------------------- #
-    # _datasets_path = 'datasets/numerical'
     # crunch_graphical_model(
     #     '/home/henryzord/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
     #     _datasets_path
     # )
     # --------------------------------------------------- #
-    # optimize_params(_config_file, 50)
+    grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
@@ -489,15 +512,15 @@ if __name__ == '__main__':
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    _evaluation_mode = 'holdout'
-
-    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-
-    if _evaluation_mode == 'cross-validation':
-        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-
-        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-        )
+    # _evaluation_mode = 'holdout'
+    #
+    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    #
+    # if _evaluation_mode == 'cross-validation':
+    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+    #
+    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+    #     )
     # --------------------------------------------------- #

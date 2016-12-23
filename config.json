@@ -5,7 +5,7 @@
   "tree_height": 7,
   "decile": 0.50,
   "uncertainty": 0.001,
-  "train_size": 0.80,
+  "train_size": 0.50,
   "n_runs": 10,
   "verbose": false,
   "ensemble": false,
