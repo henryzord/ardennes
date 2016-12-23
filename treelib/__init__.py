@@ -329,7 +329,7 @@ class Ardennes(object):
                 for ind in population:  # type: Individual
                     if Individual.y_test_true is not None:
                         y_pred = ind.predict(Individual.sets['test'])
-                        add = accuracy_score(Individual.y_test_true, y_pred)
+                        add = [accuracy_score(Individual.y_test_true, y_pred)]
                     else:
                         add = []
 

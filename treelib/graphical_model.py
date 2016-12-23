@@ -98,17 +98,20 @@ class GraphicalModel(object):
 
             def local_update(column):
                 labels = [get_label(fit, column.name) for fit in fittest]
+                n_unsampled = labels.count(None)
+                graft = np.random.choice(column.index, size=n_unsampled, replace=True)
+                # removes interference from individuals which do not present the current node
                 labels = [x for x in labels if x is not None]
+                labels.extend(graft)
 
-                if len(labels) > 0:
-                    count = Counter(labels)
-                    column[:] = 0.
-                    for k, v in count.iteritems():
-                        column[column.index == k] = v
+                count = Counter(labels)
+                column[:] = 0.
+                for k, v in count.iteritems():
+                    column[column.index == k] = v
 
-                    column /= float(column.sum())
-                    rest = abs(column.sum() - 1.)
-                    column[np.random.choice(column.index)] += rest
+                column /= float(column.sum())
+                rest = abs(column.sum() - 1.)
+                column[np.random.choice(column.index)] += rest
 
                 return column
 
