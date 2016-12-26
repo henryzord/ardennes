@@ -4,34 +4,23 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
 import os
-import warnings
-import math
 
 import numpy as np
 
+from __base__ import Device
 
-class CudaMaster(object):
+
+class CudaDevice(Device):
     MIN_N_THREADS = 32
     MAX_N_THREADS = 1024
 
     def __init__(self, dataset):
-        sep = '\\' if os.name == 'nt' else '/'
+        super(CudaDevice, self).__init__(dataset)
 
-        cur_path = os.path.abspath(__file__)
-        split = sep.join(cur_path.split(sep)[:-1])
-
-        kernel = open(os.path.join(split, 'kernel.cu'), 'r').read()
+        kernel = open(os.path.join(self._split, 'kernel.cu'), 'r').read()
         mod = SourceModule(source=kernel)
 
         self._func_gain_ratio = mod.get_function('gain_ratio')
-
-        self.target_attr = dataset.columns[-1]
-        self.class_labels = np.array(dataset[dataset.columns[-1]].unique())
-        self.numerical_class_labels = np.arange(self.class_labels.shape[0], dtype=np.float32)
-        self.class_label_index = {k: x for x, k in enumerate(self.class_labels)}
-        self.attribute_index = {k: x for x, k in enumerate(dataset.columns)}
-
-        self.n_objects, self.n_attributes = dataset.shape
 
         self.mem_dataset = cuda.mem_alloc(dataset.values.nbytes)
         self.mem_class_labels = cuda.mem_alloc(self.numerical_class_labels.nbytes)
@@ -42,13 +31,13 @@ class CudaMaster(object):
         n_candidates = candidates.shape[0]
         candidates = candidates.astype(np.float32)
 
-        if n_candidates > CudaMaster.MAX_N_THREADS:
-            raise NotImplementedError('Support for higher than %d threads per kernel launch not implemented!' % CudaMaster.MAX_N_THREADS)
+        if n_candidates > CudaDevice.MAX_N_THREADS:
+            raise NotImplementedError('Support for higher than %d threads per kernel launch not implemented!' % CudaDevice.MAX_N_THREADS)
 
         # _threads_per_block = ((n_candidates / CudaMaster.MIN_N_THREADS) + 1) * CudaMaster.MIN_N_THREADS
         # n_blocks = math.ceil(np.log10(n_candidates) / np.log10(CudaMaster.MIN_N_THREADS))
         n_blocks = 1
-        n_threads_per_block = CudaMaster.MAX_N_THREADS
+        n_threads_per_block = CudaDevice.MAX_N_THREADS
         grid_size = (1, 1)
 
         _mem_candidates = cuda.mem_alloc(candidates.nbytes)

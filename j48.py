@@ -5,7 +5,7 @@ import numpy as np
 from preprocessing.dataset import read_dataset
 from matplotlib import pyplot as plt
 
-from information import Handler
+from information import Processor
 import networkx as nx
 from networkx.drawing.nx_agraph import graphviz_layout
 from itertools import count
@@ -66,7 +66,7 @@ def hunt(subset, tree, handler, n_instances, node_id):
         subset_index = np.zeros(n_instances)
         subset_index[subset.index] = 1
 
-        gains = handler.batch_gain_ratio(subset_index, attribute=attribute, candidates=candidates)
+        gains = handler.get_ratios(subset_index, attribute=attribute, candidates=candidates)
 
         argmax = np.argmax(gains)
         if gains[argmax] > best_gain:
@@ -107,7 +107,7 @@ def hunt(subset, tree, handler, n_instances, node_id):
 def main():
     _dataset = read_dataset('datasets/numerical/hayes-roth-full.arff')
     n_instances = _dataset.shape[0]
-    _handler = Handler(_dataset)
+    _handler = Processor(_dataset)
     _tree = nx.DiGraph()
 
     _tree = hunt(_dataset, _tree, _handler, n_instances, next(counter))

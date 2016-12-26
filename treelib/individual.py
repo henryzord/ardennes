@@ -315,7 +315,7 @@ class Individual(object):
             else:
                 candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
 
-            gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
+            gains = self.handler.get_ratios(subset_index, node_label, candidates)
 
             argmax = np.argmax(gains)
             if gains[argmax] <= 0:
