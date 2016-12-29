@@ -54,7 +54,7 @@ class CPUDevice(Device):
             gr = 0
         return gr
 
-    def queue_execution(self, subset_index, attribute, candidates):
+    def device_gain_ratio(self, subset_index, attribute, candidates):
         proper_subset = self.dataset.loc[subset_index.astype(np.bool)]
 
         ratios = map(

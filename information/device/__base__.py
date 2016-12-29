@@ -17,5 +17,5 @@ class Device(object):
         cur_path = os.path.abspath(__file__)
         self._split = sep.join(cur_path.split(sep)[:-1])
 
-    def queue_execution(self, subset_index, attribute, candidates):
+    def device_gain_ratio(self, subset_index, attribute, candidates):
         pass

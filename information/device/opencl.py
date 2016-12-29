@@ -32,18 +32,7 @@ class CLDevice(Device):
 
         self._func_gain_ratio = self.prg.gain_ratio
 
-    def queue_execution(self, subset_index, attribute, candidates):
-        # self.prg.make_sum(
-        #     self.queue,
-        #     a_np.shape,
-        #     None,
-        #     a_g,
-        #     b_g,
-        #     out_device
-        # )
-
-        # cl.enqueue_copy(self.queue, out_host, out_device)
-
+    def device_gain_ratio(self, subset_index, attribute, candidates):
         n_candidates = candidates.shape[0]
         candidates = candidates.astype(np.float32)
 
@@ -79,3 +68,11 @@ class CLDevice(Device):
         cl.enqueue_copy(self.queue, candidates, _mem_candidates)  # returns an event, for blocking
 
         return candidates
+
+    def device_predict_object(self):
+        pass
+
+        # __kernel void predict_objects(
+        # __global float *dataset, int n_objects, int n_attributes,
+        # __global int *attribute_index, __global float *thresholds,
+        # int n_individuals, int H, __global int *predictions) {

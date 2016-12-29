@@ -30,7 +30,7 @@ class Processor(object):
         self.master = AvailableDevice(dataset)
 
     def get_ratios(self, subset_index, attribute, candidates):
-        ratios = self.master.queue_execution(subset_index, attribute, candidates)
+        ratios = self.master.device_gain_ratio(subset_index, attribute, candidates)
         return ratios
 
 

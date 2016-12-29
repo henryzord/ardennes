@@ -27,7 +27,7 @@ class CudaDevice(Device):
         cuda.memcpy_htod(self.mem_dataset, dataset.values.ravel())
         cuda.memcpy_htod(self.mem_class_labels, self.numerical_class_labels)
 
-    def queue_execution(self, subset_index, attribute, candidates):
+    def device_gain_ratio(self, subset_index, attribute, candidates):
         n_candidates = candidates.shape[0]
         candidates = candidates.astype(np.float32)
 

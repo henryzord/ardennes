@@ -1,3 +1,30 @@
+int next_node(int current_node, int go_left, int finished) {
+    return (!finished * ((current_node * 2) + 1 + go_left)) + (finished * current_node);
+}
+
+__kernel void predict_objects(
+    __global float *dataset, int n_objects, int n_attributes,
+    __global int *attribute_index, __global float *thresholds,
+    int n_individuals, int H, __global int *predictions) {
+
+    const int idx = get_global_id(0);
+    if (idx < n_individuals) {
+        int i, h, current_node, go_left, finished;
+
+        for(i = 0; i < n_objects; i++) {
+            current_node = 0, finished = 0;
+            
+            for(h = 0; h < H; h++) {
+                finished = finished || (attribute_index[current_node] == (n_attributes - 1));
+                go_left = dataset[i * n_objects + attribute_index[current_node]] <= thresholds[current_node]; 
+                current_node = next_node(current_node, go_left, finished);
+            }
+            predictions[idx * n_individuals + i] = (int)thresholds[current_node];
+        }
+    }
+}
+
+
 float entropy_by_index(__global float *dataset, int n_objects, int n_attributes, __global int *subset_index, int n_classes, __global float *class_labels) {
     const int class_index = n_attributes - 1;
 
