@@ -154,7 +154,6 @@ class Individual(object):
 
         y_pred = self.predict(Individual.sets['val'])
         acc_score = accuracy_score(Individual.y_val_true, y_pred)
-        # _f1_score = f1_score(y_true, y_pred, average='micro')
 
         self.fitness = acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))

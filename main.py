@@ -479,10 +479,8 @@ def crunch_graphical_model(pgm_path, path_datasets):
                 title='Probabilistic Graphical Model<br>Dataset %s' % dataset_name,
                 titlefont=dict(size=16),
                 showlegend=True,
-                # width=1500,
-                # height=1000,
                 hovermode='closest',
-                # margin=dict(b=20, l=5, r=5, t=40),
+
                 xaxis=go.XAxis(showgrid=False, zeroline=False, showticklabels=False),
                 yaxis=go.YAxis(showgrid=False, zeroline=False, showticklabels=False),
             )

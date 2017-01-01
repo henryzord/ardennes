@@ -48,7 +48,7 @@ class CLDevice(Device):
         )
 
         global_size = (n_threads, )  # TODO optimize!
-        local_size = (n_threads, )  # TODO optimize!
+        local_size = (CLDevice.MIN_N_THREADS, )  # TODO optimize!
 
         self._func_gain_ratio(  # returns an event, for blocking
             self.queue,
