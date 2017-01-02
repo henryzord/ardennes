@@ -11,5 +11,7 @@ df = pd.DataFrame(
     columns=np.hstack((dt.feature_names, 'class'))
 )
 
-individual = cPickle.load(open('/home/henry/Desktop/individual', 'r'))
-make_predictions(df.shape[0], df.shape[1])
+individual = cPickle.load(open('individual.bin', 'r'))
+print make_predictions(
+    df.shape[0], df.shape[1], df.values.ravel(), np.empty(df.shape[0], dtype=np.int), individual.tree
+)
