@@ -1,3 +1,9 @@
+from __future__ import absolute_import
+
+import sys
+sys.path.append("..")
+from treelib import individual
+
 from c_individual import make_predictions
 
 from sklearn import datasets
@@ -11,7 +17,10 @@ df = pd.DataFrame(
     columns=np.hstack((dt.feature_names, 'class'))
 )
 
-individual = cPickle.load(open('individual.bin', 'r'))
+some_ind = cPickle.load(open('individual.bin', 'r'))
+
+tree = some_ind.tree.node
+
 print make_predictions(
-    df.shape[0], df.shape[1], df.values.ravel(), np.empty(df.shape[0], dtype=np.int), individual.tree
+    df.shape[0], df.shape[1], df.values.ravel().astype(np.float32).tolist(), tree, (np.ones(df.shape[0], dtype=np.int32) * 42).tolist()
 )
