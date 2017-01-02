@@ -1,9 +1,8 @@
 # noinspection PyUnresolvedReferences
-import pycuda.autoinit
+import os
+
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
-
-import os
 
 import numpy as np
 
@@ -16,6 +15,9 @@ class CudaDevice(Device):
 
     def __init__(self, dataset):
         super(CudaDevice, self).__init__(dataset)
+
+        # noinspection PyUnresolvedReferences
+        import pycuda.autoinit
 
         kernel = open(os.path.join(self._split, 'kernel.cu'), 'r').read()
         mod = SourceModule(source=kernel)

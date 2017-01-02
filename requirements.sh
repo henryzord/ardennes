@@ -14,7 +14,7 @@ pip install additional_packages/python-weka-wrapper-0.3.9.tar.gz
 pip install pycuda
 # -- for opencl -- #
 sudo apt-get install libffi-dev g++
-sudo apt install ocl-icd-opencl-dev  # TODO may need some changes in future
+sudo apt-get install ocl-icd-opencl-dev  # TODO may need some changes in future
 pip install mako
 ## then follow instructions from https://wiki.tiker.net/PyOpenCL/Installation/Linux :
 ## download http://pypi.python.org/pypi/pyopencl

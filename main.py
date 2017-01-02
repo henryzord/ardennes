@@ -115,13 +115,18 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     random_state = config_file['random_state']
 
     def __append__(_train_s, _val_s, __config_file):
-        from sklearn.model_selection import train_test_split
-        warnings.warn('WARNING: Using %2.2f of data for training' % __config_file['train_size'])
+        warnings.warn('WARNING: Using %2.2f of data (excluding test fold) for training' % __config_file['train_size'])
 
         mass = _train_s.append(_val_s, ignore_index=False)
-        _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
+        if __config_file['train_size'] < 1.:
 
-        return _train_s, _val_s
+            from sklearn.model_selection import train_test_split
+
+            _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
+
+            return _train_s, _val_s
+        else:
+            return mass, mass
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
@@ -515,23 +520,23 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    _results_file = json.load(
-        open('/home/henry/Desktop/results.json', 'r')
-    )
-    crunch_result_file(_results_file, output_file='results.csv')
+    # _results_file = json.load(
+    #     open('/home/henry/Desktop/results.json', 'r')
+    # )
+    # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    # _evaluation_mode = 'holdout'
-    #
-    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-    #
-    # if _evaluation_mode == 'cross-validation':
-    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #
-    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-    #     )
+    _evaluation_mode = 'cross-validation'
+
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
     # --------------------------------------------------- #

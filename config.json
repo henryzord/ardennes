@@ -5,11 +5,11 @@
   "tree_height": 7,
   "decile": 0.50,
   "uncertainty": 0.001,
-  "train_size": 0.50,
+  "train_size": 1,
   "n_runs": 10,
   "verbose": false,
   "ensemble": false,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/iris.arff",
+  "dataset_path": "datasets/temp/blobs.arff",
   "folds_path": "datasets/folds"
 }
