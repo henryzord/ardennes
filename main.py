@@ -179,28 +179,40 @@ def crunch_result_file(results_file, output_file=None):
     n_folds = len(results_file['runs'][some_run][some_dataset]['folds'].keys())
 
     df = pd.DataFrame(
-        columns=['run', 'dataset', 'fold', 'acc', 'height'],
-        index=np.arange(n_runs * n_datasets * n_folds)
+        columns=['run', 'dataset', 'fold', 'train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1_score', 'height'],
+        index=np.arange(n_runs * n_datasets * n_folds),
+        dtype=np.object
     )
+
+    dtypes = dict(
+        run=np.float32, dataset=np.object, fold=np.float32,
+        train_acc=np.float32, val_acc=np.float32, test_acc=np.float32,
+        test_precision=np.float32, test_f1_score=np.float32, height=np.float32
+    )
+
+    for k, v in dtypes.iteritems():
+        df[k] = df[k].astype(v)
 
     count_row = 0
     for n_run, run in results_file['runs'].iteritems():
         for dataset_name, dataset in run.iteritems():
             for n_fold, v in dataset['folds'].iteritems():
-                acc = v['acc']
+                train_acc = v['train_acc']
+                val_acc = v['val_acc']
+                test_acc = v['acc']
+                precision = v['precision']
+                _f1_score = v['f1_score']
                 height = v['height']
-                df.loc[count_row] = [int(n_run), str(dataset_name), int(n_fold), float(acc), float(height)]
+                df.loc[count_row] = [
+                    int(n_run), str(dataset_name), int(n_fold),
+                    float(train_acc), float(val_acc), float(test_acc),
+                    float(precision), float(_f1_score), float(height)
+                ]
                 count_row += 1
-
-    df['acc'] = df['acc'].astype(np.float)
-    df['dataset'] = df['dataset'].astype(np.object)
-    df['run'] = df['run'].astype(np.int)
-    df['fold'] = df['fold'].astype(np.int)
-    df['height'] = df['height'].astype(np.float)
 
     print df
 
-    grouped = df.groupby(by=['dataset'])['acc', 'height']
+    grouped = df.groupby(by=['dataset'])['train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1_score', 'height']
     final = grouped.aggregate([np.mean, np.std])
 
     print final
@@ -263,8 +275,8 @@ def grid_optimizer(config_file, datasets_path, output_path):
 
     range_individuals = [200]
     range_tree_height = [7]
-    range_iterations = [50, 60, 70, 80, 90, 100]
-    range_decile = [.5, .55, .6, .65, .70, .75, .8, .85, .9, .95]
+    range_iterations = [50]
+    range_decile = [.6, .7, .8, .9, .95]
     n_runs = 10
 
     n_opts = reduce(
@@ -501,14 +513,14 @@ if __name__ == '__main__':
     #     _datasets_path
     # )
     # --------------------------------------------------- #
-    grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
+    # grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
-    # _results_file = json.load(
-    #     open('/home/henry/Desktop/del/results.json', 'r')
-    # )
-    # crunch_result_file(_results_file, output_file='results.csv')
+    _results_file = json.load(
+        open('/home/henry/Desktop/parametrizations/[n_individuals:200][n_iterations:50][tree_height:7][decile:55]/results.json', 'r')
+    )
+    crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
