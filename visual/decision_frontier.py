@@ -1,20 +1,16 @@
 # coding=utf-8
 
-# Code source: Gaël Varoquaux
-#              Andreas Müller
-# Modified for documentation by Jaques Grobler
-# License: BSD 3 clause
-import warnings
-
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import ListedColormap
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.tree import DecisionTreeClassifier
+from preprocessing.dataset import write_dataset
 
-from treelib import Ardennes, get_max_height
+from treelib import Ardennes
+import pandas as pd
+import warnings
 
 h = .02  # step size in the mesh
 
@@ -32,10 +28,7 @@ datasets = [
     linearly_separable
 ]
 
-# cls = [DecisionTreeClassifier(max_depth=5)]
 
-
-# figure = plt.figure(figsize=(14, 9))
 figure = plt.figure()
 i = 1
 
@@ -55,6 +48,7 @@ for ds_cnt, ds in enumerate(datasets):
     
     x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
     y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+
     xx, yy = np.meshgrid(
         np.arange(x_min, x_max, h),
         np.arange(y_min, y_max, h)

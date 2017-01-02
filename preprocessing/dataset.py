@@ -3,6 +3,9 @@ import copy
 import json
 import os
 
+import itertools as it
+
+import numpy as np
 import arff
 import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold
@@ -46,6 +49,42 @@ def generate_folds(df, dataset_name, output_folder, n_folds=10, random_state=Non
         d_folds[i] = {'train': list(x_train.index), 'val': list(x_val.index), 'test': list(arg_test)}
 
     json.dump(d_folds, open(os.path.join(output_folder, dataset_name + '.json'), 'w'), indent=2)
+
+
+def write_dataset(dataframe, dataset_path):
+    """
+
+    :param dataframe:
+    :type dataframe: pandas.DataFrame
+    :param dataset_path:
+    :param ext:
+    :return:
+    """
+    ext = dataset_path.split('.')[-1]
+
+    if ext == 'arff':
+        relation = dataset_path.split('/')[-1].split('.')[0]
+
+        dict_relation = {
+            'data': dataframe.values,
+            'description': 'None',
+            'relation': relation,
+            'attributes': list(
+                it.izip([str(x) for x in dataframe.columns],
+                    [raw_type_dict[str(dataframe[k].dtype)] if str(dataframe[k].dtype) != np.object
+                     else raw_type_dict[str(dataframe[k].dtype)] % ','.join(dataframe[k].unique()) for k in dataframe.columns]
+                )
+            )
+        }
+
+        arff.dump(
+            dict_relation,
+            open(dataset_path, 'w')
+        )
+    elif ext == 'csv':
+        dataframe.write_csv(dataset_path, sep=',')
+    else:
+        raise TypeError('Invalid extension for dataset!')
 
 
 def read_dataset(dataset_path):
@@ -200,9 +239,32 @@ def __generate_intermediary_datasets__(datasets_path, folds_path, output_path):
 
     jvm.stop()
 
+raw_type_dict = {
+        'int': 'NUMERIC',
+        'int_': 'NUMERIC',
+        'intc': 'NUMERIC',
+        'intp': 'NUMERIC',
+        'int8': 'NUMERIC',
+        'int16': 'NUMERIC',
+        'int32': 'NUMERIC',
+        'int64': 'NUMERIC',
+        'uint8': 'NUMERIC',
+        'uint16': 'NUMERIC',
+        'uint32': 'NUMERIC',
+        'uint64': 'NUMERIC',
+        'float': 'REAL',
+        'float_': 'REAL',
+        'float16': 'REAL',
+        'float32': 'REAL',
+        'float64': 'REAL',
+        'object': '{%s}',
+        'bool_': 'NUMERIC',
+        'bool': 'NUMERIC',
+        'str': 'string',
+    }
 
 def main():
-    _datasets_path = '../datasets/__big__'
+    _datasets_path = '../datasets/temp'
     _folds_path = '../datasets/folds'
 
     n_folds = 10
@@ -218,3 +280,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
