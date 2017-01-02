@@ -10,6 +10,6 @@
   "verbose": false,
   "ensemble": false,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds"
 }

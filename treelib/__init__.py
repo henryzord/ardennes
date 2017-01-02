@@ -9,7 +9,7 @@ import pandas
 from classes import type_check, value_check
 from graphical_model import *
 from individual import Individual
-from information import Handler
+from information import Processor
 from sklearn.metrics import accuracy_score
 
 __author__ = 'Henry Cagnini'
@@ -103,7 +103,7 @@ class Ardennes(object):
 
             return _sets
 
-        self.handler = Handler(full)
+        self.handler = Processor(full)
         arg_sets = __initialize_argsets__(train, val, test)
         sets = __initialize_sets__(train, val, test)
 

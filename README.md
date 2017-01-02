@@ -24,6 +24,14 @@ iter: 002	mean: +0.331169	median: +0.277056	max: +0.424242
 
 Where ```iter``` is the current iteration of the algorithm, and ```mean```, ```median``` and ```max``` are the corresponding properties of the fitness distribution for the current iteration.
 
+
+### Limitations
+
+This algorithm will only work:
+* for datasets with class at the last attribute;
+* for datasets with numerical predictive attributes, and categorical class attribute;
+* only binary splits;
+
 ### Further usage
 
 To use it for a custom dataset, you may find the algorithm under ```treelib.Ardennes```.

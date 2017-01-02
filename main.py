@@ -491,10 +491,8 @@ def crunch_graphical_model(pgm_path, path_datasets):
                 title='Probabilistic Graphical Model<br>Dataset %s' % dataset_name,
                 titlefont=dict(size=16),
                 showlegend=True,
-                # width=1500,
-                # height=1000,
                 hovermode='closest',
-                # margin=dict(b=20, l=5, r=5, t=40),
+
                 xaxis=go.XAxis(showgrid=False, zeroline=False, showticklabels=False),
                 yaxis=go.YAxis(showgrid=False, zeroline=False, showticklabels=False),
             )
@@ -525,15 +523,15 @@ if __name__ == '__main__':
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    # _evaluation_mode = 'holdout'
-    #
-    # _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-    #
-    # if _evaluation_mode == 'cross-validation':
-    #     _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #     _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-    #
-    #     print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-    #         _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-    #     )
+    _evaluation_mode = 'holdout'
+
+    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+
+    if _evaluation_mode == 'cross-validation':
+        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
+
+        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
     # --------------------------------------------------- #

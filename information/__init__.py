@@ -1,9 +1,8 @@
-import warnings
+from device import AvailableDevice
 import numpy as np
-from collections import Counter
 
 
-class Handler(object):
+class Processor(object):
     max_n_candidates = 1024
 
     def __init__(self, dataset):
@@ -28,89 +27,23 @@ class Handler(object):
         self.dataset = dataset
         self.n_objects, self.n_attributes = dataset.shape
 
-        try:
-            from cuda import CudaMaster
-            self.master = CudaMaster(dataset)
-            self.max_n_candidates = self.master.MAX_N_THREADS
-        except ImportError as ie:
-            warnings.warn('Warning: GPU not available. Defaulting to CPU for calculating thresholds.')
-            self.master = None
-            self.max_n_candidates = None
+        self.master = AvailableDevice(dataset)
 
-    def gain_ratio(self, subset, subset_left, subset_right, target_attr):
-        ig = self.information_gain(subset, subset_left, subset_right, target_attr)
-        si = self.__split_info__(subset, subset_left, subset_right)
-
-        if ig > 0 and si > 0:
-            gr = ig / si
-        else:
-            gr = 0
-        return gr
-
-    @staticmethod
-    def __split_info__(subset, subset_left, subset_right):
-        split_info = 0.
-        for child_subset in [subset_left, subset_right]:
-            if child_subset.shape[0] <= 0 or subset.shape[0] <= 0:
-                pass
-            else:
-                share = (child_subset.shape[0] / float(subset.shape[0]))
-                split_info += share * np.log2(share)
-
-        return -split_info
-
-    def information_gain(self, subset, subset_left, subset_right, target_attr):
-        sum_term = 0.
-        for child_subset in [subset_left, subset_right]:
-            sum_term += (child_subset.shape[0] / float(subset.shape[0])) * self.entropy(child_subset, target_attr)
-
-        ig = self.entropy(subset, target_attr) - sum_term
-        return ig
-
-    @staticmethod
-    def entropy(subset, target_attr):
-        # the smaller, the better
-        size = float(subset.shape[0])
-
-        counter = Counter(subset[target_attr])
-
-        _entropy = 0.
-        for c, q in counter.iteritems():
-            _entropy += (q / size) * np.log2(q / size)
-
-        return -1. * _entropy
-
-    def batch_gain_ratio(self, subset_index, attribute, candidates):
-        if self.master is not None:
-            return self.master.queue_execution(subset_index, attribute, candidates)
-        else:
-            raise NotImplementedError('not implemented yet!')
-
-            proper_subset = self.dataset.loc[subset_index.astype(np.bool)]
-
-            ratios = map(
-                lambda c: self.gain_ratio(
-                    proper_subset,
-                    proper_subset.loc[proper_subset[attribute] <= c],
-                    proper_subset.loc[proper_subset[attribute] > c],
-                    self.target_attr
-                ),
-                candidates
-            )
-            return ratios
+    def get_ratios(self, subset_index, attribute, candidates):
+        ratios = self.master.device_gain_ratio(subset_index, attribute, candidates)
+        return ratios
 
 
 def __test_gain_ratio__():
     from sklearn import datasets
     import pandas as pd
+    from device.cpu import CPUDevice
 
     dt = datasets.load_iris()
     df = pd.DataFrame(
         data=np.hstack((dt.data.astype(np.float32), dt.target[:, np.newaxis].astype(np.float32))),
         columns=np.hstack((dt.feature_names, 'class'))
     )
-
-    handler = Handler(df)
 
     attr = df.columns[0]
     class_attribute = df.columns[-1]
@@ -124,11 +57,12 @@ def __test_gain_ratio__():
 
     subset_index = np.random.randint(2, size=df.shape[0])  # only a subset
 
-    ratios = handler.batch_gain_ratio(subset_index, attr, candidates)
+    handler = Processor(df)
+    ratios = handler.get_ratios(subset_index, attr, candidates)
 
     for i, candidate in enumerate(candidates):
         _subset = df.loc[subset_index.astype(np.bool)]
-        host_gain = handler.gain_ratio(
+        host_gain = CPUDevice.gain_ratio(
             _subset, _subset.loc[_subset[attr] < candidate],
             _subset.loc[_subset[attr] >= candidate],
             class_attribute

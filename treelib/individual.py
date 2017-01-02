@@ -154,7 +154,6 @@ class Individual(object):
 
         y_pred = self.predict(Individual.sets['val'])
         acc_score = accuracy_score(Individual.y_val_true, y_pred)
-        # _f1_score = f1_score(y_true, y_pred, average='micro')
 
         self.fitness = acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
@@ -239,6 +238,23 @@ class Individual(object):
         tree.add_node(node_id, attr_dict=meta)
         return tree
 
+    def __predict_object__(self, obj):
+        arg_node = 0  # always start with root
+
+        tree = self.tree  # type: nx.DiGraph
+
+        node = tree.node[arg_node]
+
+        while not node['terminal']:
+            go_left = obj[node['label']] <= node['threshold']
+            successors = tree.successors(arg_node)
+            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
+
+            node = tree.node[arg_node]
+
+        return node['label']
+
+
     def predict(self, samples):
         """
         Makes predictions for unseen samples.
@@ -247,26 +263,10 @@ class Individual(object):
         :rtype: numpy.ndarray
         :return: The predicted class for each sample.
         """
-        def __predict_object__(obj):
-            arg_node = 0  # always start with root
-
-            tree = self.tree  # type: nx.DiGraph
-
-            node = tree.node[arg_node]
-
-            while not node['terminal']:
-                go_left = obj[node['label']] <= node['threshold']
-                successors = tree.successors(arg_node)
-                arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
-
-                node = tree.node[arg_node]
-
-            return node['label']
-
         if isinstance(samples, pd.DataFrame):
-            preds = samples.apply(__predict_object__, axis=1).as_matrix()
+            preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
         elif isinstance(samples, pd.Series):
-            preds = __predict_object__(samples)
+            preds = self.__predict_object__(samples)
         else:
             raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
         return preds
@@ -315,7 +315,7 @@ class Individual(object):
             else:
                 candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
 
-            gains = self.handler.batch_gain_ratio(subset_index, node_label, candidates)
+            gains = self.handler.get_ratios(subset_index, node_label, candidates)
 
             argmax = np.argmax(gains)
             if gains[argmax] <= 0:
