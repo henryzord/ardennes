@@ -120,7 +120,7 @@ class Ardennes(object):
         self.class_labels = class_values['class_labels']
 
         # threshold where individuals will be picked for PMF updating/replacing
-        integer_threshold = int(self.decile * self.n_individuals)
+        to_replace_index = np.arange(self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32)
 
         Individual.set_values(
             sets=sets,
@@ -157,10 +157,9 @@ class Ardennes(object):
             ind_id=range(self.n_individuals), gm=gm
         )
 
-        population = np.array(sorted(population, key=lambda x: (x.fitness, x.inverse_height), reverse=True))
-        fitness = np.array([x.fitness for x in population])
+        population = np.sort(population)[::-1]
 
-        to_replace_index = np.arange(integer_threshold, population.shape[0], dtype=np.int32)
+        fitness = np.array([x.fitness for x in population])
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
@@ -177,7 +176,7 @@ class Ardennes(object):
             )
             t1 = t2
 
-            fittest_pop = population[:integer_threshold]
+            fittest_pop = population[:to_replace_index[0]]
 
             gm.update(fittest_pop)
 
@@ -186,9 +185,8 @@ class Ardennes(object):
                     ind_id=range(self.n_individuals), gm=gm
                 )
 
-                population = np.array(
-                    sorted(population, key=lambda x: (x.fitness, x.inverse_height), reverse=True)
-                )
+                population = np.sort(population)[::-1]
+
             fitness = np.array([x.fitness for x in population])
 
             if self.__early_stop__(fitness, self.uncertainty):

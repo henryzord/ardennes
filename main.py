@@ -158,7 +158,16 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         for p in processes:
             p.join()
 
-        result_dict['folds'] = dict(dict_manager)
+        dict_results = dict(dict_manager)
+
+        _accs = np.array([x['acc'] for x in dict_results.itervalues()], dtype=np.float32)
+        _heights = np.array([x['height'] for x in dict_results.itervalues()], dtype=np.float32)
+
+        print 'acc: %0.3f +- %0.3f\ttree height: %02.2f +- %02.2f' % (
+            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        )
+
+        result_dict['folds'] = dict_results
         return result_dict
 
     else:
@@ -276,12 +285,10 @@ def grid_optimizer(config_file, datasets_path, output_path):
 
     config_file['verbose'] = False
 
-    datasets = os.listdir(datasets_path)
-
-    range_individuals = [200]
+    range_individuals = [500]
     range_tree_height = [7]
-    range_iterations = [50]
-    range_decile = [.95, .9, .8, .7]
+    range_iterations = [100]
+    range_decile = [.5, .95, .6, .8, .7, .9]
     n_runs = 10
 
     n_opts = reduce(
@@ -301,7 +308,7 @@ def grid_optimizer(config_file, datasets_path, output_path):
                     _partial_str = '[n_individuals:%d][n_iterations:%d][tree_height:%d][decile:%d]' % \
                                    (n_individuals, n_iterations, tree_height, int(decile * 100))
 
-                    print 'opts: %02.d/%2.d' % (count_row, n_opts) + ' ' + _partial_str
+                    print 'opts: %02.d/%02.d' % (count_row, n_opts) + ' ' + _partial_str
 
                     _write_path = os.path.join(output_path, _partial_str)
                     if os.path.exists(_write_path):
@@ -516,7 +523,7 @@ if __name__ == '__main__':
     #     _datasets_path
     # )
     # --------------------------------------------------- #
-    # grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
+    grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
@@ -528,15 +535,6 @@ if __name__ == '__main__':
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    _evaluation_mode = 'holdout'
-
-    _dict_results = do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
-
-    if _evaluation_mode == 'cross-validation':
-        _accs = np.array([x['acc'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-        _heights = np.array([x['height'] for x in _dict_results['folds'].itervalues()], dtype=np.float32)
-
-        print 'acc: %02.2f +- %02.2f\ttree height: %02.2f +- %02.2f' % (
-            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
-        )
+    # _evaluation_mode = 'cross-validation'
+    # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #

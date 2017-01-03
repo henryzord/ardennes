@@ -475,41 +475,41 @@ class Individual(object):
     def n_nodes(self):
         return len(self.tree)
 
-    def __isclose__(self, other):
-        quality_diff = abs(self.fitness - other.quality)
+    def __is_close__(self, other):
+        quality_diff = abs(self.fitness - other.fitness)
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
-        if self.__isclose__(other):
-            return self.height <= other.height
-        return self.fitness < other.quality
+        if self.__is_close__(other):
+            return self.height >= other.height
+        return self.fitness < other.fitness
 
     def __lt__(self, other):  # less than
-        if self.__isclose__(other):
-            return self.height < other.height
-        else:
-            return self.fitness < other.quality
-
-    def __ge__(self, other):  # greater or equal
-        if self.__isclose__(other):
-            return self.height >= other.height
-        else:
-            return self.fitness >= other.quality
-
-    def __gt__(self, other):  # greater than
-        if self.__isclose__(other):
+        if self.__is_close__(other):
             return self.height > other.height
         else:
-            return self.fitness > other.quality
+            return self.fitness < other.fitness
+
+    def __ge__(self, other):  # greater or equal
+        if self.__is_close__(other):
+            return self.height <= other.height
+        else:
+            return self.fitness >= other.fitness
+
+    def __gt__(self, other):  # greater than
+        if self.__is_close__(other):
+            return self.height < other.height
+        else:
+            return self.fitness > other.fitness
 
     def __eq__(self, other):  # equality
-        if self.__isclose__(other):
+        if self.__is_close__(other):
             return self.height == other.height
         else:
             return False
 
     def __ne__(self, other):  # inequality
-        if self.__isclose__(other):
+        if self.__is_close__(other):
             return self.height != other.height
         else:
             return True

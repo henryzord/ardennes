@@ -122,6 +122,7 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
 
     print 'configuration file:'
     print config_file
+    config_file['verbose'] = False
 
     n_runs = config_file['n_runs']
 
