@@ -1,7 +1,8 @@
+# coding=utf-8
+
 """
 Convenient module for heap (i.e, binary) tree properties.
 """
-# coding=utf-8
 
 import numpy as np
 

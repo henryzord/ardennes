@@ -100,11 +100,15 @@ class GraphicalModel(object):
                 labels = [get_label(fit, column.name) for fit in fittest]
                 n_unsampled = labels.count(None)
                 graft = np.random.choice(column.index, size=n_unsampled, replace=True)
+
                 # removes interference from individuals which do not present the current node
                 labels = [x for x in labels if x is not None]
-                labels.extend(graft)
 
-                count = Counter(labels)
+                label_count = Counter(labels)
+                graft_count = Counter(graft)
+                label_count.update(graft_count)
+                count = label_count
+
                 column[:] = 0.
                 for k, v in count.iteritems():
                     column[column.index == k] = v

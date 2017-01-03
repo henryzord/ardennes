@@ -172,7 +172,7 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
                 print(e.message, e.args)
 
 if __name__ == '__main__':
-    _datasets_path = 'datasets/temp'
+    _datasets_path = 'datasets/numerical'
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'

@@ -107,10 +107,10 @@ def hunt(subset, tree, handler, n_instances, node_id):
 def main():
     _dataset = read_dataset('datasets/numerical/hayes-roth-full.arff')
     n_instances = _dataset.shape[0]
-    _handler = Processor(_dataset)
+    _processor = Processor(_dataset)
     _tree = nx.DiGraph()
 
-    _tree = hunt(_dataset, _tree, _handler, n_instances, next(counter))
+    _tree = hunt(_dataset, _tree, _processor, n_instances, next(counter))
     plot(_tree)
 
 if __name__ == '__main__':

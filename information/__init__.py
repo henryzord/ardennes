@@ -27,10 +27,10 @@ class Processor(object):
         self.dataset = dataset
         self.n_objects, self.n_attributes = dataset.shape
 
-        self.master = AvailableDevice(dataset)
+        self.device = AvailableDevice(dataset)
 
     def get_ratios(self, subset_index, attribute, candidates):
-        ratios = self.master.device_gain_ratio(subset_index, attribute, candidates)
+        ratios = self.device.device_gain_ratio(subset_index, attribute, candidates)
         return ratios
 
 
@@ -57,8 +57,8 @@ def __test_gain_ratio__():
 
     subset_index = np.random.randint(2, size=df.shape[0])  # only a subset
 
-    handler = Processor(df)
-    ratios = handler.get_ratios(subset_index, attr, candidates)
+    processor = Processor(df)
+    ratios = processor.get_ratios(subset_index, attr, candidates)
 
     for i, candidate in enumerate(candidates):
         _subset = df.loc[subset_index.astype(np.bool)]

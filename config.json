@@ -1,15 +1,15 @@
 {
   "random_state": null,
-  "n_individuals": 500,
-  "n_iterations": 100,
+  "n_individuals": 200,
+  "n_iterations": 50,
   "tree_height": 7,
-  "decile": 0.90,
+  "decile": 0.75,
   "uncertainty": 0.001,
   "train_size": 1,
   "n_runs": 10,
-  "verbose": true,
+  "verbose": false,
   "ensemble": false,
   "distribution": "univariate",
-  "dataset_path": "datasets/temp/blobs.arff",
+  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
   "folds_path": "datasets/folds"
 }

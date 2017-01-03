@@ -54,7 +54,7 @@ class Ardennes(object):
         self.target_attr = None
         self.class_labels = None
 
-        self.handler = None
+        self.processor = None
 
     def __enter__(self):
         return self
@@ -103,7 +103,7 @@ class Ardennes(object):
 
             return _sets
 
-        self.handler = Processor(full)
+        self.processor = Processor(full)
         arg_sets = __initialize_argsets__(train, val, test)
         sets = __initialize_sets__(train, val, test)
 
@@ -127,7 +127,7 @@ class Ardennes(object):
             arg_sets=arg_sets,
             y_val_true=sets['val'][self.target_attr],
             y_test_true=sets['test'][self.target_attr] if 'test' in sets else None,
-            handler=self.handler,
+            processor=self.processor,
             column_types={
                 x: Individual.raw_type_dict[str(full[x].dtype)] for x in full.columns
             },

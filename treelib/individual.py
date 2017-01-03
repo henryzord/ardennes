@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import *
 
 from treelib.node import *
+from c_individual import make_predictions
+
 
 __author__ = 'Henry Cagnini'
 
@@ -27,7 +29,7 @@ class Individual(object):
     n_objects = None
     n_attributes = None
 
-    handler = None
+    processor = None
 
     ind_id = None
     fitness = None  # type: float
@@ -242,18 +244,14 @@ class Individual(object):
         arg_node = 0  # always start with root
 
         tree = self.tree  # type: nx.DiGraph
-
         node = tree.node[arg_node]
 
         while not node['terminal']:
             go_left = obj[node['label']] <= node['threshold']
-            successors = tree.successors(arg_node)
-            arg_node = (int(go_left) * min(successors)) + (int(not go_left) * max(successors))
-
+            arg_node = (arg_node * 2) + (not go_left) + 1
             node = tree.node[arg_node]
 
         return node['label']
-
 
     def predict(self, samples):
         """
@@ -263,12 +261,24 @@ class Individual(object):
         :rtype: numpy.ndarray
         :return: The predicted class for each sample.
         """
-        if isinstance(samples, pd.DataFrame):
-            preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
-        elif isinstance(samples, pd.Series):
-            preds = self.__predict_object__(samples)
-        else:
-            raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
+        # if isinstance(samples, pd.DataFrame):
+        #     preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
+        # elif isinstance(samples, pd.Series):
+        #     preds = self.__predict_object__(samples)
+        # else:
+        #     raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
+
+        data = samples.values.ravel().tolist()
+        tree = self.tree.node
+
+        preds = make_predictions(
+            samples.shape,
+            data,
+            tree,
+            range(samples.shape[0]),
+            self.processor.attribute_index
+        )
+
         return preds
 
     def __set_inner_node__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
@@ -307,15 +317,15 @@ class Individual(object):
         except KeyError as ke:
             unique_vals = sorted(Individual.full.loc[subset_index, node_label])
 
-            if self.handler.max_n_candidates is None:
+            if self.processor.max_n_candidates is None:
                 candidates = np.array(unique_vals + [
                     (unique_vals[i] + unique_vals[i + 1]) / 2.
                     if (i + 1) < len(unique_vals) else unique_vals[i] for i in xrange(len(unique_vals))
                 ][:-1])
             else:
-                candidates = np.linspace(unique_vals[0], unique_vals[-1], self.handler.max_n_candidates)
+                candidates = np.linspace(unique_vals[0], unique_vals[-1], self.processor.max_n_candidates)
 
-            gains = self.handler.get_ratios(subset_index, node_label, candidates)
+            gains = self.processor.get_ratios(subset_index, node_label, candidates)
 
             argmax = np.argmax(gains)
             if gains[argmax] <= 0:

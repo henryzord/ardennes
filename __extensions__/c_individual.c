@@ -4,47 +4,58 @@
 #define false 0
 
 
-static void predict_dataset(int n_objects, int n_attributes, PyObject *dataset, PyObject *predictions, PyObject *tree) {
-    int i, terminal, current_node, go_left;
+static int next_node(int current_node, int go_left) {
+    return (current_node * 2) + 1 + (!go_left);
+}
 
-//    printf("some number: %d\n", (int)PyInt_AsLong(PyList_GetItem(predictions, 0)));
+static void predict_dataset(int n_objects, int n_attributes, PyObject *dataset, PyObject *tree, PyObject *predictions, PyObject *attribute_index) {
+    int i, terminal, current_node, go_left, int_attr;
+    char *label;
+    float threshold, val;
 
     for(i = 0; i < n_objects; i++) {
-        current_node = 0; go_left = 0;
+        current_node = 0;
 
         while(true) {
-            PyObject *node = PyDict_GetItem(tree, Py_BuildValue("i", 0));
+            PyObject *node = PyDict_GetItem(tree, Py_BuildValue("i", current_node));
             PyObject *is_terminal = PyDict_GetItemString(node, "terminal");
-            int terminal = PyObject_IsTrue(is_terminal);
+            label = PyString_AsString(PyDict_GetItemString(node, "label"));
 
-            if(terminal) {  // if is terminal
+            terminal = PyObject_IsTrue(is_terminal);
+
+            if(terminal) {
+                PyList_SetItem(predictions, i, Py_BuildValue("s", label));
                 break;
-//                char *label =
-
-//                PyList_SetItem(predictions, i, Py_BuildValue("s", terminal));
-//                predictions[i] = (int)thresholds[current_node];
-//                break;
             } else {
-//                PyList_GetItem(dataset, i * n_objects + )
+                int_attr = (int)PyInt_AsLong(PyDict_GetItemString(attribute_index, label));
+                threshold = (float)PyFloat_AsDouble(PyDict_GetItemString(node, "threshold"));
+                val = (float)PyFloat_AsDouble(PyList_GetItem(dataset, i * n_attributes + int_attr));
 
-
-                go_left = dataset[i * n_objects + attribute_index[current_node]] <= thresholds[current_node];
-                current_node = next_node(current_node, go_left, finished);
+                go_left = val <= threshold;
+                current_node = next_node(current_node, go_left);
             }
-            break;
         }
     }
 }
 
 static PyObject* make_predictions(PyObject *self, PyObject *args) {
-    PyObject *predictions, *tree, *dataset;
     int n_objects, n_attributes;
+    PyObject *predictions, *tree, *dataset, *attribute_index, *shape;
 
-    if (!PyArg_ParseTuple(args, "iiOOO!", &n_objects, &n_attributes, &dataset, &tree, &PyList_Type, &predictions)) {
+    if (!PyArg_ParseTuple(
+            args, "O!O!O!O!O!",
+            &PyTuple_Type, &shape,
+            &PyList_Type, &dataset,
+            &PyDict_Type, &tree,
+            &PyList_Type, &predictions,
+            &PyDict_Type, &attribute_index)) {
         return NULL;
     }
 
-    predict_dataset(n_objects, n_attributes, &dataset[0], &predictions[0], tree);
+    n_objects = (int)PyInt_AsLong(PyTuple_GetItem(shape, 0));
+    n_attributes = (int)PyInt_AsLong(PyTuple_GetItem(shape, 1));
+
+    predict_dataset(n_objects, n_attributes, &dataset[0], tree, &predictions[0], attribute_index);
 
     return Py_BuildValue("O", predictions);
 }
