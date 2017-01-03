@@ -1,7 +1,7 @@
 {
   "random_state": null,
-  "n_individuals": 200,
-  "n_iterations": 50,
+  "n_individuals": 10,
+  "n_iterations": 10,
   "tree_height": 7,
   "decile": 0.75,
   "uncertainty": 0.001,
@@ -10,6 +10,6 @@
   "verbose": false,
   "ensemble": false,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/numerical/iris.arff",
   "folds_path": "datasets/folds"
 }

@@ -194,6 +194,10 @@ class Ardennes(object):
 
             iteration += 1
 
+            population.max().plot()  # TODO remove!
+            from matplotlib import pyplot as plt
+            plt.show()
+
         # self.best_individual = sample_func(
         #     ind_id=0, graphical_model=gm, max_height=self.max_height, sets=sets,
         #     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels

@@ -523,7 +523,7 @@ if __name__ == '__main__':
     #     _datasets_path
     # )
     # --------------------------------------------------- #
-    grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
+    # grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
@@ -535,6 +535,6 @@ if __name__ == '__main__':
     # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
     # crunch_ensemble(_results_path)
     # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
-    # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    _evaluation_mode = 'holdout'
+    do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #
