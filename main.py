@@ -60,9 +60,9 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
         y_val_true = val_s[val_s.columns[-1]]
         y_test_true = test_s[test_s.columns[-1]]
 
-        y_pred_train = inst.predict(train_s, ensemble=config_file['ensemble'])
-        y_pred_val = inst.predict(val_s, ensemble=config_file['ensemble'])
-        y_pred_test = inst.predict(test_s, ensemble=config_file['ensemble'])
+        y_pred_train = inst.predict(train_s)
+        y_pred_val = inst.predict(val_s)
+        y_pred_test = inst.predict(test_s)
 
         _train_acc = accuracy_score(y_train_true, y_pred_train)
         _val_acc = accuracy_score(y_val_true, y_pred_val)
@@ -523,7 +523,7 @@ if __name__ == '__main__':
     #     _datasets_path
     # )
     # --------------------------------------------------- #
-    grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
+    # grid_optimizer(_config_file, _datasets_path, output_path='/home/henry/Desktop/parametrizations')
     # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
@@ -532,9 +532,6 @@ if __name__ == '__main__':
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
-    # _results_path = '/home/henry/Projects/ardennes/metadata/past_runs/[10 runs 10 folds] ardennes'
-    # crunch_ensemble(_results_path)
-    # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
-    # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    _evaluation_mode = 'holdout'
+    do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #

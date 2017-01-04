@@ -5,11 +5,10 @@
   "tree_height": 7,
   "decile": 0.75,
   "uncertainty": 0.001,
-  "train_size": 1,
+  "train_size": 0.5,
   "n_runs": 10,
-  "verbose": false,
-  "ensemble": false,
+  "verbose": true,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/numerical/vehicle.arff",
   "folds_path": "datasets/folds"
 }

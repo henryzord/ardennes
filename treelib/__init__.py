@@ -159,15 +159,12 @@ class Ardennes(object):
 
         population = np.sort(population)[::-1]
 
-        fitness = np.array([x.fitness for x in population])
-
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
             t2 = dt.now()
 
             self.__report__(
                 iteration=iteration,
-                fitness=fitness,
                 population=population,
                 verbose=verbose,
                 elapsed_time=(t2-t1).total_seconds(),
@@ -187,9 +184,7 @@ class Ardennes(object):
 
                 population = np.sort(population)[::-1]
 
-            fitness = np.array([x.fitness for x in population])
-
-            if self.__early_stop__(fitness, self.uncertainty):
+            if self.__early_stop__(population):
                 break
 
             iteration += 1
@@ -200,30 +195,20 @@ class Ardennes(object):
         # )
 
         self.gm = gm
-        self.best_individual = np.argmax(fitness)
+        self.best_individual = population.max()
         self.last_population = population
         self.trained = True
 
     @property
     def tree_height(self):
         if self.trained:
-            return self.last_population[self.best_individual].height
+            return self.best_individual.height
 
-    def predict(self, samples, ensemble=False):
+    def predict(self, samples):
         df = self.__to_dataframe__(samples)
 
-        if not ensemble:
-            predictor = self.last_population[self.best_individual]
-            all_preds = predictor.predict(df)
-        else:
-            predictor = self.last_population
-
-            def sample_pred(sample):
-                sample_predictions = map(lambda x: x.predict(sample), predictor)
-                most_common = Counter(sample_predictions).most_common()[0][0]
-                return most_common
-
-            all_preds = df.apply(sample_pred, axis=1).as_matrix()
+        predictor = self.best_individual
+        all_preds = predictor.predict(df)
 
         return all_preds
 
@@ -233,25 +218,6 @@ class Ardennes(object):
         if make_class:
             columns += ['class']
         return columns
-
-    def validate(self, test_set=None, X_test=None, y_test=None, ensemble=False):
-        """
-        Assess the accuracy of this instance against the provided set.
-
-        :type test_set: pandas.DataFrame
-        :param test_set: a matrix with the class attribute in the last position (i.e, column).
-        :rtype: float
-        :return: The accuracy of this model when testing with test_set.
-        """
-
-        if test_set is None:
-            test_set = pd.DataFrame(
-                np.hstack((X_test, y_test[:, np.newaxis])), columns=self.__generate_columns__(X_test.shape[1], make_class=True)
-            )
-
-        predictions = self.predict(test_set, ensemble=ensemble)
-        acc = (test_set[test_set.columns[-1]] == predictions).sum() / float(test_set.shape[0])
-        return acc
 
     def __to_dataframe__(self, samples):
         if isinstance(samples, list):
@@ -281,8 +247,8 @@ class Ardennes(object):
 
         # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
-        fitness = kwargs['fitness']  # type: np.ndarray
         population = kwargs['population']
+        fitness = np.array([x.fitness for x in population])
         verbose = kwargs['verbose']
         elapsed_time = kwargs['elapsed_time']
         gm = kwargs['gm']
@@ -339,5 +305,5 @@ class Ardennes(object):
             )
 
     @staticmethod
-    def __early_stop__(fitness, uncertainty):
-        return abs(fitness.min() - fitness.max()) < uncertainty
+    def __early_stop__(population):
+        return population[0] == population[-1]

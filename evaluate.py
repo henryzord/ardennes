@@ -180,11 +180,11 @@ if __name__ == '__main__':
     _intermediary_sets = 'intermediary'
     _config_file = json.load(open('config.json', 'r'))
 
-    evaluate_ardennes(
-        datasets_path=_datasets_path,
-        config_file=_config_file,
-        output_path=_output_path,
-        validation_mode=_validation_mode
-    )
+    # evaluate_ardennes(
+    #     datasets_path=_datasets_path,
+    #     config_file=_config_file,
+    #     output_path=_output_path,
+    #     validation_mode=_validation_mode
+    # )
 
-    # evaluate_j48(_datasets_path, _intermediary_sets)
+    evaluate_j48(_datasets_path, _intermediary_sets)
