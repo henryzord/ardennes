@@ -6,7 +6,6 @@ import itertools as it
 from collections import Counter
 
 import networkx as nx
-import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.metrics import *
 
@@ -404,7 +403,7 @@ class Individual(object):
 
         return meta, (subset_left, subset_right)
 
-    def plot(self, savepath=None, test_acc=None):
+    def plot(self, savepath=None):
         """
         Draw this individual.
         """
@@ -413,6 +412,12 @@ class Individual(object):
         # from wand import display
         # img = Image(filename='.temp.pdf')
         # display.display(img)
+
+        if Individual.y_test_true is not None:
+            y_pred = self.predict(Individual.sets['test'])
+            test_acc = accuracy_score(Individual.y_test_true, y_pred)
+        else:
+            test_acc = None
 
         fig = plt.figure(figsize=(40, 30))
 
@@ -455,12 +460,6 @@ class Individual(object):
         if savepath is not None:
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
-
-    @property
-    def inverse_height(self):
-        height = self.height
-        inv_height = self.max_height - height
-        return inv_height
 
     @property
     def n_nodes(self):

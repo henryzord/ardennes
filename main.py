@@ -26,12 +26,6 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
     except KeyError:
         random_state = None
 
-    if random_state is not None:
-        warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
-
-    random.seed(random_state)
-    np.random.seed(random_state)
-
     tree_height = config_file['tree_height']
 
     t1 = dt.now()
@@ -42,7 +36,8 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
         uncertainty=config_file['uncertainty'],
         max_height=tree_height,
         distribution=config_file['distribution'],
-        n_iterations=config_file['n_iterations']
+        n_iterations=config_file['n_iterations'],
+        random_state=random_state
     ) as inst:
         inst.fit(
             full=full,
@@ -172,7 +167,7 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
     else:
         train_s, val_s, test_s = get_batch(
-            df, train_size=config_file['train_size'], random_state=config_file['random_state']
+            df, train_size=config_file['train_size'], random_state=random_state
         )
 
         train_s, val_s = __append__(train_s, val_s, config_file)
@@ -528,10 +523,10 @@ if __name__ == '__main__':
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # --------------------------------------------------- #
     # _results_file = json.load(
-    #     open('/home/henry/Desktop/results.json', 'r')
+    #     open('/home/henry/Projects/ardennes/j48_results.json', 'r')
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # --------------------------------------------------- #
-    _evaluation_mode = 'holdout'
-    do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
+    # _evaluation_mode = 'cross-validation'
+    # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #

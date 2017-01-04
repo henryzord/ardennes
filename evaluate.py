@@ -17,7 +17,7 @@ from main import do_train
 import numpy as np
 
 import networkx as nx
-import math
+from sklearn.metrics import precision_score, accuracy_score, f1_score
 
 __author__ = 'Henry Cagnini'
 
@@ -78,25 +78,50 @@ def evaluate_j48(datasets_path, intermediary_path):
                     graph = cls.graph.encode('ascii')
                     out = StringIO.StringIO(graph)
                     G = nx.Graph(nx.nx_pydot.read_dot(out))
-                    n_nodes = G.number_of_nodes()
-                    height = math.ceil(np.log2(n_nodes + 1))
 
-                    acc = 0.
+                    # TODO plotting!
+                    # from networkx.drawing.nx_agraph import graphviz_layout
+                    # from matplotlib import pyplot as plt
+                    # pos = graphviz_layout(G, root='N0', prog='dot')
+                    # nx.draw_networkx_nodes(G, pos)
+                    # nx.draw_networkx_edges(G, pos)
+                    # nx.draw_networkx_labels(G, pos, {k: k for k in G.node.iterkeys()}, font_size=16)  # node labels
+                    # plt.show()
+                    # exit(0)
+                    # TODO plotting!
+
+                    height = max(map(len, nx.shortest_path(G, source='N0').itervalues()))
+
+                    y_test_true = []
+                    y_test_pred = []
+
+                    y_train_true = []
+                    y_train_pred = []
+
+                    for index, inst in enumerate(train_s):
+                        y_train_true += [inst.get_value(inst.class_index)]
+                        y_train_pred += [cls.classify_instance(inst)]
+
                     for index, inst in enumerate(test_s):
-                        pred = cls.classify_instance(inst)
-                        real = inst.get_value(inst.class_index)
-                        acc += (pred == real)
+                        y_test_true += [inst.get_value(inst.class_index)]
+                        y_test_pred += [cls.classify_instance(inst)]
 
-                    acc /= float(test_s.num_instances)
+                    acc = accuracy_score(y_test_true, y_test_pred)
 
                     results['runs']['1'][dataset_name]['folds'][n_fold] = {
+                        'train_acc': accuracy_score(y_train_true, y_train_pred),
+                        'val_acc': accuracy_score(y_train_true, y_train_pred),
                         'acc': acc,
+                        'f1_score': f1_score(y_test_true, y_test_pred, average='micro'),
+                        'precision': precision_score(y_test_true, y_test_pred, average='micro'),
                         'height': height
                     }
 
                     print 'dataset %s %d-th fold accuracy: %02.2f tree height: %d' % (dataset_name, int(n_fold), acc, height)
 
                 except Exception as e:
+                    print e.message
+
                     accs = np.array(
                         [x['acc'] for x in results['runs']['1'][dataset_name]['folds'].itervalues()]
                     )
@@ -180,11 +205,11 @@ if __name__ == '__main__':
     _intermediary_sets = 'intermediary'
     _config_file = json.load(open('config.json', 'r'))
 
-    # evaluate_ardennes(
-    #     datasets_path=_datasets_path,
-    #     config_file=_config_file,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode
-    # )
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        config_file=_config_file,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )
 
-    evaluate_j48(_datasets_path, _intermediary_sets)
+    # evaluate_j48(_datasets_path, _intermediary_sets)

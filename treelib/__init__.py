@@ -2,15 +2,15 @@
 
 import csv
 import os
+import random
 from datetime import datetime as dt
 
-import pandas
+from sklearn.metrics import accuracy_score
 
 from classes import type_check, value_check
 from graphical_model import *
 from individual import Individual
 from information import Processor
-from sklearn.metrics import accuracy_score
 
 __author__ = 'Henry Cagnini'
 
@@ -21,7 +21,7 @@ class Ardennes(object):
     def __init__(self,
                  n_individuals=100, n_iterations=100, uncertainty=0.001,
                  decile=0.9, max_height=3, distribution='univariate',
-                 class_probability='declining'):
+                 class_probability='declining', random_state=None):
         """
         Default EDA class, with common code to all EDAs -- regardless
         of the complexity of inner GMs or updating techniques.
@@ -36,6 +36,12 @@ class Ardennes(object):
             how much of it must be resampled for the next generation. For example, if decile=0.9, then 10% of the
             population will be used for GM updating and 90% will be resampled.
         """
+        if random_state is not None:
+            warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
+
+        random.seed(random_state)
+        np.random.seed(random_state)
+
         self.n_individuals = n_individuals
         self.decile = decile
         self.uncertainty = uncertainty
@@ -189,10 +195,6 @@ class Ardennes(object):
 
             iteration += 1
 
-            population.max().plot()  # TODO remove!
-            from matplotlib import pyplot as plt
-            plt.show()
-
         # self.best_individual = sample_func(
         #     ind_id=0, graphical_model=gm, max_height=self.max_height, sets=sets,
         #     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
@@ -202,6 +204,10 @@ class Ardennes(object):
         self.best_individual = population.max()
         self.last_population = population
         self.trained = True
+
+        # population.max().plot(savepath='/home/henry/Desktop/fold_%d.pdf' % int(kwargs['fold']))  # TODO remove!
+        # from matplotlib import pyplot as plt
+        # plt.show()
 
     @property
     def tree_height(self):
@@ -303,9 +309,8 @@ class Ardennes(object):
 
                     csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height] + add)
 
-            population[np.argmax(fitness)].plot(
-                savepath=evo_file.split('.')[0].strip() + '.pdf',
-                test_acc=best_test_fitness
+            population.max().plot(
+                savepath=evo_file.split('.')[0].strip() + '.pdf'
             )
 
     @staticmethod

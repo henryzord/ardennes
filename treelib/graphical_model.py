@@ -54,10 +54,14 @@ class GraphicalModel(object):
             # class attribute is the last one
             n_attributes = column.index.shape[0]
 
-            depth = get_depth(column.name)
+            d = get_depth(column.name)
 
-            # class_prob = (1. / (max_depth + 1)) * float(depth)  # linear progression
-            class_prob = 2. ** depth / 2. ** (D + 1)  # power of 2 progression
+            warnings.warn('WARNING: using custom-setup for class probability!')
+
+
+            class_prob = 0
+            # class_prob = (1. / (D + 1)) * float(d)  # linear progression
+            # class_prob = 2. ** d / 2. ** (D + 1)  # power of 2 progression
             pred_prob = (1. - class_prob) / (n_attributes - 1.)
 
             column[-1] = class_prob
@@ -99,7 +103,9 @@ class GraphicalModel(object):
             def local_update(column):
                 labels = [get_label(fit, column.name) for fit in fittest]
                 n_unsampled = labels.count(None)
-                graft = np.random.choice(column.index, size=n_unsampled, replace=True)
+                warnings.warn('WARNING: not including class in graft!')
+                graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)  # TODO modified
+                # graft = np.random.choice(column.index, size=n_unsampled, replace=True)  # TODO original
 
                 # removes interference from individuals which do not present the current node
                 labels = [x for x in labels if x is not None]
