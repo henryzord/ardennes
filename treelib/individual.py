@@ -360,12 +360,16 @@ class Individual(object):
     def __set_terminal__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
         # node_label in this case is probably the self.target_attr; so it
         # is not significant for the **real** label of the terminal node.
-        label = Counter(Individual.full.loc[subset_index, self.target_attr]).most_common()[0][0]
+
+        counter = Counter(Individual.full.loc[subset_index, self.target_attr])
+        label, count_frequent = counter.most_common()[0]
 
         meta = {
             'label': label,
             'threshold': None,
             'terminal': True,
+            'inst_correct': count_frequent,
+            'inst_total': subset_index.sum(),
             'level': node_level,
             'node_id': node_id,
             'color': Individual._terminal_node_color
@@ -385,6 +389,8 @@ class Individual(object):
         meta = {
             'label': node_label,
             'threshold': threshold,
+            'inst_correct': None,
+            'inst_total': subset_index.sum(),
             'terminal': False,
             'level': node_level,
             'node_id': node_id,
@@ -417,7 +423,10 @@ class Individual(object):
         node_list = tree.nodes(data=True)
         edge_list = tree.edges(data=True)
 
-        node_labels = {x[0]: str(x[1]['node_id']) + ': ' + str(x[1]['label']) for x in node_list}
+        node_labels = {
+            x[0]: '%s: %s\n%s' % (str(x[1]['node_id']), str(x[1]['label']), '%s/%s' % (str(x[1]['inst_correct']), str(x[1]['inst_total'])) if x[1]['terminal'] else '')
+            for x in node_list
+        }
         node_colors = [x[1]['color'] for x in node_list]
         edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
 
@@ -426,41 +435,23 @@ class Individual(object):
         nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
         nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
 
-        if self.ind_id is not None:
-            plt.text(
-                0.8,
-                0.9,
-                'individual id: %03.d' % self.ind_id,
-                fontsize=15,
-                horizontalalignment='left',
-                verticalalignment='center',
-                transform=fig.transFigure
-            )
-
         plt.text(
-            0.8,
-            0.94,
-            'val accuracy: %0.4f' % self.fitness,
+            0.2,
+            0.9,
+            '\n'.join([
+                'val accuracy: %0.4f' % self.fitness,
+                'individual id: %03.d' % self.ind_id if self.ind_id is not None else '',
+                'test acc: %0.4f' % test_acc if test_acc is not None else ''
+
+            ]),
             fontsize=15,
-            horizontalalignment='left',
-            verticalalignment='center',
+            horizontalalignment='right',
+            verticalalignment='top',
             transform=fig.transFigure
         )
 
-        if test_acc is not None:
-            plt.text(
-                0.8,
-                0.98,
-                'test acc: %0.4f' % test_acc,
-                fontsize=15,
-                horizontalalignment='left',
-                verticalalignment='center',
-                transform=fig.transFigure
-            )
-
         plt.axis('off')
 
-        # plt.show()
         if savepath is not None:
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
