@@ -619,18 +619,19 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     random_state = config_file['random_state']
 
     def __append__(_train_s, _val_s, __config_file):
-        warnings.warn('WARNING: Using %2.2f of data (excluding test fold) for training' % __config_file['train_size'])
-
-        mass = _train_s.append(_val_s, ignore_index=False)
-        if __config_file['train_size'] < 1.:
-
-            from sklearn.model_selection import train_test_split
-
-            _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
-
-            return _train_s, _val_s
-        else:
-            return mass, mass
+        return _train_s, _val_s
+        # warnings.warn('WARNING: Using %2.2f of data (excluding test fold) for training' % __config_file['train_size'])
+        #
+        # mass = _train_s.append(_val_s, ignore_index=False)
+        # if __config_file['train_size'] < 1.:
+        #
+        #     from sklearn.model_selection import train_test_split
+        #
+        #     _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
+        #
+        #     return _train_s, _val_s
+        # else:
+        #     return mass, mass
 
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '

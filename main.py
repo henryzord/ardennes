@@ -35,6 +35,6 @@ if __name__ == '__main__':
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
+    # _evaluation_mode = 'holdout'
     # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #

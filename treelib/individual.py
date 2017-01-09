@@ -33,6 +33,7 @@ class Individual(object):
     ind_id = None
     fitness = None  # type: float
     height = None
+    n_nodes = None
     max_height = -1
     tree = None  # type: nx.DiGraph
 
@@ -45,8 +46,9 @@ class Individual(object):
     arg_sets = None
     y_test_true = None
     y_val_true = None
+    y_train_true = None
 
-    rtol = 1e-3
+    rtol = 1e-2
 
     def __init__(self, gm, **kwargs):
         """
@@ -153,11 +155,15 @@ class Individual(object):
 
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        y_pred = self.predict(Individual.sets['val'])
-        acc_score = accuracy_score(Individual.y_val_true, y_pred)
+        y_val_pred = self.predict(Individual.sets['val'])
+        val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
 
-        self.fitness = acc_score
+        y_train_pred = self.predict(Individual.sets['train'])
+        train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
+
+        self.fitness = 0.5 * val_acc_score + 0.5 * train_acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
+        self.n_nodes = len(self.tree.node)
 
     def __set_node__(self, node_id, gm, tree, subset_index, level, parent_labels, coordinates):
         try:
@@ -461,51 +467,65 @@ class Individual(object):
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
 
-    @property
-    def n_nodes(self):
-        return len(self.tree)
-
     def __is_close__(self, other):
         quality_diff = abs(self.fitness - other.fitness)
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
         if self.__is_close__(other):
-            return self.height >= other.height
-        return self.fitness < other.fitness
+            if self.height == other.height:
+                return self.n_nodes >= other.n_nodes
+            else:
+                return self.height >= other.height
+        return self.fitness <= other.fitness
 
     def __lt__(self, other):  # less than
         if self.__is_close__(other):
-            return self.height > other.height
+            if self.height == other.height:
+                return self.n_nodes > other.n_nodes
+            else:
+                return self.height > other.height
         else:
             return self.fitness < other.fitness
 
     def __ge__(self, other):  # greater or equal
         if self.__is_close__(other):
-            return self.height <= other.height
+            if self.height == other.height:
+                return self.n_nodes <= other.n_nodes
+            else:
+                return self.height <= other.height
         else:
             return self.fitness >= other.fitness
 
     def __gt__(self, other):  # greater than
         if self.__is_close__(other):
-            return self.height < other.height
+            if self.height == other.height:
+                return self.n_nodes < other.n_nodes
+            else:
+                return self.height < other.height
         else:
             return self.fitness > other.fitness
 
     def __eq__(self, other):  # equality
         if self.__is_close__(other):
-            return self.height == other.height
+            if self.height == other.height:
+                return self.n_nodes == other.n_nodes
+            else:
+                return self.height == other.height
         else:
             return False
 
     def __ne__(self, other):  # inequality
         if self.__is_close__(other):
-            return self.height != other.height
+            if self.height == other.height:
+                return self.n_nodes != other.n_nodes
+            else:
+                return self.height != other.height
         else:
             return True
 
     def __str__(self):
-        return 'fitness: %0.2f height: %d' % (self.fitness, self.height)
+        return 'fitness: %0.2f height: %d n_nodes: %d' % (self.fitness, self.height, self.n_nodes)
 
     def get_predictive_type(self, dtype):
         """

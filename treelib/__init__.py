@@ -131,6 +131,7 @@ class Ardennes(object):
         Individual.set_values(
             sets=sets,
             arg_sets=arg_sets,
+            y_train_true=sets['train'][self.target_attr],
             y_val_true=sets['val'][self.target_attr],
             y_test_true=sets['test'][self.target_attr] if 'test' in sets else None,
             processor=self.processor,
@@ -195,6 +196,10 @@ class Ardennes(object):
 
             iteration += 1
 
+            # population.max().plot(savepath='/home/henry/Desktop/gens/gen_%d.pdf' % iteration)  # TODO remove!
+            # from matplotlib import pyplot as plt
+            # plt.show()
+
         # self.best_individual = sample_func(
         #     ind_id=0, graphical_model=gm, max_height=self.max_height, sets=sets,
         #     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
@@ -204,10 +209,6 @@ class Ardennes(object):
         self.best_individual = population.max()
         self.last_population = population
         self.trained = True
-
-        # population.max().plot(savepath='/home/henry/Desktop/fold_%d.pdf' % int(kwargs['fold']))  # TODO remove!
-        # from matplotlib import pyplot as plt
-        # plt.show()
 
     @property
     def tree_height(self):

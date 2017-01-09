@@ -5,10 +5,10 @@
   "tree_height": 9,
   "decile": 0.5,
   "uncertainty": 0.001,
-  "train_size": 1,
+  "train_size": 0.5,
   "n_runs": 10,
   "verbose": true,
   "distribution": "univariate",
-  "dataset_path": "datasets/numerical/hayes-roth-full.arff",
+  "dataset_path": "datasets/numerical/liver-disorders.arff",
   "folds_path": "datasets/folds"
 }

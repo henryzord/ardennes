@@ -56,7 +56,7 @@ class GraphicalModel(object):
 
             d = get_depth(column.name)
 
-            warnings.warn('WARNING: using custom-setup for class probability!')
+            # warnings.warn('WARNING: using custom-setup for class probability!')
 
 
             class_prob = 0
@@ -103,7 +103,7 @@ class GraphicalModel(object):
             def local_update(column):
                 labels = [get_label(fit, column.name) for fit in fittest]
                 n_unsampled = labels.count(None)
-                warnings.warn('WARNING: not including class in graft!')
+                # warnings.warn('WARNING: not including class in graft!')
                 graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)  # TODO modified
                 # graft = np.random.choice(column.index, size=n_unsampled, replace=True)  # TODO original
 
