@@ -3,6 +3,8 @@
 *.pyc
 metadata/
 
+main.py
+
 # folders
 datasets/subsample
 intermediary

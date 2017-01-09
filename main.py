@@ -13,12 +13,12 @@ if __name__ == '__main__':
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
 
-    # evaluate_ardennes(
-    #     datasets_path=_datasets_path,
-    #     config_file=_config_file,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode
-    # )
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        config_file=_config_file,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )
     # evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
     # crunch_graphical_model(
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # # --------------------------------------------------- #
     # _results_file = json.load(
-    #     open('/home/henry/Projects/ardennes/j48_results.json', 'r')
+    #     open('/home/henry/Desktop/results.json', 'r')
     # )
     # crunch_result_file(_results_file, output_file='results.csv')
     # # --------------------------------------------------- #

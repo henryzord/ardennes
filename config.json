@@ -3,7 +3,7 @@
   "n_individuals": 200,
   "n_iterations": 100,
   "tree_height": 9,
-  "decile": 0.75,
+  "decile": 0.5,
   "uncertainty": 0.001,
   "train_size": 1,
   "n_runs": 10,
