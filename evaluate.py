@@ -41,6 +41,8 @@ def evaluate_j48(datasets_path, intermediary_path):
     import weka.core.jvm as jvm
     from weka.core.converters import Loader
     from weka.classifiers import Classifier
+    from networkx.drawing.nx_agraph import graphviz_layout
+    from matplotlib import pyplot as plt
 
     jvm.start()
 
@@ -85,15 +87,26 @@ def evaluate_j48(datasets_path, intermediary_path):
                     G = nx.Graph(nx.nx_pydot.read_dot(out))
 
                     # TODO plotting!
-                    # from networkx.drawing.nx_agraph import graphviz_layout
-                    # from matplotlib import pyplot as plt
+                    # TODO plotting!
+                    # TODO plotting!
+                    # fig = plt.figure(figsize=(40, 30))
                     # pos = graphviz_layout(G, root='N0', prog='dot')
-                    # nx.draw_networkx_nodes(G, pos)
-                    # nx.draw_networkx_edges(G, pos)
-                    # nx.draw_networkx_labels(G, pos, {k: k for k in G.node.iterkeys()}, font_size=16)  # node labels
+                    #
+                    # edgelist = G.edges(data=True)
+                    # nodelist = G.nodes(data=True)
+                    #
+                    # edge_labels = {(x1, x2): v['label'] for x1, x2, v in edgelist}
+                    # node_colors = {node_id: ('#98FB98' if 'shape' in _dict else '#0099FF') for node_id, _dict in nodelist}
+                    # node_colors['N0'] = '#FFFFFF'
+                    # node_colors = node_colors.values()
+                    #
+                    # nx.draw_networkx_nodes(G, pos, node_color=node_colors)
+                    # nx.draw_networkx_edges(G, pos, style='dashed', arrows=False)
+                    # nx.draw_networkx_labels(G, pos, {k: v['label'] for k, v in G.node.iteritems()})
+                    # nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+                    # plt.axis('off')
                     # plt.show()
                     # exit(0)
-                    # TODO plotting!
 
                     height = max(map(len, nx.shortest_path(G, source='N0').itervalues()))
 

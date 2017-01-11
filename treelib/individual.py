@@ -414,10 +414,7 @@ class Individual(object):
         Draw this individual.
         """
 
-        # from wand.image import Image
-        # from wand import display
-        # img = Image(filename='.temp.pdf')
-        # display.display(img)
+        from networkx.drawing.nx_agraph import graphviz_layout
 
         if Individual.y_test_true is not None:
             y_pred = self.predict(Individual.sets['test'])
@@ -428,7 +425,6 @@ class Individual(object):
         fig = plt.figure(figsize=(40, 30))
 
         tree = self.tree  # type: nx.DiGraph
-        from networkx.drawing.nx_agraph import graphviz_layout
         pos = graphviz_layout(tree, root=0, prog='dot')
 
         node_list = tree.nodes(data=True)

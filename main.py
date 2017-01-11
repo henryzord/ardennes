@@ -13,13 +13,13 @@ if __name__ == '__main__':
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
 
-    evaluate_ardennes(
-        datasets_path=_datasets_path,
-        config_file=_config_file,
-        output_path=_output_path,
-        validation_mode=_validation_mode
-    )
-    # evaluate_j48(_datasets_path, _intermediary_sets)
+    # evaluate_ardennes(
+    #     datasets_path=_datasets_path,
+    #     config_file=_config_file,
+    #     output_path=_output_path,
+    #     validation_mode=_validation_mode
+    # )
+    evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
     # crunch_graphical_model(
     #     '/home/henryzord/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # _results_file = json.load(
     #     open('/home/henry/Desktop/results.json', 'r')
     # )
-    # crunch_result_file(_results_file, output_file='results.csv')
+    # crunch_result_file(_results_file, output_file='/home/henry/Desktop/results.csv')
     # # --------------------------------------------------- #
     # _evaluation_mode = 'holdout'
     # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
