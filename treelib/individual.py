@@ -27,19 +27,11 @@ class Individual(object):
     class_labels = None
     n_objects = None
     n_attributes = None
+    max_height = -1
 
     processor = None
 
-    ind_id = None
-    fitness = None  # type: float
-    height = None
-    n_nodes = None
-    max_height = -1
-    tree = None  # type: nx.DiGraph
-
     thresholds = dict()  # thresholds for nodes
-
-    _shortest_path = dict()  # type: dict
 
     full = None
     sets = None
@@ -47,6 +39,19 @@ class Individual(object):
     y_test_true = None
     y_val_true = None
     y_train_true = None
+
+    _shortest_path = dict()  # type: dict
+    tree = None  # type: nx.DiGraph
+
+    ind_id = None
+    fitness = None  # type: float
+    height = None
+    n_nodes = None
+    train_acc_score = None
+    val_acc_score = None
+    test_acc_score = None
+    test_precision_score = None
+    test_f1_score = None
 
     rtol = 1e-2
 
@@ -155,13 +160,17 @@ class Individual(object):
 
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        y_val_pred = self.predict(Individual.sets['val'])
-        val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
-
         y_train_pred = self.predict(Individual.sets['train'])
-        train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
+        y_val_pred = self.predict(Individual.sets['val'])
+        y_test_pred = self.predict(Individual.sets['test'])
 
-        self.fitness = 0.5 * val_acc_score + 0.5 * train_acc_score
+        self.train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
+        self.val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
+        self.test_acc_score = accuracy_score(Individual.y_test_true, y_test_pred)
+        self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred)
+        self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred)
+
+        self.fitness = 0.5 * self.val_acc_score + 0.5 * self.train_acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
 
@@ -416,12 +425,6 @@ class Individual(object):
 
         from networkx.drawing.nx_agraph import graphviz_layout
 
-        if Individual.y_test_true is not None:
-            y_pred = self.predict(Individual.sets['test'])
-            test_acc = accuracy_score(Individual.y_test_true, y_pred)
-        else:
-            test_acc = None
-
         fig = plt.figure(figsize=(40, 30))
 
         tree = self.tree  # type: nx.DiGraph
@@ -447,8 +450,8 @@ class Individual(object):
             0.9,
             '\n'.join([
                 'val accuracy: %0.4f' % self.fitness,
-                'individual id: %03.d' % self.ind_id if self.ind_id is not None else '',
-                'test acc: %0.4f' % test_acc if test_acc is not None else ''
+                'individual id: %03.d' % self.ind_id,
+                'test acc: %0.4f' % Individual.test_acc_score if Individual.test_acc_score is not None else ''
 
             ]),
             fontsize=15,

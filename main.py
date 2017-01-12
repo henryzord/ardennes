@@ -2,7 +2,8 @@ import json
 
 # noinspection PyUnresolvedReferences
 from evaluate import evaluate_ardennes, evaluate_j48, crunch_graphical_model, \
-    grid_optimizer, crunch_parametrization, crunch_result_file, do_train
+    grid_optimizer, crunch_parametrization, crunch_result_file, do_train, crunch_evolution_data, \
+    generation_statistics
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
@@ -19,10 +20,10 @@ if __name__ == '__main__':
     #     output_path=_output_path,
     #     validation_mode=_validation_mode
     # )
-    evaluate_j48(_datasets_path, _intermediary_sets)
+    # evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
     # crunch_graphical_model(
-    #     '/home/henryzord/Projects/ardennes/metadata/liver-disorders/liver-disorders_pgm_fold_000_run_000.csv',
+    #     '/home/henry/Desktop/floats/iris_pgm_fold_000_run_004.csv',
     #     _datasets_path
     # )
     # # --------------------------------------------------- #
@@ -38,3 +39,6 @@ if __name__ == '__main__':
     # _evaluation_mode = 'holdout'
     # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #
+    # crunch_evolution_data('/home/henry/Desktop/floats/iris_evo_fold_000_run_004.csv')
+    # --------------------------------------------------- #
+    generation_statistics('/home/henry/Desktop/floats/iris_evo_fold_000_run_004.csv')

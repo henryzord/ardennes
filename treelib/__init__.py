@@ -5,8 +5,6 @@ import os
 import random
 from datetime import datetime as dt
 
-from sklearn.metrics import accuracy_score
-
 from classes import type_check, value_check
 from graphical_model import *
 from individual import Individual
@@ -126,7 +124,9 @@ class Ardennes(object):
         self.class_labels = class_values['class_labels']
 
         # threshold where individuals will be picked for PMF updating/replacing
-        to_replace_index = np.arange(self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32)
+        to_replace_index = np.arange(
+            self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
+        )
 
         Individual.set_values(
             sets=sets,
@@ -180,6 +180,11 @@ class Ardennes(object):
             )
             t1 = t2
 
+            if self.__early_stop__(population):
+                break
+
+            iteration += 1
+
             fittest_pop = population[:to_replace_index[0]]
 
             gm.update(fittest_pop)
@@ -190,11 +195,6 @@ class Ardennes(object):
                 )
 
                 population = np.sort(population)[::-1]
-
-            if self.__early_stop__(population):
-                break
-
-            iteration += 1
 
             # population.max().plot(savepath='/home/henry/Desktop/gens/gen_%d.pdf' % iteration)  # TODO remove!
             # from matplotlib import pyplot as plt
@@ -264,7 +264,7 @@ class Ardennes(object):
         elapsed_time = kwargs['elapsed_time']
         gm = kwargs['gm']
 
-        best_individual = population[0]  # best individual in the population
+        best_individual = population[0]  # type: Individual  # best individual in the population
 
         # optional data
         n_run = None if 'run' not in kwargs else kwargs['run']
@@ -272,19 +272,13 @@ class Ardennes(object):
         dataset_name = None if 'dataset_name' not in kwargs else kwargs['dataset_name']
         output_path = None if 'output_path' not in kwargs else kwargs['output_path']
 
-        if Individual.y_test_true is not None:
-            y_pred = best_individual.predict(Individual.sets['test'])
-            best_test_fitness = accuracy_score(Individual.y_test_true, y_pred)
-        else:
-            best_test_fitness = None
-
         if verbose:
             mean = np.mean(fitness)  # type: float
             median = np.median(fitness)  # type: float
 
             print 'iter: %03.d  mean: %0.6f  median: %0.6f  max: %0.6f  ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
                 iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
-            ) + ('test acc: %0.6f' % best_test_fitness if best_test_fitness is not None else '')
+            ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
         if output_path is not None:
             evo_file = os.path.join(output_path, dataset_name + '_evo_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
@@ -298,17 +292,17 @@ class Ardennes(object):
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
 
                 if iteration == 0:  # resets file
-                    header_add = [] if Individual.y_test_true is None else ['test accuracy']
-                    csv_w.writerow(['individual', 'iteration', 'validation accuracy', 'tree height'] + header_add)
+                    csv_w.writerow(['individual', 'iteration', 'fitness', 'height', 'n_nodes',
+                                    'train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1'])
 
                 for ind in population:  # type: Individual
                     if Individual.y_test_true is not None:
-                        y_pred = ind.predict(Individual.sets['test'])
-                        add = [accuracy_score(Individual.y_test_true, y_pred)]
+                        add = [ind.test_acc_score, ind.test_precision_score, ind.test_f1_score]
                     else:
-                        add = []
+                        add = ['', '', '']
 
-                    csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height] + add)
+                    csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height, ind.n_nodes,
+                                    ind.train_acc_score, ind.val_acc_score] + add)
 
             population.max().plot(
                 savepath=evo_file.split('.')[0].strip() + '.pdf'

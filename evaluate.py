@@ -337,49 +337,66 @@ def crunch_result_file(results_file, output_file=None):
         final.to_csv(output_file, sep=',', quotechar='\"')
 
 
-def crunch_population_data(path_results):
+def crunch_evolution_data(path_results):
     from matplotlib import pyplot as plt
+    df = pd.read_csv(path_results)
+    # df.columns = ['individual', 'iteration', 'fitness', 'tree height', 'test accuracy']
+    criteria = ['validation accuracy', 'test accuracy', 'tree height']
+    for criterion in criteria:
+        df.boxplot(column=criterion, by='iteration')
+        plt.savefig(path_results.split('.')[0] + '_%s.pdf' % criterion, bbox_inches='tight', format='pdf')
+        plt.close()
 
-    def best_tree_height(_dirs):
-        def is_csv(_f):
-            return _f.split('.')[-1] == 'csv'
 
-        def get_heights(_f):
-            def proper_get(df):
-                _h = df.loc[(df['iteration'] == df['iteration'].max())]
-                _h = _h.loc[_h['test accuracy'] == _h['test accuracy'].max()]['tree height']
-                return _h
+def generation_statistics(path_results):
+    df = pd.read_csv(path_results)
+    gb = df.groupby(by='iteration')
+    meta = gb.agg([np.min, np.max, np.median, np.mean, np.std])
+    meta.to_csv('iteration_statistics.csv')
 
-            fpcsv = os.path.join(fp, _f)
-
-            df = pd.read_csv(fpcsv, delimiter=',')
-            if 'iteration' not in df.columns:
-                df = pd.read_csv(fpcsv, delimiter=',',
-                                 names=['individual', 'iteration', 'validation accuracy', 'tree height',
-                                        'test accuracy'])
-            l_heights = proper_get(df)
-            return l_heights
-
-        heights = []
-
-        for dir in _dirs:
-            fp = os.path.join(path_results, dir)
-            csv_files = [f for f in os.listdir(fp) if is_csv(f)]
-            for csv_f in csv_files:
-                heights.extend(get_heights(csv_f))
-
-        plt.figure()
-
-        n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
-
-        plt.xlabel('Heights')
-        plt.ylabel('Quantity')
-        plt.title('heights')
-        plt.grid(True)
-
-    dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
-    best_tree_height(dirs)
-    plt.show()
+# def crunch_population_data(path_results):
+#     from matplotlib import pyplot as plt
+#
+#     def best_tree_height(_dirs):
+#         def is_csv(_f):
+#             return _f.split('.')[-1] == 'csv'
+#
+#         def get_heights(_f):
+#             def proper_get(df):
+#                 _h = df.loc[(df['iteration'] == df['iteration'].max())]
+#                 _h = _h.loc[_h['test accuracy'] == _h['test accuracy'].max()]['tree height']
+#                 return _h
+#
+#             fpcsv = os.path.join(fp, _f)
+#
+#             df = pd.read_csv(fpcsv, delimiter=',')
+#             if 'iteration' not in df.columns:
+#                 df = pd.read_csv(fpcsv, delimiter=',',
+#                                  names=['individual', 'iteration', 'validation accuracy', 'tree height',
+#                                         'test accuracy'])
+#             l_heights = proper_get(df)
+#             return l_heights
+#
+#         heights = []
+#
+#         for dir in _dirs:
+#             fp = os.path.join(path_results, dir)
+#             csv_files = [f for f in os.listdir(fp) if is_csv(f)]
+#             for csv_f in csv_files:
+#                 heights.extend(get_heights(csv_f))
+#
+#         plt.figure()
+#
+#         n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
+#
+#         plt.xlabel('Heights')
+#         plt.ylabel('Quantity')
+#         plt.title('heights')
+#         plt.grid(True)
+#
+#     dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
+#     best_tree_height(dirs)
+#     plt.show()
 
 
 def grid_optimizer(config_file, datasets_path, output_path):
@@ -584,7 +601,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
     with open(pgm_path, 'r') as f:
         csv_w = csv.reader(f, delimiter=',', quotechar='\"')
         for generation, line in enumerate(csv_w):
-            series = np.array(line, dtype=np.float).reshape(n_columns, -1)
+            series = np.array(line, dtype=np.float).reshape(n_columns, -1)  # each row is an attribute, each column a generation
 
             G = build_graph(series)
 
