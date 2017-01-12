@@ -21,7 +21,6 @@ from treelib import Ardennes
 from datetime import datetime as dt
 from multiprocessing import Process, Manager
 
-from sklearn.metrics import precision_score, accuracy_score, f1_score
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 
 __author__ = 'Henry Cagnini'
@@ -35,12 +34,15 @@ def __clean_macros__(macros):
             os.remove(sets['val'])
 
 
+# noinspection PyUnresolvedReferences
 def evaluate_j48(datasets_path, intermediary_path):
     # for examples on how to use this function, refer to
     # http://pythonhosted.org/python-weka-wrapper/examples.html#build-classifier-on-dataset-output-predictions
     import weka.core.jvm as jvm
     from weka.core.converters import Loader
     from weka.classifiers import Classifier
+    from sklearn.metrics import precision_score, accuracy_score, f1_score
+
     from networkx.drawing.nx_agraph import graphviz_layout
     from matplotlib import pyplot as plt
 
@@ -247,43 +249,41 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
             run=n_run
         )
 
-        y_train_true = train_s[train_s.columns[-1]]
-        y_val_true = val_s[val_s.columns[-1]]
-        y_test_true = test_s[test_s.columns[-1]]
+        # y_train_true = train_s[train_s.columns[-1]]
+        # y_val_true = val_s[val_s.columns[-1]]
+        # y_test_true = test_s[test_s.columns[-1]]
+        #
+        # y_pred_train = inst.predict(train_s)
+        # y_pred_val = inst.predict(val_s)
+        # y_pred_test = inst.predict(test_s)
+        #
+        # _train_acc = accuracy_score(y_train_true, y_pred_train)
+        # _val_acc = accuracy_score(y_val_true, y_pred_val)
+        # _test_acc = accuracy_score(y_test_true, y_pred_test)  # accuracy
+        #
+        # _test_prc = precision_score(y_test_true, y_pred_test, average='micro')  # precision
+        # _test_f1s = f1_score(y_test_true, y_pred_test, average='micro')  # f1 measure
 
-        y_pred_train = inst.predict(train_s)
-        y_pred_val = inst.predict(val_s)
-        y_pred_test = inst.predict(test_s)
-
-        _train_acc = accuracy_score(y_train_true, y_pred_train)
-        _val_acc = accuracy_score(y_val_true, y_pred_val)
-        _test_acc = accuracy_score(y_test_true, y_pred_test)  # accuracy
-
-        _test_prc = precision_score(y_test_true, y_pred_test, average='micro')  # precision
-        _test_f1s = f1_score(y_test_true, y_pred_test, average='micro')  # f1 measure
-
-        _tree_height = inst.tree_height
+        ind = inst.best_individual
 
         t2 = dt.now()
 
     print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
-        n_run, n_fold, _test_acc, (t2 - t1).total_seconds()
+        n_run, n_fold, ind.test_acc_score, (t2 - t1).total_seconds()
     )
 
     if 'dict_manager' in kwargs:
         kwargs['dict_manager'][n_fold] = dict(
-            train_acc=_train_acc,
-            val_acc=_val_acc,
-            acc=_test_acc,
-            f1_score=_test_f1s,
-            precision=_test_prc,
-            height=_tree_height,
-            # y_pred_test=list(y_pred_test),
-            # y_pred_train=list(y_pred_train),
-            # y_pred_val=list(y_pred_val)
+            train_acc=ind.train_acc_score,
+            val_acc=ind.val_acc_score,
+            acc=ind.test_acc_score,
+            f1_score=ind.test_f1_score,
+            precision=ind.test_precision_score,
+            height=ind.height,
+            n_nodes=ind.n_nodes
         )
 
-    return _test_acc
+    return ind.test_acc_score
 
 
 def crunch_result_file(results_file, output_file=None):

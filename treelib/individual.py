@@ -167,8 +167,8 @@ class Individual(object):
         self.train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
         self.val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
         self.test_acc_score = accuracy_score(Individual.y_test_true, y_test_pred)
-        self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred)
-        self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred)
+        self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
+        self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
         self.fitness = 0.5 * self.val_acc_score + 0.5 * self.train_acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
@@ -467,6 +467,8 @@ class Individual(object):
             plt.close()
 
     def __is_close__(self, other):
+        # TODO change to support a range of values! (i.e 3% of difference is still valid!)
+
         quality_diff = abs(self.fitness - other.fitness)
         return quality_diff <= Individual.rtol
 
@@ -555,8 +557,6 @@ class Individual(object):
         'complex': __set_error__,
         'class': __set_terminal__
     }
-
-    # TODO replace with np.sctypes!
 
     raw_type_dict = {
         'int': 'int',
