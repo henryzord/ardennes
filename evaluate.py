@@ -337,11 +337,9 @@ def crunch_result_file(results_file, output_file=None):
         final.to_csv(output_file, sep=',', quotechar='\"')
 
 
-def crunch_evolution_data(path_results):
+def crunch_evolution_data(path_results, criteria):
     from matplotlib import pyplot as plt
     df = pd.read_csv(path_results)
-    # df.columns = ['individual', 'iteration', 'fitness', 'tree height', 'test accuracy']
-    criteria = ['validation accuracy', 'test accuracy', 'tree height']
     for criterion in criteria:
         df.boxplot(column=criterion, by='iteration')
         plt.savefig(path_results.split('.')[0] + '_%s.pdf' % criterion, bbox_inches='tight', format='pdf')

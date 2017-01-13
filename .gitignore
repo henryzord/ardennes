@@ -2,12 +2,13 @@
 *.html
 *.pyc
 metadata/
-
 main.py
 
 # folders
 datasets/subsample
+datasets/numerical/wine.arff~
 intermediary
+datasets/test/
 
 
 # Distribution / packaging

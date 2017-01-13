@@ -170,7 +170,8 @@ class Individual(object):
         self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
         self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
-        self.fitness = 0.5 * self.val_acc_score + 0.5 * self.train_acc_score
+        # self.fitness = 0.5 * self.val_acc_score + 0.5 * self.train_acc_score
+        self.fitness = self.train_acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
 
@@ -451,7 +452,7 @@ class Individual(object):
             '\n'.join([
                 'val accuracy: %0.4f' % self.fitness,
                 'individual id: %03.d' % self.ind_id,
-                'test acc: %0.4f' % Individual.test_acc_score if Individual.test_acc_score is not None else ''
+                'test acc: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
 
             ]),
             fontsize=15,

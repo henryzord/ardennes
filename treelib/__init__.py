@@ -196,18 +196,13 @@ class Ardennes(object):
 
                 population = np.sort(population)[::-1]
 
-            # population.max().plot(savepath='/home/henry/Desktop/gens/gen_%d.pdf' % iteration)  # TODO remove!
-            # from matplotlib import pyplot as plt
-            # plt.show()
-
-        # self.best_individual = sample_func(
-        #     ind_id=0, graphical_model=gm, max_height=self.max_height, sets=sets,
-        #     pred_attr=self.pred_attr, target_attr=self.target_attr, class_labels=self.class_labels
-        # )
-
         self.gm = gm
-        self.best_individual = population.max()
         self.last_population = population
+
+        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
+        self.best_individual = population[np.argmax(outer_fitness)]
+
+        # self.best_individual = population.max()
         self.trained = True
 
     @property
@@ -264,7 +259,9 @@ class Ardennes(object):
         elapsed_time = kwargs['elapsed_time']
         gm = kwargs['gm']
 
-        best_individual = population[0]  # type: Individual  # best individual in the population
+        # best_individual = population[0]  # type: Individual  # best individual in the population
+        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
+        best_individual = population[np.argmax(outer_fitness)]
 
         # optional data
         n_run = None if 'run' not in kwargs else kwargs['run']
