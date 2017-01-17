@@ -11,7 +11,7 @@ from sklearn.metrics import *
 
 from treelib.node import *
 from c_individual import make_predictions
-
+import operator as op
 
 __author__ = 'Henry Cagnini'
 
@@ -147,8 +147,63 @@ class Individual(object):
     # sampling and related methods #
     # ############################ #
 
+    def reduced_error_pruning(self, tree):
+        # depth first search
+
+        def go_removing_deep(current_node, _tree):
+            successors = _tree.successors(current_node)
+            for successor in successors:
+                _tree = go_removing_deep(successor, _tree)
+
+            _tree.remove_node(current_node)
+
+            return _tree
+
+        def _sub_remove_(current_node, _tree, _train_acc, _val_acc):
+            successors = _tree.successors(current_node)
+
+            for successor in successors:
+                _tree = _sub_remove_(successor, _tree, _train_acc, _val_acc)
+
+            if current_node == 0:
+                return _tree
+
+            n_tree = copy.deepcopy(_tree)
+
+            n_tree.node[current_node]['terminal'] = True
+            n_tree.node[current_node]['label'] = n_tree.node[current_node]['common_class']
+
+            for successor in successors:
+                go_removing_deep(successor, n_tree)
+
+            n_train_acc = reduce(
+                op.add,
+                map(lambda x: x['inst_correct'] if x['terminal'] else 0,
+                    n_tree.node.itervalues()
+                    )
+            ) / float(n_tree.node[0]['inst_total'])
+
+            n_val_acc = accuracy_score(Individual.y_val_true, self.predict(Individual.sets['val'], tree=n_tree))
+
+            if n_train_acc >= _train_acc and n_val_acc >= _val_acc:
+                return n_tree
+            return _tree
+
+        val_acc = accuracy_score(Individual.y_val_true, self.predict(Individual.sets['val'], tree=tree))
+
+        train_acc = reduce(
+            op.add,
+            map(lambda x: x['inst_correct'] if x['terminal'] else 0,
+                tree.node.itervalues()
+                )
+        ) / float(tree.node[0]['inst_total'])
+
+        tree = _sub_remove_(0, tree, train_acc, val_acc)
+
+        return tree
+
     def sample(self, gm, arg_train):
-        self.tree = self.tree = self.__set_node__(
+        tree = self.tree = self.__set_node__(
             node_id=0,
             gm=gm,
             tree=nx.DiGraph(),
@@ -158,19 +213,25 @@ class Individual(object):
             coordinates=[],
         )  # type: nx.DiGraph
 
+        self.tree = self.reduced_error_pruning(tree)
+
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        y_train_pred = self.predict(Individual.sets['train'])
+        self.train_acc_score = reduce(
+            op.add,
+            map(lambda x: x['inst_correct'] if x['terminal'] else 0,
+                tree.node.itervalues()
+                )
+        ) / float(tree.node[0]['inst_total'])
+
         y_val_pred = self.predict(Individual.sets['val'])
         y_test_pred = self.predict(Individual.sets['test'])
 
-        self.train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
         self.val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
         self.test_acc_score = accuracy_score(Individual.y_test_true, y_test_pred)
         self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
         self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
-        # self.fitness = 0.5 * self.val_acc_score + 0.5 * self.train_acc_score
         self.fitness = self.train_acc_score
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
@@ -268,7 +329,7 @@ class Individual(object):
 
         return node['label']
 
-    def predict(self, samples):
+    def predict(self, samples, tree=None):
         """
         Makes predictions for unseen samples.
 
@@ -284,7 +345,10 @@ class Individual(object):
         #     raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
 
         data = samples.values.ravel().tolist()
-        tree = self.tree.node
+        if tree is None:
+            tree = self.tree.node
+        else:
+            tree = tree.node
 
         preds = make_predictions(
             samples.shape,
@@ -381,6 +445,7 @@ class Individual(object):
 
         meta = {
             'label': label,
+            'common_class': label,
             'threshold': None,
             'terminal': True,
             'inst_correct': count_frequent,
@@ -401,11 +466,15 @@ class Individual(object):
 
     @staticmethod
     def __subsets_and_meta__(node_label, node_id, node_level, subset_index, threshold):
+
+        counter = Counter(Individual.full.loc[subset_index, Individual.target_attr])
+
         meta = {
             'label': node_label,
             'threshold': threshold,
-            'inst_correct': None,
+            'inst_correct': counter.most_common()[0][1],
             'inst_total': subset_index.sum(),
+            'common_class': counter.most_common()[0][0],
             'terminal': False,
             'level': node_level,
             'node_id': node_id,

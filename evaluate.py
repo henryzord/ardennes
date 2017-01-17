@@ -248,7 +248,7 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
             output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
             run=n_run,
-            manager_output=kwargs['manager_output'] if 'manager_output' in kwargs else None
+            threshold_stop=config_file['threshold_stop'] if 'threshold_stop' in config_file else None,
         )
 
         # y_train_true = train_s[train_s.columns[-1]]

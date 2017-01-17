@@ -168,7 +168,11 @@ class Ardennes(object):
 
         population = np.sort(population)[::-1]
 
-        last_best = np.random.rand(int(self.n_individuals * 0.2))
+        last_best = np.random.rand(
+            max(1,
+                int(self.n_iterations * kwargs['threshold_stop'] if 'threshold_stop' in kwargs else .2)
+            )
+        )
 
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
@@ -326,5 +330,6 @@ class Ardennes(object):
     @staticmethod
     def __early_stop__(last_best, iteration, population):
             last_best[iteration % last_best.shape[0]] = population.max().fitness
-            return last_best.min() == last_best.max()
+            stop = abs(last_best.min() - last_best.max()) < 1e-03
+            return stop
         # return population[0] == population[-1]

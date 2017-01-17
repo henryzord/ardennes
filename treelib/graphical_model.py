@@ -103,16 +103,15 @@ class GraphicalModel(object):
             def local_update(column):
                 labels = [get_label(fit, column.name) for fit in fittest]
                 n_unsampled = labels.count(None)
-                # warnings.warn('WARNING: not including class in graft!')
-                graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)  # TODO modified
+                # graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)  # TODO modified
                 # graft = np.random.choice(column.index, size=n_unsampled, replace=True)  # TODO original
 
                 # removes interference from individuals which do not present the current node
                 labels = [x for x in labels if x is not None]
 
                 label_count = Counter(labels)
-                graft_count = Counter(graft)
-                label_count.update(graft_count)
+                # graft_count = Counter(graft)
+                # label_count.update(graft_count)
                 count = label_count
 
                 column[:] = 0.

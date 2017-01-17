@@ -2,6 +2,7 @@
   "random_state": null,
   "n_individuals": 200,
   "n_iterations": 200,
+  "threshold_stop": 0.05,
   "tree_height": 7,
   "decile": 0.80,
   "uncertainty": 0.001,

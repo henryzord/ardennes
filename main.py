@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # # --------------------------------------------------- #
-    # _evaluation_mode = 'cross-validation'
+    # _evaluation_mode = 'holdout'
     # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #
     # crunch_evolution_data('/home/henry/Desktop/floats/iris_evo_fold_000_run_004.csv')
