@@ -3,26 +3,24 @@ import json
 # noinspection PyUnresolvedReferences
 from evaluate import evaluate_ardennes, evaluate_j48, crunch_graphical_model, \
     grid_optimizer, crunch_parametrization, crunch_result_file, do_train, crunch_evolution_data, \
-    generation_statistics
+    generation_statistics, custom_pop_stat
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-
-    import warnings
-    warnings.warn('WARNING: using a test folder!')
-    _datasets_path = 'datasets/test'
+    _datasets_path = 'datasets/liver-disorders'
 
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'
     _validation_mode = 'cross-validation'
     _intermediary_sets = 'intermediary'
 
-    evaluate_ardennes(
-        datasets_path=_datasets_path,
-        config_file=_config_file,
-        output_path=_output_path,
-        validation_mode=_validation_mode
-    )
+    # custom_pop_stat('/home/henry/Projects/ardennes/metadata')
+    # # --------------------------------------------------- #
+    # _results_file = json.load(
+    #     open('/home/henry/Desktop/2_runs.json', 'r')
+    # )
+    # crunch_result_file(_results_file, output_file='/home/henry/Desktop/2_runs.csv')
+    # # --------------------------------------------------- #
     # evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
     # crunch_graphical_model(
@@ -34,14 +32,16 @@ if __name__ == '__main__':
     # # --------------------------------------------------- #
     # crunch_parametrization('parametrization_hayes-roth-full.csv')
     # # --------------------------------------------------- #
-    # _results_file = json.load(
-    #     open('/home/henry/Desktop/results.json', 'r')
-    # )
-    # crunch_result_file(_results_file, output_file='/home/henry/Desktop/results.csv')
-    # # --------------------------------------------------- #
-    # _evaluation_mode = 'holdout'
+    # _evaluation_mode = 'cross-validation'
     # do_train(config_file=_config_file, n_run=0, evaluation_mode=_evaluation_mode)
     # --------------------------------------------------- #
     # crunch_evolution_data('/home/henry/Desktop/floats/iris_evo_fold_000_run_004.csv')
     # --------------------------------------------------- #
     # generation_statistics('/home/henry/Desktop/iris_evo_fold_002_run_000.csv')
+    # --------------------------------------------------- #
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        config_file=_config_file,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )

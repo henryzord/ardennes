@@ -16,6 +16,8 @@ __author__ = 'Henry Cagnini'
 class Ardennes(object):
     gm = None
 
+    best_overall = None  # TODO remove!
+
     def __init__(self,
                  n_individuals=100, n_iterations=100, uncertainty=0.001,
                  decile=0.9, max_height=3, distribution='univariate',
@@ -166,6 +168,8 @@ class Ardennes(object):
 
         population = np.sort(population)[::-1]
 
+        last_best = np.random.rand(int(self.n_individuals * 0.2))
+
         iteration = 0
         while iteration < self.n_iterations:  # evolutionary process
             t2 = dt.now()
@@ -180,7 +184,7 @@ class Ardennes(object):
             )
             t1 = t2
 
-            if self.__early_stop__(population):
+            if self.__early_stop__(last_best, iteration, population):
                 break
 
             iteration += 1
@@ -248,8 +252,7 @@ class Ardennes(object):
 
         return fittest
 
-    @staticmethod
-    def __report__(**kwargs):
+    def __report__(self, **kwargs):
 
         # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
@@ -262,6 +265,17 @@ class Ardennes(object):
         # best_individual = population[0]  # type: Individual  # best individual in the population
         outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
         best_individual = population[np.argmax(outer_fitness)]
+
+        best_overall = population[np.argmax([
+            0.33 * (ind.test_acc_score + ind.val_acc_score + ind.train_acc_score) for ind in population
+        ])]
+
+        if self.best_overall is None:
+            self.best_overall = best_overall
+
+        if 0.33 * (best_overall.test_acc_score + best_overall.val_acc_score + best_overall.train_acc_score) > \
+            0.33 * (self.best_overall.test_acc_score + self.best_overall.val_acc_score + self.best_overall.train_acc_score):
+            self.best_overall = best_overall
 
         # optional data
         n_run = None if 'run' not in kwargs else kwargs['run']
@@ -301,10 +315,16 @@ class Ardennes(object):
                     csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height, ind.n_nodes,
                                     ind.train_acc_score, ind.val_acc_score] + add)
 
-            population.max().plot(
+            best_individual.plot(
                 savepath=evo_file.split('.')[0].strip() + '.pdf'
             )
 
+            self.best_overall.plot(
+                savepath=evo_file.split('.')[0].strip() + '_best_overall.pdf'
+            )
+
     @staticmethod
-    def __early_stop__(population):
-        return population[0] == population[-1]
+    def __early_stop__(last_best, iteration, population):
+            last_best[iteration % last_best.shape[0]] = population.max().fitness
+            return last_best.min() == last_best.max()
+        # return population[0] == population[-1]

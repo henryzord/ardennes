@@ -450,9 +450,12 @@ class Individual(object):
             0.2,
             0.9,
             '\n'.join([
-                'val accuracy: %0.4f' % self.fitness,
                 'individual id: %03.d' % self.ind_id,
-                'test acc: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
+                'height: %d' % self.height,
+                'n_nodes: %d' % self.n_nodes,
+                'train accuracy: %0.4f' % self.train_acc_score,
+                'val accuracy: %0.4f' % self.val_acc_score,
+                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
 
             ]),
             fontsize=15,

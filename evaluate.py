@@ -3,7 +3,7 @@
 """
 Performs tests in an 'industrial' fashion.
 """
-
+import glob
 import os
 import csv
 import json
@@ -14,6 +14,7 @@ import pandas as pd
 import operator as op
 import networkx as nx
 import itertools as it
+import time
 
 from treelib.node import *
 from treelib import Ardennes
@@ -22,6 +23,7 @@ from datetime import datetime as dt
 from multiprocessing import Process, Manager
 
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
+from matplotlib import pyplot as plt
 
 __author__ = 'Henry Cagnini'
 
@@ -44,7 +46,6 @@ def evaluate_j48(datasets_path, intermediary_path):
     from sklearn.metrics import precision_score, accuracy_score, f1_score
 
     from networkx.drawing.nx_agraph import graphviz_layout
-    from matplotlib import pyplot as plt
 
     jvm.start()
 
@@ -246,7 +247,8 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
             dataset_name=config_file['dataset_name'],
             output_path=config_file['output_path'] if 'output_path' in config_file else None,
             fold=n_fold,
-            run=n_run
+            run=n_run,
+            manager_output=kwargs['manager_output'] if 'manager_output' in kwargs else None
         )
 
         # y_train_true = train_s[train_s.columns[-1]]
@@ -338,7 +340,6 @@ def crunch_result_file(results_file, output_file=None):
 
 
 def crunch_evolution_data(path_results, criteria):
-    from matplotlib import pyplot as plt
     df = pd.read_csv(path_results)
     for criterion in criteria:
         df.boxplot(column=criterion, by='iteration')
@@ -352,49 +353,48 @@ def generation_statistics(path_results):
     meta = gb.agg([np.min, np.max, np.median, np.mean, np.std])
     meta.to_csv('iteration_statistics.csv')
 
-# def crunch_population_data(path_results):
-#     from matplotlib import pyplot as plt
-#
-#     def best_tree_height(_dirs):
-#         def is_csv(_f):
-#             return _f.split('.')[-1] == 'csv'
-#
-#         def get_heights(_f):
-#             def proper_get(df):
-#                 _h = df.loc[(df['iteration'] == df['iteration'].max())]
-#                 _h = _h.loc[_h['test accuracy'] == _h['test accuracy'].max()]['tree height']
-#                 return _h
-#
-#             fpcsv = os.path.join(fp, _f)
-#
-#             df = pd.read_csv(fpcsv, delimiter=',')
-#             if 'iteration' not in df.columns:
-#                 df = pd.read_csv(fpcsv, delimiter=',',
-#                                  names=['individual', 'iteration', 'validation accuracy', 'tree height',
-#                                         'test accuracy'])
-#             l_heights = proper_get(df)
-#             return l_heights
-#
-#         heights = []
-#
-#         for dir in _dirs:
-#             fp = os.path.join(path_results, dir)
-#             csv_files = [f for f in os.listdir(fp) if is_csv(f)]
-#             for csv_f in csv_files:
-#                 heights.extend(get_heights(csv_f))
-#
-#         plt.figure()
-#
-#         n, bins, patches = plt.hist(heights, facecolor='green')  # 50, normed=1, alpha=0.75)
-#
-#         plt.xlabel('Heights')
-#         plt.ylabel('Quantity')
-#         plt.title('heights')
-#         plt.grid(True)
-#
-#     dirs = [f for f in os.listdir(path_results) if not os.path.isfile(os.path.join(path_results, f))]
-#     best_tree_height(dirs)
-#     plt.show()
+
+def custom_pop_stat(general_path):
+    datasets = [o for o in os.listdir(general_path) if os.path.isdir(os.path.join(general_path, o))]
+
+    j = {'runs': {str(x): dict() for x in range(10)}}
+
+    for dataset_name in datasets:
+        for i in xrange(10):
+            j['runs'][str(i)][dataset_name] = {'folds': {str(x): dict() for x in range(10)}}
+
+        reports_full_path = os.path.join(general_path, dataset_name, '%s_evo_fold_[0-9]*_run_[0-9]*.csv' % dataset_name)
+        reports = glob.glob(reports_full_path)
+
+        for report in reports:
+            info = report
+            info = info.split('.')[0].split('/')[-1].replace('%s_evo_' % dataset_name, '')
+            info = info.replace('fold_', '').replace('run_', '')
+            fold, run = info.split("_")
+
+            df = pd.read_csv(report)
+
+            # TODO best test from last population
+            # last_pop = df.loc[df['iteration'] == df['iteration'].max()]
+            # best_fit = last_pop.loc[last_pop['validation accuracy'] == last_pop['validation accuracy'].max()]
+            # best_from_all = best_fit.loc[best_fit['test accuracy'] == best_fit['test accuracy'].max()].iloc[0]
+            # TODO best test from any generation
+            # best_from_all = df.loc[df['test_acc'] == df['test_acc'].max()].iloc[0]
+            # TODO best fitness from a given generation
+            temp = df.loc[df['iteration'] == min(100, df['iteration'].max())]
+            best_from_all = temp.loc[temp['fitness'] == temp['fitness'].max()].iloc[0]
+
+            j['runs'][str(int(run))][dataset_name]['folds'][str(int(fold))] = {
+                'train_acc': best_from_all['train_acc'],
+                'val_acc': best_from_all['val_acc'],
+                'acc': best_from_all['test_acc'],
+                'precision': best_from_all['test_precision'],
+                'f1_score': best_from_all['test_f1'],
+                'height': best_from_all['height'],
+                'n_nodes': best_from_all['n_nodes']
+            }
+
+    json.dump(j, open(os.path.join(general_path, 'new_results.json'), 'w'), indent=2)
 
 
 def grid_optimizer(config_file, datasets_path, output_path):
@@ -646,21 +646,6 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
 
-    def __append__(_train_s, _val_s, __config_file):
-        return _train_s, _val_s
-        # warnings.warn('WARNING: Using %2.2f of data (excluding test fold) for training' % __config_file['train_size'])
-        #
-        # mass = _train_s.append(_val_s, ignore_index=False)
-        # if __config_file['train_size'] < 1.:
-        #
-        #     from sklearn.model_selection import train_test_split
-        #
-        #     _train_s, _val_s = train_test_split(mass, train_size=__config_file['train_size'])
-        #
-        #     return _train_s, _val_s
-        # else:
-        #     return mass, mass
-
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
@@ -672,17 +657,16 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
         manager = Manager()
         dict_manager = manager.dict()
+        manager_output = manager.dict()
 
         processes = []
 
         for i, (train_s, val_s, test_s) in enumerate(folds):
-            train_s, val_s = __append__(train_s, val_s, config_file)
-
             p = Process(
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
                     test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state,
-                    full=df
+                    full=df, manager_output=manager_output
                 )
             )
             p.start()
@@ -707,8 +691,6 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         train_s, val_s, test_s = get_batch(
             df, train_size=config_file['train_size'], random_state=random_state
         )
-
-        train_s, val_s = __append__(train_s, val_s, config_file)
 
         run_fold(
             n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
