@@ -53,7 +53,7 @@ class Individual(object):
     test_precision_score = None
     test_f1_score = None
 
-    rtol = 1e-2
+    rtol = 1e-8
 
     def __init__(self, gm, **kwargs):
         """
@@ -203,7 +203,7 @@ class Individual(object):
         return tree
 
     def sample(self, gm, arg_train):
-        tree = self.tree = self.__set_node__(
+        self.tree = self.tree = self.__set_node__(
             node_id=0,
             gm=gm,
             tree=nx.DiGraph(),
@@ -213,26 +213,35 @@ class Individual(object):
             coordinates=[],
         )  # type: nx.DiGraph
 
-        self.tree = self.reduced_error_pruning(tree)
+        # self.tree = self.reduced_error_pruning(self.tree)
 
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        self.train_acc_score = reduce(
-            op.add,
-            map(lambda x: x['inst_correct'] if x['terminal'] else 0,
-                tree.node.itervalues()
-                )
-        ) / float(tree.node[0]['inst_total'])
+        # self.train_acc_score = reduce(
+        #     op.add,
+        #     map(lambda x: x['inst_correct'] if x['terminal'] else 0,
+        #         self.tree.node.itervalues()
+        #         )
+        # ) / float(self.tree.node[0]['inst_total'])
 
+        y_train_pred = self.predict(Individual.sets['train'])
         y_val_pred = self.predict(Individual.sets['val'])
         y_test_pred = self.predict(Individual.sets['test'])
 
+        self.train_acc_score = accuracy_score(Individual.y_train_true, y_train_pred)
         self.val_acc_score = accuracy_score(Individual.y_val_true, y_val_pred)
         self.test_acc_score = accuracy_score(Individual.y_test_true, y_test_pred)
         self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
         self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
+        # binary_y_train_true = self.processor.binary_y[self.arg_sets['train_index']]
+        # binary_y_train_pred = [
+        #     self.processor.to_categorical(self.processor.class_label_index[x])[0] for x in y_train_pred
+        # ]
+        # self.fitness = roc_auc_score(binary_y_train_true, binary_y_train_pred)
+
         self.fitness = self.train_acc_score
+
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
 
@@ -547,56 +556,94 @@ class Individual(object):
 
     def __le__(self, other):  # less or equal
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes >= other.n_nodes
-            else:
-                return self.height >= other.height
+            # if self.height == other.height:
+            return self.n_nodes >= other.n_nodes
         return self.fitness <= other.fitness
 
     def __lt__(self, other):  # less than
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes > other.n_nodes
-            else:
-                return self.height > other.height
+            return self.n_nodes > other.n_nodes
         else:
             return self.fitness < other.fitness
 
     def __ge__(self, other):  # greater or equal
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes <= other.n_nodes
-            else:
-                return self.height <= other.height
+            return self.n_nodes <= other.n_nodes
         else:
             return self.fitness >= other.fitness
 
     def __gt__(self, other):  # greater than
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes < other.n_nodes
-            else:
-                return self.height < other.height
+            return self.n_nodes < other.n_nodes
         else:
             return self.fitness > other.fitness
 
     def __eq__(self, other):  # equality
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes == other.n_nodes
-            else:
-                return self.height == other.height
+            return self.n_nodes == other.n_nodes
         else:
             return False
 
     def __ne__(self, other):  # inequality
         if self.__is_close__(other):
-            if self.height == other.height:
-                return self.n_nodes != other.n_nodes
-            else:
-                return self.height != other.height
+            return self.n_nodes != other.n_nodes
         else:
             return True
+
+    # TODO
+    # def __le__(self, other):  # less or equal
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes >= other.n_nodes
+    #         else:
+    #             return self.height >= other.height
+    #     return self.fitness <= other.fitness
+    #
+    # def __lt__(self, other):  # less than
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes > other.n_nodes
+    #         else:
+    #             return self.height > other.height
+    #     else:
+    #         return self.fitness < other.fitness
+    #
+    # def __ge__(self, other):  # greater or equal
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes <= other.n_nodes
+    #         else:
+    #             return self.height <= other.height
+    #     else:
+    #         return self.fitness >= other.fitness
+    #
+    # def __gt__(self, other):  # greater than
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes < other.n_nodes
+    #         else:
+    #             return self.height < other.height
+    #     else:
+    #         return self.fitness > other.fitness
+    #
+    # def __eq__(self, other):  # equality
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes == other.n_nodes
+    #         else:
+    #             return self.height == other.height
+    #     else:
+    #         return False
+    #
+    # def __ne__(self, other):  # inequality
+    #     if self.__is_close__(other):
+    #         if self.height == other.height:
+    #             return self.n_nodes != other.n_nodes
+    #         else:
+    #             return self.height != other.height
+    #     else:
+    #         return True
+    # TODO
 
     def __str__(self):
         return 'fitness: %0.2f height: %d n_nodes: %d' % (self.fitness, self.height, self.n_nodes)

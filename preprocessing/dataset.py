@@ -264,7 +264,7 @@ raw_type_dict = {
     }
 
 def main():
-    _datasets_path = '../datasets/temp'
+    _datasets_path = '../datasets/gene'
     _folds_path = '../datasets/folds'
 
     n_folds = 10

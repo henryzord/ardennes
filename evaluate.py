@@ -251,21 +251,6 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
             threshold_stop=config_file['threshold_stop'] if 'threshold_stop' in config_file else None,
         )
 
-        # y_train_true = train_s[train_s.columns[-1]]
-        # y_val_true = val_s[val_s.columns[-1]]
-        # y_test_true = test_s[test_s.columns[-1]]
-        #
-        # y_pred_train = inst.predict(train_s)
-        # y_pred_val = inst.predict(val_s)
-        # y_pred_test = inst.predict(test_s)
-        #
-        # _train_acc = accuracy_score(y_train_true, y_pred_train)
-        # _val_acc = accuracy_score(y_val_true, y_pred_val)
-        # _test_acc = accuracy_score(y_test_true, y_pred_test)  # accuracy
-        #
-        # _test_prc = precision_score(y_test_true, y_pred_test, average='micro')  # precision
-        # _test_f1s = f1_score(y_test_true, y_pred_test, average='micro')  # f1 measure
-
         ind = inst.best_individual
 
         t2 = dt.now()
@@ -398,8 +383,6 @@ def custom_pop_stat(general_path):
 
 
 def grid_optimizer(config_file, datasets_path, output_path):
-    from evaluate import evaluate_ardennes
-
     config_file['verbose'] = False
 
     range_individuals = [500]
@@ -697,3 +680,38 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             test_s=test_s, config_file=config_file, random_state=random_state,
             full=df
         )
+
+
+def get_real_accuracy(_path_folds, result_file):
+    files = os.listdir(_path_folds)
+
+    all_results = pd.DataFrame(index=[x.split('.')[0] for x in files], columns=['test_accuracy_mean', 'test_accuracy_std'], dtype=np.float32)
+
+    global_counter = 0
+    for dataset in files:
+        accs = []
+        for n_run, run in result_file['runs'].iteritems():
+            dataset_name = dataset.split('.')[0]
+            fold_info = json.load(open(os.path.join(_path_folds, dataset), 'r'))
+            real_accuracy = 0.
+            total_size = 0
+            for n_fold, index in fold_info.iteritems():
+                try:
+                    fold_accuracy = run[dataset_name]['folds'][n_fold]['acc']
+                    size = len(index['test'])
+                    total_size += size
+
+                    real_accuracy += fold_accuracy * float(size)
+                except KeyError:
+                    pass
+
+            try:
+                accs += [real_accuracy / float(total_size)]
+            except ZeroDivisionError:
+                accs += [0.]
+
+        all_results.iloc[global_counter] = [np.mean(accs), np.std(accs)]
+        global_counter += 1
+        # print 'dataset %s: %f +- %f' % (dataset_name, np.mean(accs), np.std(accs))
+
+    print all_results

@@ -125,10 +125,13 @@ class Ardennes(object):
         self.target_attr = class_values['target_attr']
         self.class_labels = class_values['class_labels']
 
+        # TODO pass from label to binary representation!
+        # self.binary_class = np.zeros()
+
         # threshold where individuals will be picked for PMF updating/replacing
-        to_replace_index = np.arange(
-            self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
-        )
+        # to_replace_index = np.arange(
+        #     self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
+        # )
 
         Individual.set_values(
             sets=sets,
@@ -174,13 +177,19 @@ class Ardennes(object):
             )
         )
 
+        '''
+            # --- Main loop --- #
+        '''
         iteration = 0
-        while iteration < self.n_iterations:  # evolutionary process
+        while iteration < self.n_iterations:
             t2 = dt.now()
+
+            fitness = np.array([x.fitness for x in population])
 
             self.__report__(
                 iteration=iteration,
                 population=population,
+                fitness=fitness,
                 verbose=verbose,
                 elapsed_time=(t2-t1).total_seconds(),
                 gm=gm,
@@ -193,12 +202,13 @@ class Ardennes(object):
 
             iteration += 1
 
-            fittest_pop = population[:to_replace_index[0]]
+            fittest_pop = population[fitness >= np.median(fitness)]
+            to_replace_index = np.flatnonzero(fitness < np.median(fitness))
 
             gm.update(fittest_pop)
 
             if len(to_replace_index) > 0:
-                population[to_replace_index] = sample_func(
+                population.flat[to_replace_index] = sample_func(
                     ind_id=range(self.n_individuals), gm=gm
                 )
 
@@ -206,12 +216,18 @@ class Ardennes(object):
 
         self.gm = gm
         self.last_population = population
-
-        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
-        self.best_individual = population[np.argmax(outer_fitness)]
-
-        # self.best_individual = population.max()
+        self.best_individual = self.get_best_individual(population)
         self.trained = True
+
+    def get_best_individual(self, population):
+        argmax_general = np.where(population == population.max())
+        best_from = sorted(population[argmax_general], key=lambda x: x.val_acc_score)
+
+        if len(best_from) > 1:
+            z = 0
+
+        best_individual = best_from[-1]
+        return best_individual
 
     @property
     def tree_height(self):
@@ -261,14 +277,12 @@ class Ardennes(object):
         # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
         population = kwargs['population']
-        fitness = np.array([x.fitness for x in population])
         verbose = kwargs['verbose']
         elapsed_time = kwargs['elapsed_time']
+        fitness = kwargs['fitness']
         gm = kwargs['gm']
 
-        # best_individual = population[0]  # type: Individual  # best individual in the population
-        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
-        best_individual = population[np.argmax(outer_fitness)]
+        best_individual = self.get_best_individual(population)
 
         best_overall = population[np.argmax([
             0.33 * (ind.test_acc_score + ind.val_acc_score + ind.train_acc_score) for ind in population
@@ -329,7 +343,6 @@ class Ardennes(object):
 
     @staticmethod
     def __early_stop__(last_best, iteration, population):
-            last_best[iteration % last_best.shape[0]] = population.max().fitness
-            stop = abs(last_best.min() - last_best.max()) < 1e-03
-            return stop
-        # return population[0] == population[-1]
+        last_best[iteration % last_best.shape[0]] = population.max().fitness
+        stop = abs(last_best.min() - last_best.max()) < 1e-06
+        return stop

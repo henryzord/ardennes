@@ -1,5 +1,6 @@
 from device import AvailableDevice
 import numpy as np
+import itertools as it
 
 
 class Processor(object):
@@ -19,6 +20,11 @@ class Processor(object):
         self.class_label_index = {k: x for x, k in enumerate(self.class_labels)}
         self.attribute_index = {k: x for x, k in enumerate(dataset.columns)}
 
+        self.binary_class_labels = {
+            x: self.to_categorical(k)[0]
+            for k, x in it.izip(self.numerical_class_labels, self.class_labels)
+            }
+
         if dataset[dataset.columns[-1]].dtype != np.int32:
             dataset = dataset.apply(get_number, axis=1)
 
@@ -27,7 +33,31 @@ class Processor(object):
         self.dataset = dataset
         self.n_objects, self.n_attributes = dataset.shape
 
+        self.binary_y = self.to_categorical(self.dataset[self.dataset.columns[-1]])
+
         self.device = AvailableDevice(dataset)
+
+    def to_categorical(self, y):
+        """
+        Adapted from https://github.com/fchollet/keras/blob/master/keras/utils/np_utils.py#L10
+        Converts a class vector (integers) to binary class matrix.
+        E.g. for use with categorical_crossentropy.
+        # Arguments
+            y: class vector to be converted into a matrix
+                (integers from 0 to nb_classes).
+            nb_classes: total number of classes.
+        # Returns
+            A binary matrix representation of the input.
+        """
+        nb_classes = self.numerical_class_labels.shape[0]
+
+        y = np.array(y, dtype='int').ravel()
+        if not nb_classes:
+            nb_classes = np.max(y) + 1
+        n = y.shape[0]
+        categorical = np.zeros((n, nb_classes))
+        categorical[np.arange(n), y] = 1
+        return categorical
 
     def get_ratios(self, subset_index, attribute, candidates):
         ratios = self.device.device_gain_ratio(subset_index, attribute, candidates)

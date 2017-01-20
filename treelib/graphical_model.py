@@ -132,6 +132,8 @@ class GraphicalModel(object):
             raise NotImplementedError('not implemented yet!')
 
     def sample(self, node_id, level, parent_labels=None, enforce_nonterminal=False):
+        warnings.filterwarnings('error')
+
         value = np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])
         if enforce_nonterminal:
             while value == self.target_attr:
