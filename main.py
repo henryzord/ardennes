@@ -7,7 +7,7 @@ from evaluate import evaluate_ardennes, evaluate_j48, crunch_graphical_model, \
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
-    _datasets_path = 'datasets/liver-disorders'
+    _datasets_path = 'datasets/numerical'
 
     _folds_path = 'datasets/folds'
     _output_path = 'metadata'

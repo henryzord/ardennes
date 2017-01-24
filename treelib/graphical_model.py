@@ -7,6 +7,8 @@ import pandas as pd
 from treelib.variable import Variable
 from node import *
 import warnings
+import operator as op
+import itertools as it
 
 __author__ = 'Henry Cagnini'
 
@@ -80,6 +82,57 @@ class GraphicalModel(object):
 
         return attributes
     
+    # def update(self, fittest):
+    #     """
+    #     Update attributes' probabilities.
+    #
+    #     :type fittest: pandas.Series
+    #     :param fittest:
+    #     :return:
+    #     """
+    #     # TODO update using trace to each one of the instances!
+    #
+    #     def get_label(_fit, _node_id):
+    #         if _node_id not in _fit.tree.node:
+    #             return None
+    #
+    #         label = _fit.tree.node[_node_id]['label'] \
+    #             if _fit.tree.node[_node_id]['label'] not in self.class_labels \
+    #             else self.target_attr
+    #         return label
+    #
+    #     if self.distribution == 'univariate':
+    #
+    #         def local_update(column):
+    #             labels = [get_label(fit, column.name) for fit in fittest]
+    #             n_unsampled = labels.count(None)
+    #             graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)
+    #
+    #             # removes interference from individuals which do not present the current node
+    #             labels = [x for x in labels if x is not None]
+    #
+    #             label_count = Counter(labels)
+    #             graft_count = Counter(graft)
+    #             label_count.update(graft_count)
+    #             count = label_count
+    #
+    #             column[:] = 0.
+    #             for k, v in count.iteritems():
+    #                 column[column.index == k] = v
+    #
+    #             column /= float(column.sum())
+    #             rest = abs(column.sum() - 1.)
+    #             column[np.random.choice(column.index)] += rest
+    #
+    #             return column
+    #
+    #         self.attributes = self.attributes.apply(local_update, axis=0)
+    #
+    #     elif self.distribution == 'multivariate':
+    #         raise NotImplementedError('not implemented yet!')
+    #     elif self.distribution == 'bivariate':
+    #         raise NotImplementedError('not implemented yet!')
+
     def update(self, fittest):
         """
         Update attributes' probabilities.
@@ -88,43 +141,49 @@ class GraphicalModel(object):
         :param fittest:
         :return:
         """
+        # TODO update using trace to each one of the instances!
 
-        def get_label(_fit, _node_id):
-            if _node_id not in _fit.tree.node:
-                return None
+        def __reset__(attr):
+            attr[:] = 0.
+            return attr
 
-            label = _fit.tree.node[_node_id]['label'] \
-                if _fit.tree.node[_node_id]['label'] not in self.class_labels \
-                else self.target_attr
-            return label
+        def __normalize__(attr):
+            _sum = attr[:].sum()
+            if _sum > 0:
+                attr[:] /= _sum
+            else:
+                # uniform distribution
+                attr[:-1] = 1. / attr.shape[0]
+
+            rest = abs(1. - attr[:].sum())
+            attr[np.random.choice(attr.index)] += rest
+
+            return attr
+
+        def get_label(_fit, _node_id, _total_instances):
+            rate_correct = _fit.tree.node[_node_id]['inst_correct']
+            return rate_correct / float(_total_instances)
 
         if self.distribution == 'univariate':
+            self.attributes = self.attributes.apply(__reset__, axis=0)
 
-            def local_update(column):
-                labels = [get_label(fit, column.name) for fit in fittest]
-                n_unsampled = labels.count(None)
-                # graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)  # TODO modified
-                # graft = np.random.choice(column.index, size=n_unsampled, replace=True)  # TODO original
+            _temp2 = [x for x in fittest[0].tree.nodes_iter() if fittest[0].tree.out_degree(x) == 0]
+            total_instances = reduce(op.add, [fittest[0].tree.node[x]['inst_total'] for x in _temp2])
 
-                # removes interference from individuals which do not present the current node
-                labels = [x for x in labels if x is not None]
+            for fit in fittest:
+                # gets only leafs
+                _temp = [x for x in fit.tree.nodes_iter() if fit.tree.out_degree(x) == 0]
+                # node_id, accuracy of the leaf, path to the node
+                paths = [fit.parents_of(x) for x in _temp]
+                path_labels = [[fit.tree.node[x]['label'] for x in path] for path in paths]
+                leafs = list(it.izip(_temp, [get_label(fit, x, total_instances) for x in _temp], paths, path_labels))
 
-                label_count = Counter(labels)
-                # graft_count = Counter(graft)
-                # label_count.update(graft_count)
-                count = label_count
+                for node_id, acc, path, path_label in leafs:
+                    for mid_id, mid_label in it.izip(path, path_label):
+                        self.attributes.loc[mid_label, mid_id] += acc
+                    # self.attributes[leaf[]]
 
-                column[:] = 0.
-                for k, v in count.iteritems():
-                    column[column.index == k] = v
-
-                column /= float(column.sum())
-                rest = abs(column.sum() - 1.)
-                column[np.random.choice(column.index)] += rest
-
-                return column
-
-            self.attributes = self.attributes.apply(local_update, axis=0)
+            self.attributes.apply(__normalize__, axis=0)
 
         elif self.distribution == 'multivariate':
             raise NotImplementedError('not implemented yet!')

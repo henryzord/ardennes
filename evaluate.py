@@ -16,6 +16,7 @@ import networkx as nx
 import itertools as it
 import time
 
+from termcolor import colored
 from treelib.node import *
 from treelib import Ardennes
 
@@ -621,12 +622,19 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     df = read_dataset(config_file['dataset_path'])
     random_state = config_file['random_state']
 
+    def __append__(_train_s, _val_s):
+        # from sklearn.model_selection import train_test_split
+        # warnings.warn('WARNING: Using 4.5 folds for training and 4.5 for validation!')
+        #
+        # mass = _train_s.append(_val_s, ignore_index=False)
+        # _train_s, _val_s = train_test_split(mass, train_size=0.5)
+
+        return _train_s, _val_s
+
     if evaluation_mode == 'cross-validation':
         assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
                                                        'file for folds! Provide it through the \'folds_path\' '
                                                        'parameter in the configuration file!')
-
-        result_dict = {'folds': dict()}
 
         folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
 
@@ -637,6 +645,9 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         processes = []
 
         for i, (train_s, val_s, test_s) in enumerate(folds):
+
+            train_s, val_s = __append__(train_s, val_s)
+
             p = Process(
                 target=run_fold, kwargs=dict(
                     n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
@@ -663,9 +674,11 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
         hit = np.diagonal(conf_matrix).sum()
         total = conf_matrix.sum()
 
-        print 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
+        out_str = 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
             hit / float(total), float(np.mean(height)), float(np.std(height)), float(np.mean(n_nodes)), float(np.std(n_nodes))
         )
+
+        print colored(out_str, 'blue')
 
         return {
             'confusion_matrix': conf_matrix.tolist(),

@@ -12,6 +12,7 @@ from sklearn.metrics import *
 from treelib.node import *
 from c_individual import make_predictions
 import operator as op
+from scipy.stats import hmean
 
 __author__ = 'Henry Cagnini'
 
@@ -53,7 +54,7 @@ class Individual(object):
     test_precision_score = None
     test_f1_score = None
 
-    rtol = 1e-8
+    rtol = 1e-3
 
     def __init__(self, gm, **kwargs):
         """
@@ -63,12 +64,11 @@ class Individual(object):
         :type sets: dict
         :param sets:
         """
-        if 'ind_id' in kwargs:
-            self.ind_id = kwargs['ind_id']
-        else:
-            self.ind_id = None
 
-        self.sample(gm, Individual.arg_sets['train_index'])
+        self.ind_id = kwargs['ind_id'] if 'ind_id' in kwargs else None
+        self.iteration = kwargs['iteration'] if 'iteration' in kwargs else None
+
+        self.sample(gm)
 
     @classmethod
     def set_values(cls, **kwargs):
@@ -86,7 +86,7 @@ class Individual(object):
 
     def nodes_at_depth(self, depth):
         """
-        Picks all nodes which are in the given level.
+        Selects all nodes which are in the given level.
 
         :type depth: int
         :param depth: The level to pick
@@ -202,27 +202,20 @@ class Individual(object):
 
         return tree
 
-    def sample(self, gm, arg_train):
+    def sample(self, gm):
+        arg_threshold = Individual.arg_sets['train_index']
+
         self.tree = self.tree = self.__set_node__(
             node_id=0,
             gm=gm,
             tree=nx.DiGraph(),
-            subset_index=arg_train,
+            subset_index=arg_threshold,
             level=0,
             parent_labels=[],
             coordinates=[],
         )  # type: nx.DiGraph
 
-        # self.tree = self.reduced_error_pruning(self.tree)
-
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
-
-        # self.train_acc_score = reduce(
-        #     op.add,
-        #     map(lambda x: x['inst_correct'] if x['terminal'] else 0,
-        #         self.tree.node.itervalues()
-        #         )
-        # ) / float(self.tree.node[0]['inst_total'])
 
         y_train_pred = self.predict(Individual.sets['train'])
         y_val_pred = self.predict(Individual.sets['val'])
@@ -234,13 +227,7 @@ class Individual(object):
         self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
         self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
-        # binary_y_train_true = self.processor.binary_y[self.arg_sets['train_index']]
-        # binary_y_train_pred = [
-        #     self.processor.to_categorical(self.processor.class_label_index[x])[0] for x in y_train_pred
-        # ]
-        # self.fitness = roc_auc_score(binary_y_train_true, binary_y_train_pred)
-
-        self.fitness = self.train_acc_score
+        self.fitness = hmean([self.val_acc_score, self.train_acc_score])
 
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
@@ -251,15 +238,15 @@ class Individual(object):
                 node_id=node_id, level=level, parent_labels=parent_labels, enforce_nonterminal=(level == 0)
             )
         except KeyError as ke:
-            if level >= self.max_height:
-                label = self.target_attr
+            if level >= Individual.max_height:
+                label = Individual.target_attr
             else:
                 raise ke
 
         if any((
-                Individual.full.loc[subset_index, self.target_attr].unique().shape[0] == 1,  # only one class
-                level >= self.max_height,  # level deeper than maximum depth
-                label == self.target_attr   # was sampled to be a class
+                Individual.full.loc[subset_index, Individual.target_attr].unique().shape[0] == 1,  # only one class
+                level >= Individual.max_height,  # level deeper than maximum depth
+                label == Individual.target_attr   # was sampled to be a class
         )):
             meta, subsets = self.__set_terminal__(
                 node_label=None,
@@ -446,10 +433,10 @@ class Individual(object):
             return meta, subsets
 
     def __set_terminal__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
-        # node_label in this case is probably the self.target_attr; so it
+        # node_label in this case is probably the Individual.target_attr; so it
         # is not significant for the **real** label of the terminal node.
 
-        counter = Counter(Individual.full.loc[subset_index, self.target_attr])
+        counter = Counter(Individual.full.loc[subset_index, Individual.target_attr])
         label, count_frequent = counter.most_common()[0]
 
         meta = {
@@ -533,7 +520,8 @@ class Individual(object):
                 'n_nodes: %d' % self.n_nodes,
                 'train accuracy: %0.4f' % self.train_acc_score,
                 'val accuracy: %0.4f' % self.val_acc_score,
-                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
+                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else '',
+                'iteration: %d' % self.iteration if self.iteration is not None else ''
 
             ]),
             fontsize=15,
@@ -549,14 +537,11 @@ class Individual(object):
             plt.close()
 
     def __is_close__(self, other):
-        # TODO change to support a range of values! (i.e 3% of difference is still valid!)
-
         quality_diff = abs(self.fitness - other.fitness)
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
         if self.__is_close__(other):
-            # if self.height == other.height:
             return self.n_nodes >= other.n_nodes
         return self.fitness <= other.fitness
 
@@ -658,8 +643,8 @@ class Individual(object):
         :return: Whether this attribute is categorical or numerical.
         """
 
-        raw_type = self.raw_type_dict[str(dtype)]
-        func = self.handler_dict[raw_type]
+        raw_type = Individual.raw_type_dict[str(dtype)]
+        func = Individual.handler_dict[raw_type]
 
         if func.__name__ == self.__set_categorical__.__name__:
             return 'categorical'

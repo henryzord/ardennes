@@ -129,9 +129,11 @@ class Ardennes(object):
         # self.binary_class = np.zeros()
 
         # threshold where individuals will be picked for PMF updating/replacing
-        # to_replace_index = np.arange(
-        #     self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
-        # )
+        to_replace_index = np.arange(
+            self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
+        )
+
+        iteration = 0
 
         Individual.set_values(
             sets=sets,
@@ -160,13 +162,13 @@ class Ardennes(object):
 
         sample_func = np.vectorize(
             Individual,
-            excluded=['gm']
+            excluded=['gm', 'iteration']
         )
 
         t1 = dt.now()  # starts measuring time
 
         population = sample_func(
-            ind_id=range(self.n_individuals), gm=gm
+            ind_id=range(self.n_individuals), gm=gm, iteration=iteration
         )
 
         population = np.sort(population)[::-1]
@@ -180,7 +182,6 @@ class Ardennes(object):
         '''
             # --- Main loop --- #
         '''
-        iteration = 0
         while iteration < self.n_iterations:
             t2 = dt.now()
 
@@ -202,32 +203,29 @@ class Ardennes(object):
 
             iteration += 1
 
-            fittest_pop = population[fitness >= np.median(fitness)]
-            to_replace_index = np.flatnonzero(fitness < np.median(fitness))
+            fittest_pop = population[:to_replace_index[0]]
 
             gm.update(fittest_pop)
 
-            if len(to_replace_index) > 0:
-                population.flat[to_replace_index] = sample_func(
-                    ind_id=range(self.n_individuals), gm=gm
-                )
+            population.flat[to_replace_index] = sample_func(
+                ind_id=range(self.n_individuals), gm=gm, iteration=iteration
+            )
 
-                population = np.sort(population)[::-1]
+            population = np.sort(population)[::-1]
 
         self.gm = gm
         self.last_population = population
         self.best_individual = self.get_best_individual(population)
         self.trained = True
 
-    def get_best_individual(self, population):
-        argmax_general = np.where(population == population.max())
-        best_from = sorted(population[argmax_general], key=lambda x: x.val_acc_score)
-
-        if len(best_from) > 1:
-            z = 0
-
-        best_individual = best_from[-1]
-        return best_individual
+    @staticmethod
+    def get_best_individual(population):
+        return population.max()
+        # argmax_general = np.where(population == population.max())
+        # best_from = sorted(population[argmax_general], key=lambda x: x.val_acc_score)
+        #
+        # best_individual = best_from[-1]
+        # return best_individual
 
     @property
     def tree_height(self):
@@ -261,16 +259,6 @@ class Ardennes(object):
             raise TypeError('Invalid type for samples! Must be either a list-like or a pandas.DataFrame!')
 
         return df
-
-    @staticmethod
-    def __pick_fittest_population__(population, borderline):
-        def fit(x):
-            return x.fitness >= borderline
-
-        fittest_bool = population.apply(fit)
-        fittest = population.loc[fittest_bool]
-
-        return fittest
 
     def __report__(self, **kwargs):
 
