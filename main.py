@@ -39,12 +39,12 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # generation_statistics('/home/henry/Desktop/iris_evo_fold_002_run_000.csv')
     # --------------------------------------------------- #
-    # evaluate_ardennes(
-    #     datasets_path=_datasets_path,
-    #     config_file=_config_file,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode
-    # )
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        config_file=_config_file,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )
     # --------------------------------------------------- #
     # _results_file = json.load(
     #     open('/home/henry/Desktop/j48/j48_results.json', 'r')

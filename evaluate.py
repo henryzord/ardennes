@@ -22,6 +22,8 @@ from treelib import Ardennes
 from datetime import datetime as dt
 from multiprocessing import Process, Manager
 
+from sklearn.metrics import confusion_matrix
+
 from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from matplotlib import pyplot as plt
 
@@ -59,9 +61,13 @@ def evaluate_j48(datasets_path, intermediary_path):
         for dataset in os.listdir(datasets_path):
             dataset_name = dataset.split('.')[0]
 
-            results['runs']['1'][dataset_name] = dict(folds=dict())
+            results['runs']['1'][dataset_name] = dict()
 
             loader = Loader(classname="weka.core.converters.ArffLoader")
+
+            y_pred_all = []
+            y_true_all = []
+            heights = []
 
             for n_fold in it.count():
                 try:
@@ -110,51 +116,36 @@ def evaluate_j48(datasets_path, intermediary_path):
                     # plt.axis('off')
                     # plt.show()
                     # exit(0)
+                    # TODO plotting!
+                    # TODO plotting!
+                    # TODO plotting!
 
-                    height = max(map(len, nx.shortest_path(G, source='N0').itervalues()))
+                    heights += [max(map(len, nx.shortest_path(G, source='N0').itervalues()))]
 
                     y_test_true = []
                     y_test_pred = []
 
-                    y_train_true = []
-                    y_train_pred = []
+                    # y_train_true = []
+                    # y_train_pred = []
 
-                    for index, inst in enumerate(train_s):
-                        y_train_true += [inst.get_value(inst.class_index)]
-                        y_train_pred += [cls.classify_instance(inst)]
+                    # for index, inst in enumerate(train_s):
+                    #     y_train_true += [inst.get_value(inst.class_index)]
+                    #     y_train_pred += [cls.classify_instance(inst)]
 
                     for index, inst in enumerate(test_s):
                         y_test_true += [inst.get_value(inst.class_index)]
                         y_test_pred += [cls.classify_instance(inst)]
 
-                    acc = accuracy_score(y_test_true, y_test_pred)
-
-                    results['runs']['1'][dataset_name]['folds'][n_fold] = {
-                        'train_acc': accuracy_score(y_train_true, y_train_pred),
-                        'val_acc': accuracy_score(y_train_true, y_train_pred),
-                        'acc': acc,
-                        'f1_score': f1_score(y_test_true, y_test_pred, average='micro'),
-                        'precision': precision_score(y_test_true, y_test_pred, average='micro'),
-                        'height': height
-                    }
-
-                    print 'dataset %s %d-th fold accuracy: %02.2f tree height: %d' % (dataset_name, int(n_fold), acc, height)
+                    y_true_all += y_test_true
+                    y_pred_all += y_test_pred
 
                 except Exception as e:
-                    print e.message
-
-                    accs = np.array(
-                        [x['acc'] for x in results['runs']['1'][dataset_name]['folds'].itervalues()]
-                    )
-
-                    heights = np.array(
-                        [x['height'] for x in results['runs']['1'][dataset_name]['folds'].itervalues()]
-                    )
-
-                    print 'dataset %s mean accuracy: %0.2f +- %02.2f tree height: %2.2f +- %2.2f' % (
-                        dataset_name, accs.mean(), accs.std(), heights.mean(), heights.std()
-                    )
                     break
+
+            results['runs']['1'][dataset_name] = {
+                'confusion_matrix': confusion_matrix(y_true_all, y_pred_all).tolist(),
+                'heights': heights,
+            }
 
         json.dump(results, open('j48_results.json', 'w'), indent=2)
 
@@ -252,23 +243,24 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
         )
 
         ind = inst.best_individual
+        y_test_pred = list(ind.predict(test_s))
+        y_test_true = list(test_s[test_s.columns[-1]])
 
         t2 = dt.now()
 
-    print 'Run %d of fold %d: Test acc: %02.2f, time: %02.2f secs' % (
-        n_run, n_fold, ind.test_acc_score, (t2 - t1).total_seconds()
+    print 'Run %d of fold %d: Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
+        n_run, n_fold, ind.test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
     )
 
     if 'dict_manager' in kwargs:
-        kwargs['dict_manager'][n_fold] = dict(
-            train_acc=ind.train_acc_score,
-            val_acc=ind.val_acc_score,
-            acc=ind.test_acc_score,
-            f1_score=ind.test_f1_score,
-            precision=ind.test_precision_score,
+        res = dict(
+            y_test_pred=y_test_pred,
+            y_test_true=y_test_true,
             height=ind.height,
             n_nodes=ind.n_nodes
         )
+
+        kwargs['dict_manager'][n_fold] = res
 
     return ind.test_acc_score
 
@@ -660,15 +652,26 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
 
         dict_results = dict(dict_manager)
 
-        _accs = np.array([x['acc'] for x in dict_results.itervalues()], dtype=np.float32)
-        _heights = np.array([x['height'] for x in dict_results.itervalues()], dtype=np.float32)
+        true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
+        pred = reduce(op.add, [dict_results[k]['y_test_pred'] for k in dict_results.iterkeys()])
 
-        print 'acc: %0.3f +- %0.3f\ttree height: %02.2f +- %02.2f' % (
-            _accs.mean(), _accs.std(), _heights.mean(), _heights.std()
+        conf_matrix = confusion_matrix(true, pred)
+
+        height = [dict_results[k]['height'] for k in dict_results.iterkeys()]
+        n_nodes = [dict_results[k]['n_nodes'] for k in dict_results.iterkeys()]
+
+        hit = np.diagonal(conf_matrix).sum()
+        total = conf_matrix.sum()
+
+        print 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
+            hit / float(total), float(np.mean(height)), float(np.std(height)), float(np.mean(n_nodes)), float(np.std(n_nodes))
         )
 
-        result_dict['folds'] = dict_results
-        return result_dict
+        return {
+            'confusion_matrix': conf_matrix.tolist(),
+            'height': height,
+            'n_nodes': n_nodes
+        }
 
     else:
         train_s, val_s, test_s = get_batch(
