@@ -541,39 +541,41 @@ class Individual(object):
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
-        if self.__is_close__(other):
-            return self.n_nodes >= other.n_nodes
+        # if self.__is_close__(other):
+        #     return self.n_nodes >= other.n_nodes
         return self.fitness <= other.fitness
 
     def __lt__(self, other):  # less than
-        if self.__is_close__(other):
-            return self.n_nodes > other.n_nodes
-        else:
-            return self.fitness < other.fitness
+        # if self.__is_close__(other):
+        #     return self.n_nodes > other.n_nodes
+        # else:
+        return self.fitness < other.fitness
 
     def __ge__(self, other):  # greater or equal
-        if self.__is_close__(other):
-            return self.n_nodes <= other.n_nodes
-        else:
-            return self.fitness >= other.fitness
+        # if self.__is_close__(other):
+        #     return self.n_nodes <= other.n_nodes
+        # else:
+        return self.fitness >= other.fitness
 
     def __gt__(self, other):  # greater than
-        if self.__is_close__(other):
-            return self.n_nodes < other.n_nodes
-        else:
-            return self.fitness > other.fitness
+        # if self.__is_close__(other):
+        #     return self.n_nodes < other.n_nodes
+        # else:
+        return self.fitness > other.fitness
 
     def __eq__(self, other):  # equality
-        if self.__is_close__(other):
-            return self.n_nodes == other.n_nodes
-        else:
-            return False
+        return self.__is_close__(other)
+        # if self.__is_close__(other):
+        #     return self.n_nodes == other.n_nodes
+        # else:
+        #     return False
 
     def __ne__(self, other):  # inequality
-        if self.__is_close__(other):
-            return self.n_nodes != other.n_nodes
-        else:
-            return True
+        return not self.__is_close__(other)
+        # if self.__is_close__(other):
+        #     return self.n_nodes != other.n_nodes
+        # else:
+        #     return True
 
     # TODO
     # def __le__(self, other):  # less or equal

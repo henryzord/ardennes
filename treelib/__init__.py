@@ -171,7 +171,7 @@ class Ardennes(object):
             ind_id=range(self.n_individuals), gm=gm, iteration=iteration
         )
 
-        population = np.sort(population)[::-1]
+        population = np.sort(population, kind='mergesort')[::-1]
 
         last_best = np.random.rand(
             max(1,
@@ -211,7 +211,7 @@ class Ardennes(object):
                 ind_id=range(self.n_individuals), gm=gm, iteration=iteration
             )
 
-            population = np.sort(population)[::-1]
+            population = np.sort(population, kind='mergesort')[::-1]
 
         self.gm = gm
         self.last_population = population
@@ -293,7 +293,7 @@ class Ardennes(object):
             mean = np.mean(fitness)  # type: float
             median = np.median(fitness)  # type: float
 
-            print 'iter: %03.d  mean: %0.6f  median: %0.6f  max: %0.6f  ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
+            print 'iter: %03.d mean: %0.6f median: %0.6f max: %0.6f ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
                 iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
             ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 

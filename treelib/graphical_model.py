@@ -179,8 +179,9 @@ class GraphicalModel(object):
                 leafs = list(it.izip(_temp, [get_label(fit, x, total_instances) for x in _temp], paths, path_labels))
 
                 for node_id, acc, path, path_label in leafs:
+                    _len_path = len(path)
                     for mid_id, mid_label in it.izip(path, path_label):
-                        self.attributes.loc[mid_label, mid_id] += acc
+                        self.attributes.loc[mid_label, mid_id] += acc / float(_len_path)
                     # self.attributes[leaf[]]
 
             self.attributes.apply(__normalize__, axis=0)
