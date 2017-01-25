@@ -266,24 +266,24 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
     return ind.test_acc_score
 
 
-def crunch_result_file(results_file, output_file=None):
+def crunch_result_file(results_path, output_file=None):
+    results_file = json.load(
+        open(results_path, 'r')
+    )
 
     n_runs = len(results_file['runs'].keys())
     some_run = results_file['runs'].keys()[0]
-    some_dataset = results_file['runs'][some_run].keys()[0]
     n_datasets = len(results_file['runs'][some_run].keys())
-    n_folds = len(results_file['runs'][some_run][some_dataset]['folds'].keys())
 
     df = pd.DataFrame(
-        columns=['run', 'dataset', 'fold', 'train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1_score', 'height'],
-        index=np.arange(n_runs * n_datasets * n_folds),
+        columns=['run', 'dataset', 'test_acc', 'height', 'n_nodes'],
+        index=np.arange(n_runs * n_datasets),
         dtype=np.object
     )
 
     dtypes = dict(
-        run=np.float32, dataset=np.object, fold=np.float32,
-        train_acc=np.float32, val_acc=np.float32, test_acc=np.float32,
-        test_precision=np.float32, test_f1_score=np.float32, height=np.float32
+        run=np.float32, dataset=np.object, test_acc=np.float32,
+        height=np.float32, n_nodes=np.float32
     )
 
     for k, v in dtypes.iteritems():
@@ -292,23 +292,22 @@ def crunch_result_file(results_file, output_file=None):
     count_row = 0
     for n_run, run in results_file['runs'].iteritems():
         for dataset_name, dataset in run.iteritems():
-            for n_fold, v in dataset['folds'].iteritems():
-                train_acc = v['train_acc']
-                val_acc = v['val_acc']
-                test_acc = v['acc']
-                precision = v['precision']
-                _f1_score = v['f1_score']
-                height = v['height']
+                conf_matrix = np.array(dataset['confusion_matrix'], dtype=np.float32)
+
+                test_acc = np.diag(conf_matrix).sum() / conf_matrix.sum()
+
+                height_mean = np.mean(dataset['height'])
+                n_nodes_mean = np.mean(dataset['n_nodes'])
+
                 df.loc[count_row] = [
-                    int(n_run), str(dataset_name), int(n_fold),
-                    float(train_acc), float(val_acc), float(test_acc),
-                    float(precision), float(_f1_score), float(height)
+                    int(n_run), str(dataset_name), float(test_acc),
+                    float(height_mean), float(n_nodes_mean)
                 ]
                 count_row += 1
 
     print df
 
-    grouped = df.groupby(by=['dataset'])['train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1_score', 'height']
+    grouped = df.groupby(by=['dataset'])['test_acc', 'height', 'n_nodes']
     final = grouped.aggregate([np.mean, np.std])
 
     print final
