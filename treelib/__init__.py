@@ -162,7 +162,7 @@ class Ardennes(object):
 
         sample_func = np.vectorize(
             Individual,
-            excluded=['gm', 'iteration']
+            excluded=['gm', 'iteration', 'whole']
         )
 
         t1 = dt.now()  # starts measuring time
@@ -215,7 +215,13 @@ class Ardennes(object):
 
         self.gm = gm
         self.last_population = population
-        self.best_individual = self.get_best_individual(population)
+
+        best = self.get_best_individual(population)
+        gm.update([best])
+
+        updated_best = sample_func(ind_id=[best.ind_id], gm=gm, iteration=iteration, whole=True)[0]
+
+        self.best_individual = updated_best
         self.trained = True
 
     @staticmethod

@@ -3,7 +3,7 @@ import json
 # noinspection PyUnresolvedReferences
 from evaluate import evaluate_ardennes, evaluate_j48, crunch_graphical_model, \
     grid_optimizer, crunch_parametrization, crunch_result_file, do_train, crunch_evolution_data, \
-    generation_statistics, custom_pop_stat, get_real_accuracy
+    generation_statistics, custom_pop_stat
 
 if __name__ == '__main__':
     _config_file = json.load(open('config.json', 'r'))
@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     # custom_pop_stat('/home/henry/Projects/ardennes/metadata')
     # # --------------------------------------------------- #
-    # crunch_result_file('/home/henry/Desktop/results.json')
+    crunch_result_file('/home/henry/Desktop/results.json')
     # # --------------------------------------------------- #
     # evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
@@ -36,14 +36,10 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # generation_statistics('/home/henry/Desktop/iris_evo_fold_002_run_000.csv')
     # --------------------------------------------------- #
-    evaluate_ardennes(
-        datasets_path=_datasets_path,
-        config_file=_config_file,
-        output_path=_output_path,
-        validation_mode=_validation_mode
-    )
-    # --------------------------------------------------- #
-    # _results_file = json.load(
-    #     open('/home/henry/Desktop/j48/j48_results.json', 'r')
+    # evaluate_ardennes(
+    #     datasets_path=_datasets_path,
+    #     config_file=_config_file,
+    #     output_path=_output_path,
+    #     validation_mode=_validation_mode
     # )
-    # get_real_accuracy(_folds_path, _results_file)
+

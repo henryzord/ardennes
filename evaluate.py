@@ -312,8 +312,7 @@ def crunch_result_file(results_path, output_file=None):
 
     print final
 
-    if output_file is not None:
-        final.to_csv(output_file, sep=',', quotechar='\"')
+    final.to_csv(results_path.split('.')[0] + '.csv', sep=',', quotechar='\"')
 
 
 def crunch_evolution_data(path_results, criteria):
@@ -622,11 +621,11 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
     random_state = config_file['random_state']
 
     def __append__(_train_s, _val_s):
-        # from sklearn.model_selection import train_test_split
-        # warnings.warn('WARNING: Using 4.5 folds for training and 4.5 for validation!')
-        #
-        # mass = _train_s.append(_val_s, ignore_index=False)
-        # _train_s, _val_s = train_test_split(mass, train_size=0.5)
+        from sklearn.model_selection import train_test_split
+        warnings.warn('WARNING: Using 4.5 folds for training and 4.5 for validation!')
+
+        mass = _train_s.append(_val_s, ignore_index=False)
+        _train_s, _val_s = train_test_split(mass, train_size=0.5)
 
         return _train_s, _val_s
 
@@ -695,38 +694,3 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             test_s=test_s, config_file=config_file, random_state=random_state,
             full=df
         )
-
-
-def get_real_accuracy(_path_folds, result_file):
-    files = os.listdir(_path_folds)
-
-    all_results = pd.DataFrame(index=[x.split('.')[0] for x in files], columns=['test_accuracy_mean', 'test_accuracy_std'], dtype=np.float32)
-
-    global_counter = 0
-    for dataset in files:
-        accs = []
-        for n_run, run in result_file['runs'].iteritems():
-            dataset_name = dataset.split('.')[0]
-            fold_info = json.load(open(os.path.join(_path_folds, dataset), 'r'))
-            real_accuracy = 0.
-            total_size = 0
-            for n_fold, index in fold_info.iteritems():
-                try:
-                    fold_accuracy = run[dataset_name]['folds'][n_fold]['acc']
-                    size = len(index['test'])
-                    total_size += size
-
-                    real_accuracy += fold_accuracy * float(size)
-                except KeyError:
-                    pass
-
-            try:
-                accs += [real_accuracy / float(total_size)]
-            except ZeroDivisionError:
-                accs += [0.]
-
-        all_results.iloc[global_counter] = [np.mean(accs), np.std(accs)]
-        global_counter += 1
-        # print 'dataset %s: %f +- %f' % (dataset_name, np.mean(accs), np.std(accs))
-
-    print all_results

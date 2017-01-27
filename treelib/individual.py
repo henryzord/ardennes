@@ -5,6 +5,7 @@ import copy
 import itertools as it
 from collections import Counter
 
+import math
 import networkx as nx
 from matplotlib import pyplot as plt
 from sklearn.metrics import *
@@ -13,6 +14,8 @@ from treelib.node import *
 from c_individual import make_predictions
 import operator as op
 from scipy.stats import hmean
+
+import warnings
 
 __author__ = 'Henry Cagnini'
 
@@ -67,6 +70,7 @@ class Individual(object):
 
         self.ind_id = kwargs['ind_id'] if 'ind_id' in kwargs else None
         self.iteration = kwargs['iteration'] if 'iteration' in kwargs else None
+        self.whole = kwargs['whole'] if 'whole' in kwargs else None
 
         self.sample(gm)
 
@@ -203,7 +207,18 @@ class Individual(object):
         return tree
 
     def sample(self, gm):
-        arg_threshold = Individual.arg_sets['train_index']
+        warnings.warn('WARNING: using ALSO validation for threshold setting!')
+        if not self.whole:
+            if np.sin(5. * (self.iteration/math.pi)) <= 0:
+                del self.__class__.thresholds
+                self.__class__.thresholds = dict()  # thresholds for nodes
+                arg_threshold = Individual.arg_sets['train_index']
+            else:
+                del self.__class__.thresholds
+                self.__class__.thresholds = dict()  # thresholds for nodes
+                arg_threshold = Individual.arg_sets['val_index']
+        else:
+            arg_threshold = Individual.arg_sets['train_index'] | Individual.arg_sets['val_index']
 
         self.tree = self.tree = self.__set_node__(
             node_id=0,
@@ -403,7 +418,10 @@ class Individual(object):
             gains = self.processor.get_ratios(subset_index, node_label, candidates)
 
             argmax = np.argmax(gains)
-            if gains[argmax] <= 0:
+
+            best_gain = gains[argmax]
+
+            if best_gain <= 0:
                 meta, subsets = self.__set_terminal__(
                     node_label=node_label,
                     node_id=node_id,
@@ -424,6 +442,7 @@ class Individual(object):
                     subset_index=subset_index,
                     threshold=best_threshold,
                 )
+
         except Exception as e:
             raise e
 
@@ -541,96 +560,39 @@ class Individual(object):
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
-        # if self.__is_close__(other):
-        #     return self.n_nodes >= other.n_nodes
+        if self.__is_close__(other):
+            return self.n_nodes >= other.n_nodes
         return self.fitness <= other.fitness
 
     def __lt__(self, other):  # less than
-        # if self.__is_close__(other):
-        #     return self.n_nodes > other.n_nodes
-        # else:
-        return self.fitness < other.fitness
+        if self.__is_close__(other):
+            return self.n_nodes > other.n_nodes
+        else:
+            return self.fitness < other.fitness
 
     def __ge__(self, other):  # greater or equal
-        # if self.__is_close__(other):
-        #     return self.n_nodes <= other.n_nodes
-        # else:
-        return self.fitness >= other.fitness
+        if self.__is_close__(other):
+            return self.n_nodes <= other.n_nodes
+        else:
+            return self.fitness >= other.fitness
 
     def __gt__(self, other):  # greater than
-        # if self.__is_close__(other):
-        #     return self.n_nodes < other.n_nodes
-        # else:
-        return self.fitness > other.fitness
+        if self.__is_close__(other):
+            return self.n_nodes < other.n_nodes
+        else:
+            return self.fitness > other.fitness
 
     def __eq__(self, other):  # equality
-        return self.__is_close__(other)
-        # if self.__is_close__(other):
-        #     return self.n_nodes == other.n_nodes
-        # else:
-        #     return False
+        if self.__is_close__(other):
+            return self.n_nodes == other.n_nodes
+        else:
+            return False
 
     def __ne__(self, other):  # inequality
-        return not self.__is_close__(other)
-        # if self.__is_close__(other):
-        #     return self.n_nodes != other.n_nodes
-        # else:
-        #     return True
-
-    # TODO
-    # def __le__(self, other):  # less or equal
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes >= other.n_nodes
-    #         else:
-    #             return self.height >= other.height
-    #     return self.fitness <= other.fitness
-    #
-    # def __lt__(self, other):  # less than
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes > other.n_nodes
-    #         else:
-    #             return self.height > other.height
-    #     else:
-    #         return self.fitness < other.fitness
-    #
-    # def __ge__(self, other):  # greater or equal
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes <= other.n_nodes
-    #         else:
-    #             return self.height <= other.height
-    #     else:
-    #         return self.fitness >= other.fitness
-    #
-    # def __gt__(self, other):  # greater than
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes < other.n_nodes
-    #         else:
-    #             return self.height < other.height
-    #     else:
-    #         return self.fitness > other.fitness
-    #
-    # def __eq__(self, other):  # equality
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes == other.n_nodes
-    #         else:
-    #             return self.height == other.height
-    #     else:
-    #         return False
-    #
-    # def __ne__(self, other):  # inequality
-    #     if self.__is_close__(other):
-    #         if self.height == other.height:
-    #             return self.n_nodes != other.n_nodes
-    #         else:
-    #             return self.height != other.height
-    #     else:
-    #         return True
-    # TODO
+        if self.__is_close__(other):
+            return self.n_nodes != other.n_nodes
+        else:
+            return True
 
     def __str__(self):
         return 'fitness: %0.2f height: %d n_nodes: %d' % (self.fitness, self.height, self.n_nodes)
