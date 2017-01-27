@@ -207,18 +207,7 @@ class Individual(object):
         return tree
 
     def sample(self, gm):
-        warnings.warn('WARNING: using ALSO validation for threshold setting!')
-        if not self.whole:
-            if np.sin(5. * (self.iteration/math.pi)) <= 0:
-                del self.__class__.thresholds
-                self.__class__.thresholds = dict()  # thresholds for nodes
-                arg_threshold = Individual.arg_sets['train_index']
-            else:
-                del self.__class__.thresholds
-                self.__class__.thresholds = dict()  # thresholds for nodes
-                arg_threshold = Individual.arg_sets['val_index']
-        else:
-            arg_threshold = Individual.arg_sets['train_index'] | Individual.arg_sets['val_index']
+        arg_threshold = Individual.arg_sets['train_index']
 
         self.tree = self.tree = self.__set_node__(
             node_id=0,
@@ -242,7 +231,7 @@ class Individual(object):
         self.test_precision_score = precision_score(Individual.y_test_true, y_test_pred, average='micro')
         self.test_f1_score = f1_score(Individual.y_test_true, y_test_pred, average='micro')
 
-        self.fitness = hmean([self.val_acc_score, self.train_acc_score])
+        self.fitness = self.val_acc_score
 
         self.height = max(map(len, self._shortest_path.itervalues()))
         self.n_nodes = len(self.tree.node)
@@ -348,13 +337,6 @@ class Individual(object):
         :rtype: numpy.ndarray
         :return: The predicted class for each sample.
         """
-        # if isinstance(samples, pd.DataFrame):
-        #     preds = samples.apply(self.__predict_object__, axis=1).as_matrix()
-        # elif isinstance(samples, pd.Series):
-        #     preds = self.__predict_object__(samples)
-        # else:
-        #     raise TypeError('Invalid type for this method! Must be either a pandas.DataFrame or pandas.Series!')
-
         data = samples.values.ravel().tolist()
         if tree is None:
             tree = self.tree.node
@@ -555,47 +537,54 @@ class Individual(object):
             plt.savefig(savepath, bbox_inches='tight', format='pdf')
             plt.close()
 
-    def __is_close__(self, other):
-        quality_diff = abs(self.fitness - other.fitness)
+    def __is_close__(self, other, attribute_name):
+        quality_diff = abs(getattr(self, attribute_name) - getattr(other, attribute_name))
         return quality_diff <= Individual.rtol
 
     def __le__(self, other):  # less or equal
-        if self.__is_close__(other):
-            return self.n_nodes >= other.n_nodes
-        return self.fitness <= other.fitness
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes >= other.n_nodes
+            return self.train_acc_score <= other.train_acc_score
+        return self.val_acc_score <= other.val_acc_score
 
     def __lt__(self, other):  # less than
-        if self.__is_close__(other):
-            return self.n_nodes > other.n_nodes
-        else:
-            return self.fitness < other.fitness
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes > other.n_nodes
+            return self.train_acc_score < other.train_acc_score
+        return self.val_acc_score < other.val_acc_score
 
     def __ge__(self, other):  # greater or equal
-        if self.__is_close__(other):
-            return self.n_nodes <= other.n_nodes
-        else:
-            return self.fitness >= other.fitness
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes <= other.n_nodes
+            return self.train_acc_score >= other.train_acc_score
+        return self.val_acc_score >= other.val_acc_score
 
     def __gt__(self, other):  # greater than
-        if self.__is_close__(other):
-            return self.n_nodes < other.n_nodes
-        else:
-            return self.fitness > other.fitness
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes < other.n_nodes
+            return self.train_acc_score > other.train_acc_score
+        return self.val_acc_score > other.val_acc_score
 
     def __eq__(self, other):  # equality
-        if self.__is_close__(other):
-            return self.n_nodes == other.n_nodes
-        else:
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes == other.n_nodes
             return False
+        return False
 
     def __ne__(self, other):  # inequality
-        if self.__is_close__(other):
-            return self.n_nodes != other.n_nodes
-        else:
+        if self.__is_close__(other, 'val_acc_score'):
+            if self.__is_close__(other, 'train_acc_score'):
+                return self.n_nodes != other.n_nodes
             return True
+        return True
 
     def __str__(self):
-        return 'fitness: %0.2f height: %d n_nodes: %d' % (self.fitness, self.height, self.n_nodes)
+        return 'train: %0.3f val: %0.3f n_nodes: %d height: %d' % (self.train_acc_score, self.val_acc_score, self.n_nodes, self.height)
 
     def get_predictive_type(self, dtype):
         """

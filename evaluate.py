@@ -8,6 +8,7 @@ import os
 import csv
 import json
 import shutil
+import subprocess
 import warnings
 import StringIO
 import pandas as pd
@@ -52,7 +53,7 @@ def evaluate_j48(datasets_path, intermediary_path):
 
     jvm.start()
 
-    results = {
+    json_results = {
         'runs': {
             '1': dict()
         }
@@ -62,13 +63,14 @@ def evaluate_j48(datasets_path, intermediary_path):
         for dataset in os.listdir(datasets_path):
             dataset_name = dataset.split('.')[0]
 
-            results['runs']['1'][dataset_name] = dict()
+            json_results['runs']['1'][dataset_name] = dict()
 
             loader = Loader(classname="weka.core.converters.ArffLoader")
 
             y_pred_all = []
             y_true_all = []
             heights = []
+            n_nodes = []
 
             for n_fold in it.count():
                 try:
@@ -122,6 +124,7 @@ def evaluate_j48(datasets_path, intermediary_path):
                     # TODO plotting!
 
                     heights += [max(map(len, nx.shortest_path(G, source='N0').itervalues()))]
+                    n_nodes += [len(G.node)]
 
                     y_test_true = []
                     y_test_pred = []
@@ -143,12 +146,48 @@ def evaluate_j48(datasets_path, intermediary_path):
                 except Exception as e:
                     break
 
-            results['runs']['1'][dataset_name] = {
+            json_results['runs']['1'][dataset_name] = {
                 'confusion_matrix': confusion_matrix(y_true_all, y_pred_all).tolist(),
-                'heights': heights,
+                'height': heights,
+                'n_nodes': n_nodes,
             }
 
-        json.dump(results, open('j48_results.json', 'w'), indent=2)
+    # interprets
+        json_results = json.load(open('/home/henry/Desktop/j48/j48_results.json', 'r'))
+
+        n_runs = len(json_results['runs'].keys())
+        some_run = json_results['runs'].keys()[0]
+        n_datasets = len(json_results['runs'][some_run].keys())
+
+        df = pd.DataFrame(
+            columns=['run', 'dataset', 'test_acc', 'height mean', 'height std', 'n_nodes mean', 'n_nodes std'],
+            index=np.arange(n_runs * n_datasets),
+            dtype=np.float32
+        )
+
+        df['dataset'] = df['dataset'].astype(np.object)
+
+        count_row = 0
+        for n_run, run in json_results['runs'].iteritems():
+            for dataset_name, dataset in run.iteritems():
+                conf_matrix = np.array(dataset['confusion_matrix'], dtype=np.float32)
+
+                test_acc = np.diag(conf_matrix).sum() / conf_matrix.sum()
+
+                height_mean = np.mean(dataset['height'])
+                height_std = np.std(dataset['height'])
+                n_nodes_mean = np.mean(dataset['n_nodes'])
+                n_nodes_std = np.std(dataset['n_nodes'])
+
+                df.loc[count_row] = [
+                    int(n_run), str(dataset_name), float(test_acc),
+                    float(height_mean), float(height_std), float(n_nodes_mean), float(n_nodes_std)
+                ]
+                count_row += 1
+
+        print df
+        json.dump(json_results, open('j48_results.json', 'w'), indent=2)
+        df.to_csv('j48_results.csv', sep=',', quotechar='\"', index=False)
 
     finally:
         jvm.stop()
@@ -266,7 +305,7 @@ def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs)
     return ind.test_acc_score
 
 
-def crunch_result_file(results_path, output_file=None):
+def crunch_result_file(results_path):
     results_file = json.load(
         open(results_path, 'r')
     )
@@ -694,3 +733,67 @@ def do_train(config_file, n_run, evaluation_mode='cross-validation'):
             test_s=test_s, config_file=config_file, random_state=random_state,
             full=df
         )
+
+
+# def convert_pdf_to_txt(path):
+#     from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+#     from pdfminer.converter import TextConverter
+#     from pdfminer.layout import LAParams
+#     from pdfminer.pdfpage import PDFPage
+#     from cStringIO import StringIO
+#
+#     rsrcmgr = PDFResourceManager()
+#     retstr = StringIO()
+#     codec = 'utf-8'
+#     laparams = LAParams()
+#     device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+#     fp = file(path, 'rb')
+#     interpreter = PDFPageInterpreter(rsrcmgr, device)
+#     password = ""
+#     maxpages = 0
+#     caching = True
+#     pagenos=set()
+#
+#     for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password,caching=caching, check_extractable=True):
+#         interpreter.process_page(page)
+#
+#     text = retstr.getvalue()
+#
+#     fp.close()
+#     device.close()
+#     retstr.close()
+#     return text
+#
+#
+# def count_nodes(super_root):
+#     datasets = [name for name in os.listdir(super_root) if os.path.isdir(os.path.join(super_root, name))]
+#
+#     df = pd.DataFrame(index=np.arange(len(datasets * 10 * 10)), columns=['dataset', 'run', 'fold', 'n_nodes', 'height'], dtype=np.int32)
+#     df['dataset'] = df['dataset'].astype(np.object)
+#
+#     counter = 0
+#
+#     for dataset_name in datasets:
+#         pdfs = [name for name in os.listdir(os.path.join(super_root, dataset_name)) if '.pdf' in name]
+#         for pdf in pdfs:
+#             splitted = pdf.split('.')[0].split('_')
+#             run = int(splitted[-1])
+#             fold = int(splitted[-3])
+#
+#             text = convert_pdf_to_txt(os.path.join(super_root, dataset_name, pdf))
+#             n_nodes = text.count(':') - 3
+#             df.iloc[counter] = [dataset_name, run, fold, n_nodes]
+#             counter += 1
+#             print '%d/%d' % (counter, df.shape[0])
+#
+#     df.to_csv('/home/henry/Desktop/n_nodes.csv')
+
+# def count_nodes_1(df_path):
+#     df = pd.read_csv(df_path)
+#     gb = df.groupby(by='dataset')['dataset', 'n_nodes']
+#     final = gb.aggregate([np.mean, np.std])
+#     print final
+#     final.to_csv('/home/hehrn')
+#
+#     # grouped = df.groupby(by=['dataset'])['test_acc', 'height', 'n_nodes']
+#     # final = grouped.aggregate([np.mean, np.std])

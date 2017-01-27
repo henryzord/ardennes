@@ -58,11 +58,7 @@ class GraphicalModel(object):
 
             d = get_depth(column.name)
 
-            # warnings.warn('WARNING: using custom-setup for class probability!')
-
-
-            class_prob = 0
-            # class_prob = (1. / (D + 1)) * float(d)  # linear progression
+            class_prob = (1. / (D + 1)) * float(d)  # linear progression
             # class_prob = 2. ** d / 2. ** (D + 1)  # power of 2 progression
             pred_prob = (1. - class_prob) / (n_attributes - 1.)
 
@@ -105,19 +101,21 @@ class GraphicalModel(object):
 
             def local_update(column):
                 labels = [get_label(fit, column.name) for fit in fittest]
-                # n_unsampled = labels.count(None)
-                # graft = np.random.choice(column.index[:-1], size=n_unsampled, replace=True)
-
-                # removes interference from individuals which do not present the current node
-                labels = [x for x in labels if x is not None]
-
+                n_unsampled = labels.count(None)
+                labels = [x for x in labels if x is not None]  # removes none from unsampled
                 label_count = Counter(labels)
-                # graft_count = Counter(graft)
-                # label_count.update(graft_count)
-                count = label_count
+
+                ommited = False
+                for attribute in column.index:
+                    if attribute not in label_count:
+                        ommited = True
+                        label_count.update({attribute: 0})
+
+                if ommited is True:
+                    label_count = {k: v + n_unsampled for k, v in label_count.iteritems()}
 
                 column[:] = 0.
-                for k, v in count.iteritems():
+                for k, v in label_count.iteritems():
                     column[column.index == k] = v
 
                 column /= float(column.sum())

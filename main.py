@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     # custom_pop_stat('/home/henry/Projects/ardennes/metadata')
     # # --------------------------------------------------- #
-    crunch_result_file('/home/henry/Desktop/results.json')
+    # crunch_result_file('/home/henry/Projects/ardennes/metadata/results.json')
     # # --------------------------------------------------- #
     # evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
@@ -36,10 +36,11 @@ if __name__ == '__main__':
     # --------------------------------------------------- #
     # generation_statistics('/home/henry/Desktop/iris_evo_fold_002_run_000.csv')
     # --------------------------------------------------- #
-    # evaluate_ardennes(
-    #     datasets_path=_datasets_path,
-    #     config_file=_config_file,
-    #     output_path=_output_path,
-    #     validation_mode=_validation_mode
-    # )
-
+    evaluate_ardennes(
+        datasets_path=_datasets_path,
+        config_file=_config_file,
+        output_path=_output_path,
+        validation_mode=_validation_mode
+    )
+    # --------------------------------------------------- #
+    # correct_mean_height()
