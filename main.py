@@ -16,9 +16,9 @@ if __name__ == '__main__':
 
     # custom_pop_stat('/home/henry/Projects/ardennes/metadata')
     # # --------------------------------------------------- #
-    # crunch_result_file('/home/henry/Projects/ardennes/metadata/results.json')
+    # crunch_result_file('/home/henry/Desktop/ardennes/r2 [8 runs]/results.json')
     # # --------------------------------------------------- #
-    # evaluate_j48(_datasets_path, _intermediary_sets)
+    evaluate_j48(_datasets_path, _intermediary_sets)
     # # --------------------------------------------------- #
     # crunch_graphical_model(
     #     '/home/henry/Desktop/floats/iris_pgm_fold_000_run_004.csv',

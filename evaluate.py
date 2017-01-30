@@ -91,6 +91,7 @@ def evaluate_j48(datasets_path, intermediary_path):
                         train_s.add_instance(inst)
 
                     cls = Classifier(classname="weka.classifiers.trees.J48", options=["-C", "0.25", "-M", "2"])
+                    # cls = Classifier(classname="weka.classifiers.trees.REPTree", options=["-M", "2", "-V", "0.001", "-N", "3", "-S", "1", "-L", "-1", "-I", "0.0"])
                     cls.build_classifier(train_s)
 
                     warnings.warn('WARNING: will only work for binary splits!')

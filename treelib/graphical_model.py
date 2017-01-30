@@ -105,14 +105,17 @@ class GraphicalModel(object):
                 labels = [x for x in labels if x is not None]  # removes none from unsampled
                 label_count = Counter(labels)
 
-                ommited = False
+                omitted = []
                 for attribute in column.index:
                     if attribute not in label_count:
-                        ommited = True
-                        label_count.update({attribute: 0})
+                        omitted += [attribute]
+                        label_count.update({attribute: 1})
 
-                if ommited is True:
-                    label_count = {k: v + n_unsampled for k, v in label_count.iteritems()}
+                if len(omitted) > 0:
+                    label_count = {
+                        k: (v + len(omitted)) if k not in omitted else v
+                        for k, v in label_count.iteritems()
+                    }
 
                 column[:] = 0.
                 for k, v in label_count.iteritems():
