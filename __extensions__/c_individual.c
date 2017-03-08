@@ -60,8 +60,15 @@ static PyObject* make_predictions(PyObject *self, PyObject *args) {
     return Py_BuildValue("O", predictions);
 }
 
+const char make_predictions_doc[] = "Makes predictions for a series of unknown data.\n\n"
+    ":param shape: Shape of Dataset.\n"
+    ":param dataset: set of unknown data.\n"
+    ":param tree: decision tree which will be used to make the predictions.\n"
+    ":param predictions: Empty array in which the predictions will be written.\n"
+    "attribute_index: A dictionary where the attribute names are the keys and the values are their indexes.";
+
 static PyMethodDef c_individual_funcs[] = {
-    {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS, "docstring for this function"},
+    {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS, &make_predictions_doc[0]},
     {NULL}  // sentinel
 };
 

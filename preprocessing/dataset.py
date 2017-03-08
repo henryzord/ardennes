@@ -1,159 +1,155 @@
 # coding=utf-8
-import copy
+
 import json
 import os
 
-import itertools as it
-
-import numpy as np
 import arff
 import pandas as pd
-from sklearn.model_selection import train_test_split, StratifiedKFold
+import weka.core.jvm as jvm
+from sklearn.model_selection import StratifiedKFold
+from weka.core.converters import Loader, Saver
 
 __author__ = 'Henry Cagnini'
 
 
-def generate_folds(df, dataset_name, output_folder, n_folds=10, random_state=None):
+def load_arff(dataset_path):
     """
-    Given a dataset df, generate n_folds for it and store them into <output_folder>/<dataset_name>.json.
+    Given a path to a dataset, reads and returns a dictionary which comprises an arff file.
 
-    :type df: pandas.DataFrame.
-    :param df: The dataset, along class attribute.
-    :type dataset_name: str
-    :param dataset_name: Name of the dataset, for storing the results.
-    :type output_folder: str
-    :param output_folder: Directory to store the folds file.
-    :type n_folds: int
-    :param n_folds: Optional - Number of folds to split the dataset into. Defaults to 10.
-    :type random_state: int
-    :param random_state: Optional - Seed to use in the splitting process. Defaults to None (no seed).
-    :return:
-    """
-    import warnings
-    warnings.filterwarnings('error')
-
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
-    _folds = skf.split(df[df.columns[:-1]], df[df.columns[-1]])
-
-    d_folds = dict()
-
-    for i, (arg_rest, arg_test) in enumerate(_folds):
-
-        x_train, x_val, y_train, y_val = train_test_split(
-            df.loc[arg_rest, df.columns[:-1]],
-            df.loc[arg_rest, df.columns[-1]],
-            test_size=1. / (n_folds - 1.),
-            random_state=random_state
-        )
-
-        d_folds[i] = {'train': list(x_train.index), 'val': list(x_val.index), 'test': list(arg_test)}
-
-    json.dump(d_folds, open(os.path.join(output_folder, dataset_name + '.json'), 'w'), indent=2)
-
-
-def write_dataset(dataframe, dataset_path):
+    :type dataset_path: str
+    :param dataset_path: Path to the dataset. Must contain the .arff file extension (i.e "my_dataset.arff")
+    :rtype: dict
+    :return: a dictionary with the arff dataset.
     """
 
-    :param dataframe:
-    :type dataframe: pandas.DataFrame
-    :param dataset_path:
-    :param ext:
-    :return:
-    """
-    ext = dataset_path.split('.')[-1]
-
-    if ext == 'arff':
-        relation = dataset_path.split('/')[-1].split('.')[0]
-
-        dict_relation = {
-            'data': dataframe.values,
-            'description': 'None',
-            'relation': relation,
-            'attributes': list(
-                it.izip([str(x) for x in dataframe.columns],
-                    [raw_type_dict[str(dataframe[k].dtype)] if str(dataframe[k].dtype) != np.object
-                     else raw_type_dict[str(dataframe[k].dtype)] % ','.join(dataframe[k].unique()) for k in dataframe.columns]
-                )
-            )
-        }
-
-        arff.dump(
-            dict_relation,
-            open(dataset_path, 'w')
-        )
-    elif ext == 'csv':
-        dataframe.write_csv(dataset_path, sep=',')
-    else:
-        raise TypeError('Invalid extension for dataset!')
-
-
-def read_dataset(dataset_path):
     dataset_type = dataset_path.split('.')[-1].strip()
+    assert dataset_type == 'arff', TypeError('Invalid type for dataset! Must be an \'arff\' file!')
+    af = arff.load(open(dataset_path, 'r'))
+    return af
 
-    if dataset_type == 'csv':
-        dataset = pd.read_csv(dataset_path, sep=',')
-    elif dataset_type == 'arff':
-        af = arff.load(open(dataset_path, 'r'))
-        dataset = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
-    else:
-        raise TypeError('Invalid type for dataset! Must be either \'csv\' or \'arff\'!')
+
+def load_dataframe(dataset):
+    """
+    Given either a dictionary or a path to a .arff file, returns a dataset in the form of a DataFrame.
+
+    :type dataset: str or dict
+    :param dataset: Either a path to the dataset with the file extension, or an arff file (i.e "my_dataset.arff")
+    :return: a DataFrame with the dataset.
+    :rtype: pandas.DataFrame
+    """
+
+    assert isinstance(dataset, dict) or isinstance(dataset, str), TypeError(
+        'Invalid type for dataset! Must be either a path to the dataset or an arff file!'
+    )
+
+    af = load_arff(dataset) if isinstance(dataset, str) else dataset
+    dataset = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
 
     return dataset
 
 
-def get_batch(dataset, train_size=0.8, random_state=None):
-    train, rest = train_test_split(
-        dataset,
-        train_size=train_size,
-        random_state=random_state
+def generate_folds(dataset_path, output_folder, n_folds=10, random_state=None):
+    """
+    Given a dataset df, generate n_folds for it and store them in <output_folder>/<dataset_name>.
+
+    :type dataset_path: str
+    :param dataset_path: Path to dataset with .arff file extension (i.e my_dataset.arff)
+    :type output_folder: str
+    :param output_folder: Path to store both index file with folds and fold files.
+    :type n_folds: int
+    :param n_folds: Optional - Number of folds to split the dataset into. Defaults to 10.
+    :type random_state: int
+    :param random_state: Optional - Seed to use in the splitting process. Defaults to None (no seed).
+    """
+
+    import warnings
+    warnings.filterwarnings('error')
+
+    dataset_name = dataset_path.split('/')[-1].split('.')[0]
+
+    af = load_arff(dataset_path)
+    df = load_dataframe(af)
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    fold_iter = skf.split(df[df.columns[:-1]], df[df.columns[-1]])
+
+    fold_index = dict()
+
+    jvm.start()
+
+    csv_loader = Loader(classname="weka.core.converters.CSVLoader")
+    arff_saver = Saver(classname='weka.core.converters.ArffSaver')
+
+    for i, (arg_rest, arg_test) in enumerate(fold_iter):
+        fold_index[i] = list(arg_test)
+
+        _temp_path = 'temp_%s_%d.csv' % (dataset_name, i)
+
+        fold_data = df.loc[arg_test]  # type: pd.DataFrame
+        fold_data.to_csv(_temp_path, sep=',', index=False)
+
+        java_arff_dataset = csv_loader.load_file(_temp_path)
+        java_arff_dataset.relationname = af['relation']
+        java_arff_dataset.class_is_last()
+        arff_saver.save_file(java_arff_dataset, os.path.join(output_folder, '%s_fold_%d.arff' % (dataset_name, i)))
+
+        os.remove(_temp_path)
+
+    json.dump(
+        fold_index, open(os.path.join(output_folder, dataset_name + '.json'), 'w'), indent=2
     )
 
-    val, test = train_test_split(
-        rest,
-        test_size=0.5,  # validation and test set have the same proportion
-        random_state=random_state
-    )
-
-    return train, val, test
+    jvm.stop()
+    warnings.filterwarnings('default')
 
 
-def get_fold_iter(df, fold):
-    if isinstance(fold, str) or isinstance(fold, unicode):
-        f = json.load(open(fold, 'r'))  # type: dict
-    elif isinstance(fold, dict):
-        f = fold  # type: dict
-    else:
-        raise TypeError('Invalid type for fold! Must be either a dictionary or a path to a json file!')
+# def get_batch(dataset, train_size=0.8, random_state=None):
+#     train, rest = train_test_split(
+#         dataset,
+#         train_size=train_size,
+#         random_state=random_state
+#     )
+#
+#     val, test = train_test_split(
+#         rest,
+#         test_size=0.5,  # validation and test set have the same proportion
+#         random_state=random_state
+#     )
+#
+#     return train, val, test
 
-    for i in sorted(f.keys()):
-        train_s = df.loc[f[i]['train']]
-        val_s = df.loc[f[i]['val']]
-        test_s = df.loc[f[i]['test']]
+def get_folds_index(dataset_name, fold_path):
+    fold_file = json.load(open(os.path.join(fold_path, dataset_name + '.json'), 'r'))  # type: dict
+    return fold_file
 
-        yield train_s, test_s, val_s
+
+def get_folds_data(full, dataset_name, fold_path):
+    """
+
+    :type full: pandas.DataFrame
+    :param full: A DataFrame which comprises the whole dataset.
+    :type dataset_name: str
+    :param dataset_name: The name of the dataset.
+    :type fold_path: str
+    :param fold_path: Path to fold files.
+    :rtype: dict
+    :return: a dictionary with fold keys and data.
+    """
+
+    fold_file = json.load(open(os.path.join(fold_path, dataset_name + '.json'), 'r'))  # type: dict
+
+    fold_data = dict()
+
+    for n_fold, fold_index in fold_file.iteritems():
+        fold_data[n_fold] = full.loc[fold_index]
+
+    return fold_data
 
 
 def get_dataset_sets(dataset_name, datasets_path, fold_file, output_path='.', merge_val=True):
-    """
-    Given a dataset (in .arff format), returns its sets (train, val and test).
 
-    :param dataset_name: The name of the dataset (i.e, 'iris' -- do not pass it with a file extension, as in 'iris.arff'
-    :param datasets_path: The path in which the dataset is. It is assumed that is a .arff file.
-    :param fold_file: A dictionary with the following structure:
-        { \n
-            \t'0':  # index of the current fold \n
-                \t\t'train': [0, 1, 2, ...]  # index of the training instances \n
-                \t\t'test': [500, 501, 502, ...]  # index of the test instances \n
-                \t\t'val': [600, 601, 602 ...]  # index of the validation instances \n
-            \t'1':  \n
-                \t\t... \n
-        } \n
-    :param output_path: optional - File to write csv, csv dataset (one per fold). Defaults to workpath.
-    :param merge_val: optional - Whether to merge training and validation sets. In this case, will not output a validation
-        csv dataset.
-    :return: A dictionary with the same structure as fold_file, except that it contains (relative) file paths to csv
-        datasets.
-    """
+    raise NotImplementedError('not implemented yet!')
+
     arff_dtst = arff.load(open(os.path.join(datasets_path, dataset_name + '.arff'), 'r'))
 
     macros = dict()
@@ -192,53 +188,6 @@ def get_dataset_sets(dataset_name, datasets_path, fold_file, output_path='.', me
     return macros
 
 
-def __generate_intermediary_datasets__(datasets_path, folds_path, output_path):
-    import weka.core.jvm as jvm
-    from weka.core.converters import Loader
-    from weka.core.converters import Saver
-
-    jvm.start()
-
-    for dataset in os.listdir(datasets_path):
-        dataset_name = dataset.split('.')[0]
-        fold_file = json.load(open(os.path.join(folds_path, dataset_name + '.json'), 'r'))
-
-        print 'generating intermediary sets for %s' % dataset_name
-
-        csv_loader = Loader(classname="weka.core.converters.CSVLoader")
-        arff_saver = Saver(classname='weka.core.converters.ArffSaver')
-
-        macros = get_dataset_sets(
-            dataset_name=dataset_name,
-            datasets_path=datasets_path,
-            fold_file=fold_file,
-            output_path=output_path,
-            merge_val=False
-        )
-
-        for n_fold, folds_sets in macros.iteritems():
-            train_s = csv_loader.load_file(macros[n_fold]['train'])
-            test_s = csv_loader.load_file(macros[n_fold]['test'])
-            val_s = csv_loader.load_file(macros[n_fold]['val'])
-
-            train_s.relationname = dataset_name
-            test_s.relationname = dataset_name
-            val_s.relationname = dataset_name
-
-            train_s.class_is_last()
-            test_s.class_is_last()
-            val_s.class_is_last()
-
-            cpy_train = copy.deepcopy(macros[n_fold]['train']).replace('.csv', '.arff')
-            cpy_test = copy.deepcopy(macros[n_fold]['test']).replace('.csv', '.arff')
-            cpy_val = copy.deepcopy(macros[n_fold]['val']).replace('.csv', '.arff')
-
-            arff_saver.save_file(train_s, cpy_train)
-            arff_saver.save_file(test_s, cpy_test)
-            arff_saver.save_file(val_s, cpy_val)
-
-    jvm.stop()
-
 raw_type_dict = {
         'int': 'NUMERIC',
         'int_': 'NUMERIC',
@@ -263,20 +212,18 @@ raw_type_dict = {
         'str': 'string',
     }
 
+
 def main():
-    _datasets_path = '../datasets/gene'
+    _datasets_path = '../datasets/liver-disorders'
     _folds_path = '../datasets/folds'
 
-    n_folds = 10
+    n_folds = 5
 
-    for dataset_format in os.listdir(_datasets_path):
-        name = dataset_format.split('.')[0]
-        df = read_dataset(os.path.join(_datasets_path, dataset_format))
+    for _dataset_path in os.listdir(_datasets_path):
+        name = _dataset_path.split('.')[0]
+        print 'Generating folds for dataset %s' % name
+        generate_folds(dataset_path=os.path.join(_datasets_path, _dataset_path), output_folder=_folds_path, n_folds=n_folds)
 
-        print 'Genering folds for dataset %s' % name
-        generate_folds(df, dataset_name=name, output_folder=_folds_path, n_folds=n_folds)
-
-    __generate_intermediary_datasets__(_datasets_path, _folds_path, output_path='../intermediary')
 
 if __name__ == '__main__':
     main()

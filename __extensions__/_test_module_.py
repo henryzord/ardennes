@@ -7,11 +7,11 @@ from c_individual import make_predictions
 
 import numpy as np
 import cPickle
-from preprocessing.dataset import read_dataset
+from preprocessing.dataset import load_dataframe
 import itertools as it
 from datetime import datetime as dt
 
-df = read_dataset('/home/henry/Projects/ardennes/datasets/numerical/iris.arff')
+df = load_dataframe('/home/henry/Projects/ardennes/datasets/numerical/iris.arff')
 
 some_ind = cPickle.load(open('individual.bin', 'r'))
 

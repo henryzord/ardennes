@@ -3,261 +3,208 @@
 import csv
 import os
 import random
+import warnings
 from datetime import datetime as dt
 
-from classes import type_check, value_check
+from classes import type_check, value_check, MetaDataset
 from graphical_model import *
 from individual import Individual
-from information import Processor
+from device import AvailableDevice
+from treelib.individual import DecisionTree
+import cPickle
 
 __author__ = 'Henry Cagnini'
 
 
 class Ardennes(object):
-    gm = None
+    global_best = None  # TODO remove once problem with suboptimal individuals is solved
 
-    best_overall = None  # TODO remove!
+    def __init__(self, n_individuals, n_iterations, uncertainty=0.001, max_height=3):
 
-    def __init__(self,
-                 n_individuals=100, n_iterations=100, uncertainty=0.001,
-                 decile=0.9, max_height=3, distribution='univariate',
-                 class_probability='declining', random_state=None):
-        """
-        Default EDA class, with common code to all EDAs -- regardless
-        of the complexity of inner GMs or updating techniques.
+        self.n_individuals = n_individuals
+        self.uncertainty = uncertainty
 
-        :type n_individuals: int
-        :param n_individuals: Number of maximum individuals for a any population, throughout the evolutionary process.
-        :param n_iterations: First (and most likely to be reached) stopping criterion. Maximum number of generations
-            that this EDA is allowed to produce.
-        :param uncertainty: Second stopping criterion. If this EDA's GM presents an uncertainty lesser than this
-            parameter, then this EDA will likely stop before reaching the maximum number of iterations.
-        :param decile: A parameter for determining how much of the population must be used for updatign the GM, and also
-            how much of it must be resampled for the next generation. For example, if decile=0.9, then 10% of the
-            population will be used for GM updating and 90% will be resampled.
-        """
-        if random_state is not None:
+        self.D = max_height - 1
+        self.n_iterations = n_iterations
+
+        self.trained = False
+        self.predictor = None
+
+    @staticmethod
+    def __initialize_argsets__(dataset, train, val, test):
+        _arg_sets = dict()
+
+        train_index = np.zeros(dataset.shape[0], dtype=np.bool)
+        val_index = np.zeros(dataset.shape[0], dtype=np.bool)
+        test_index = np.zeros(dataset.shape[0], dtype=np.bool)
+
+        train_index[train] = 1
+        val_index[val] = 1
+        test_index[test] = 1
+
+        _arg_sets['train'] = train_index
+        _arg_sets['val'] = val_index
+        _arg_sets['test'] = test_index
+
+        return _arg_sets
+
+    def __setup__(self, train, **kwargs):
+        if 'random_state' in kwargs and kwargs['random_state'] is not None:
+            random_state = kwargs['random_state']
             warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
+        else:
+            random_state = None
 
         random.seed(random_state)
         np.random.seed(random_state)
 
-        self.n_individuals = n_individuals
-        self.decile = decile
-        self.uncertainty = uncertainty
+        dataset = kwargs['full'] if 'full' in kwargs else train
+        val = kwargs['validation'] if 'validation' in kwargs else train
+        test = kwargs['test'] if 'test' in kwargs else train
 
-        self.D = max_height - 1
-        self.distribution = distribution
-        self.n_iterations = n_iterations
+        arg_sets = self.__initialize_argsets__(dataset, train, val, test)
 
-        self.trained = False
-        self.best_individual = None
-        self.last_population = None
+        dataset_info = MetaDataset(dataset)
 
-        self.class_probability = class_probability
+        mdevice = AvailableDevice(dataset, dataset_info)
 
-        self.pred_attr = None
-        self.target_attr = None
-        self.class_labels = None
-
-        self.processor = None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        GraphicalModel.clean()
-        Individual.clean()
-        self.clean()
-
-    @classmethod
-    def clean(cls):
-        cls.pred_attr = None
-        cls.target_attr = None
-        cls.class_labels = None
-
-    def fit(self, full, train, val=None, test=None, verbose=True, **kwargs):
-        def __initialize_argsets__(_train, _val, _test):
-            _arg_sets = dict()
-            train_index = np.zeros(full.shape[0], dtype=np.bool)
-            train_index[_train.index] = 1
-            _arg_sets['train_index'] = train_index
-
-            if _val is not None:
-                val_index = np.zeros(full.shape[0], dtype=np.bool)
-                val_index[_val.index] = 1
-                _arg_sets['val_index'] = val_index
-            else:
-                _arg_sets['val_index'] = _arg_sets['train_index']
-
-            if _test is not None:
-                test_index = np.zeros(full.shape[0], dtype=np.bool)
-                test_index[_test.index] = 1
-                _arg_sets['test_index'] = test_index
-
-            return _arg_sets
-
-        def __initialize_sets__(_train, _val, _test):
-            _sets = dict()
-            _sets['train'] = _train
-            if _val is not None:
-                _sets['val'] = _val
-            else:
-                _sets['val'] = _sets['train']
-            if _test is not None:
-                _sets['test'] = _test
-
-            return _sets
-
-        self.processor = Processor(full)
-        arg_sets = __initialize_argsets__(train, val, test)
-        sets = __initialize_sets__(train, val, test)
-
-        # from now on, considers only a dictionary 'sets' with train and val subsets
-
-        class_values = {
-            'pred_attr': list(full.columns[:-1]),
-            'target_attr': full.columns[-1],
-            'class_labels': np.sort(full[full.columns[-1]].unique()).tolist()
-        }
-
-        self.pred_attr = class_values['pred_attr']
-        self.target_attr = class_values['target_attr']
-        self.class_labels = class_values['class_labels']
-
-        # TODO pass from label to binary representation!
-        # self.binary_class = np.zeros()
-
-        # threshold where individuals will be picked for PMF updating/replacing
-        to_replace_index = np.arange(
-            self.n_individuals - int(self.decile * self.n_individuals), self.n_individuals, dtype=np.int32
-        )
-
-        iteration = 0
-
-        Individual.set_values(
-            sets=sets,
+        DecisionTree.set_values(
             arg_sets=arg_sets,
-            y_train_true=sets['train'][self.target_attr],
-            y_val_true=sets['val'][self.target_attr],
-            y_test_true=sets['test'][self.target_attr] if 'test' in sets else None,
-            processor=self.processor,
-            column_types={
-                x: Individual.raw_type_dict[str(full[x].dtype)] for x in full.columns
-            },
-            pred_attr=self.pred_attr,
-            target_attr=self.target_attr,
-            class_labels=self.class_labels,
+            y_train_true=dataset.loc[arg_sets['train'], dataset_info.target_attr],
+            y_val_true=dataset.loc[arg_sets['val'], dataset_info.target_attr],
+            y_test_true=dataset.loc[test, dataset_info.target_attr] if test is not None else None,
+            processor=mdevice,
+            dataset_info=dataset_info,
             max_height=self.D,
-            full=full
+            dataset=dataset,
+            mdevice=mdevice
         )
 
         gm = GraphicalModel(
-            pred_attr=self.pred_attr,
-            target_attr=self.target_attr,
-            class_labels=self.class_labels,
-            D=self.D,  # since last level must be all leafs
-            distribution=self.distribution
+            D=self.D,
+            dataset_info=dataset_info,
         )
 
-        sample_func = np.vectorize(
-            Individual,
-            excluded=['gm', 'iteration', 'whole']
-        )
+        return gm
 
-        t1 = dt.now()  # starts measuring time
+    def fit(self, train, decile, verbose=True, **kwargs):
+        """
+        Fits the
 
-        population = sample_func(
-            ind_id=range(self.n_individuals), gm=gm, iteration=iteration
-        )
+        :param train: train set.
+        :type decile: float
+        :param decile: decile of individuals which will be used for inducing the graphical model.
+        :type verbose: bool
+        :param verbose: optional - whether to print metadata to console.
+        :param full: optional - full dataset. Will use train if not provided.
+        :param validation: optional - Validation set.
+        :param test: optional - test set.
+        :type fold: int
+        :param fold: optional - current fold.
+        :type run: int
+        :param run: optional - current run.
+        :type random_state: int
+        :param random_state: optional - random seed, which affects values sampled in the graphical model.
+        :type n_stop: int
+        :param n_stop: optional - maximum number of generations with the same best individual unchanged. Upon reaching
+            this value the evolutionary procedure will stop.
+        :type output_path: str
+        :param output_path: optional - path to output metadata.
+        """
 
-        population = np.sort(population, kind='mergesort')[::-1]
+        '''
+        output_path=config_file['output_path'] if 'output_path' in config_file else None,  # kwargs
+        '''
 
-        last_best = np.random.rand(
-            max(1,
-                int(self.n_iterations * kwargs['threshold_stop'] if 'threshold_stop' in kwargs else .2)
-            )
-        )
+        assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
+            ValueError('Decile must comprise at least one individual and at maximum the whole population!')
+
+        gm = self.__setup__(train=train, **kwargs)
+
+        sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
+
+        population = np.empty(shape=self.n_individuals, dtype=Individual)
+        to_replace_index = np.arange(self.n_individuals, dtype=np.int32)
 
         '''
             # --- Main loop --- #
         '''
+        iteration = 0
+
         while iteration < self.n_iterations:
+            t1 = dt.now()  # starts measuring time
+
+            fitness, population = self.sample_population(gm, iteration, sample_func, to_replace_index, population)
+
+            to_replace_index, fittest_pop = self.split_population(decile, population)
+
+            gm.update(fittest_pop)
+
             t2 = dt.now()
-
-            fitness = np.array([x.fitness for x in population])
-
             self.__report__(
                 iteration=iteration,
                 population=population,
                 fitness=fitness,
                 verbose=verbose,
-                elapsed_time=(t2-t1).total_seconds(),
+                elapsed_time=(t2 - t1).total_seconds(),
                 gm=gm,
                 **kwargs
             )
-            t1 = t2
 
-            if self.__early_stop__(last_best, iteration, population):
+            if self.__early_stop__(population):
                 break
 
             iteration += 1
 
-            fittest_pop = population[:to_replace_index[0]]
-
-            gm.update(fittest_pop)
-
-            population.flat[to_replace_index] = sample_func(
-                ind_id=range(self.n_individuals), gm=gm, iteration=iteration
-            )
-
-            population = np.sort(population, kind='mergesort')[::-1]
-
-        self.gm = gm
-        self.last_population = population
-
-        self.best_individual = self.get_best_individual(population)
+        self.predictor = self.get_best_individual(population)
         self.trained = True
 
     @staticmethod
+    def sample_population(gm, iteration, func, to_replace_index, population):
+        """
+
+        :type gm: treelib.graphical_model.GraphicalModel
+        :param gm: Current graphical model.
+        :type iteration: int
+        :param iteration: Current iteration.
+        :param func: Sample function.
+        :type to_replace_index: list
+        :param to_replace_index: List of indexes of individuals to be replaced in the following generation.
+        :type population: numpy.ndarray
+        :param population: Current population.
+        :rtype: tuple
+        :return: A tuple where the first item is the population fitness and the second the population.
+        """
+
+        population.flat[to_replace_index] = func(
+            ind_id=to_replace_index, gm=gm, iteration=iteration
+        )
+        population.sort()
+        population = population[::-1]
+
+        fitness = np.array([x.fitness for x in population])
+
+        return fitness, population
+
+    def split_population(self, decile, population):
+        integer_decile = int(self.n_individuals * decile)
+
+        to_replace_index = [ind.ind_id for ind in population[integer_decile:]]
+        fittest_pop = population[:integer_decile]
+
+        return to_replace_index, fittest_pop
+
+    @staticmethod
     def get_best_individual(population):
-        return population.max()
+        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
+        return population[np.argmax(outer_fitness)]
 
     @property
     def tree_height(self):
         if self.trained:
-            return self.best_individual.height
-
-    def predict(self, samples):
-        df = self.__to_dataframe__(samples)
-
-        predictor = self.best_individual
-        all_preds = predictor.predict(df)
-
-        return all_preds
-
-    @staticmethod
-    def __generate_columns__(n_predictive, make_class=True):
-        columns = ['attr_%d' % d for d in xrange(n_predictive)]
-        if make_class:
-            columns += ['class']
-        return columns
-
-    def __to_dataframe__(self, samples):
-        if isinstance(samples, list):
-            samples = np.array(samples)
-
-        if isinstance(samples, np.ndarray):
-            df = pd.DataFrame(samples, columns=self.__generate_columns__(samples.shape[1], make_class=False))
-        elif isinstance(samples, pd.DataFrame):
-            df = samples
-        else:
-            raise TypeError('Invalid type for samples! Must be either a list-like or a pandas.DataFrame!')
-
-        return df
+            return self.predictor.height
 
     def __report__(self, **kwargs):
-
         # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
         population = kwargs['population']
@@ -266,24 +213,26 @@ class Ardennes(object):
         fitness = kwargs['fitness']
         gm = kwargs['gm']
 
+        sep = '/' if os.name is not 'nt' else '\\'
+
         best_individual = self.get_best_individual(population)
 
-        best_overall = population[np.argmax([
+        global_best = population[np.argmax([
             0.33 * (ind.test_acc_score + ind.val_acc_score + ind.train_acc_score) for ind in population
         ])]
 
-        if self.best_overall is None:
-            self.best_overall = best_overall
+        if self.global_best is None:
+            self.global_best = global_best
 
-        if 0.33 * (best_overall.test_acc_score + best_overall.val_acc_score + best_overall.train_acc_score) > \
-            0.33 * (self.best_overall.test_acc_score + self.best_overall.val_acc_score + self.best_overall.train_acc_score):
-            self.best_overall = best_overall
+        if 0.33 * (global_best.test_acc_score + global_best.val_acc_score + global_best.train_acc_score) > \
+           0.33 * (self.global_best.test_acc_score + self.global_best.val_acc_score + self.global_best.train_acc_score):
+            self.global_best = global_best
 
         # optional data
         n_run = None if 'run' not in kwargs else kwargs['run']
         n_fold = None if 'fold' not in kwargs else kwargs['fold']
-        dataset_name = None if 'dataset_name' not in kwargs else kwargs['dataset_name']
         output_path = None if 'output_path' not in kwargs else kwargs['output_path']
+        dataset_name = output_path.split(sep)[-1] if output_path is not None else None
 
         if verbose:
             mean = np.mean(fitness)  # type: float
@@ -301,32 +250,40 @@ class Ardennes(object):
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
                 csv_w.writerow(gm.attributes.values.ravel())
 
-            with open(evo_file, 'a') as f:
+            with open(evo_file, 'w') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')
 
                 if iteration == 0:  # resets file
-                    csv_w.writerow(['individual', 'iteration', 'fitness', 'height', 'n_nodes',
-                                    'train_acc', 'val_acc', 'test_acc', 'test_precision', 'test_f1'])
+                    csv_w.writerow([
+                        'individual', 'iteration', 'fitness', 'height', 'n_nodes',
+                        'train_correct', 'train_total', 'val_correct', 'val_total', 'test_correct', 'test_total'
+                    ])
+
+            with open(evo_file, 'a') as f:
+                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
 
                 for ind in population:  # type: Individual
                     if Individual.y_test_true is not None:
-                        add = [ind.test_acc_score, ind.test_precision_score, ind.test_f1_score]
+                        add = [int(ind.test_acc_score * len(ind.y_test_true)), len(ind.y_test_true)]
                     else:
-                        add = ['', '', '']
+                        add = ['', '']
 
-                    csv_w.writerow([ind.ind_id, iteration, ind.fitness, ind.height, ind.n_nodes,
-                                    ind.train_acc_score, ind.val_acc_score] + add)
+                    csv_w.writerow([
+                        ind.ind_id, iteration, ind.fitness, ind.height, ind.n_nodes,
+                        int(ind.train_acc_score * len(ind.y_train_true)), len(ind.y_train_true),
+                        int(ind.val_acc_score * len(ind.y_val_true)), len(ind.y_val_true)] + add
+                    )
 
             best_individual.plot(
                 savepath=evo_file.split('.')[0].strip() + '.pdf'
             )
 
-            self.best_overall.plot(
+            self.global_best.plot(
                 savepath=evo_file.split('.')[0].strip() + '_best_overall.pdf'
             )
 
+            cPickle.dump(best_individual, open(evo_file.split('.')[0].strip() + '.bin', 'w'))
+
     @staticmethod
-    def __early_stop__(last_best, iteration, population):
-        last_best[iteration % last_best.shape[0]] = population.max().fitness
-        stop = abs(last_best.min() - last_best.max()) < 1e-06
-        return stop
+    def __early_stop__(population):
+        return population.min() == population.max()

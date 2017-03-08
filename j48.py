@@ -1,22 +1,16 @@
 from collections import Counter
-
-import pandas as pd
-import numpy as np
-from preprocessing.dataset import read_dataset
-from matplotlib import pyplot as plt
-
-from information import Processor
-import networkx as nx
-from networkx.drawing.nx_agraph import graphviz_layout
 from itertools import count
+
+import networkx as nx
+import numpy as np
+from matplotlib import pyplot as plt
+from networkx.drawing.nx_agraph import graphviz_layout
+
+from preprocessing.dataset import load_dataframe
+from treelib.information import Processor
 
 
 def plot(tree):
-    """
-    Draw this individual.
-    """
-    # fig = plt.figure()
-
     pos = graphviz_layout(tree, root=0, prog='dot')
 
     node_list = tree.nodes(data=True)
@@ -105,7 +99,7 @@ def hunt(subset, tree, handler, n_instances, node_id):
 
 
 def main():
-    _dataset = read_dataset('datasets/numerical/hayes-roth-full.arff')
+    _dataset = load_dataframe('datasets/numerical/hayes-roth-full.arff')
     n_instances = _dataset.shape[0]
     _processor = Processor(_dataset)
     _tree = nx.DiGraph()

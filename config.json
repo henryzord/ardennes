@@ -1,15 +1,11 @@
 {
   "random_state": null,
   "n_individuals": 200,
-  "n_iterations": 200,
-  "threshold_stop": 0.15,
+  "n_iterations": 100,
+  "decile": 0.5,
+  "n_stop": 10,
   "tree_height": 9,
-  "decile": 0.9,
   "uncertainty": 0.001,
-  "train_size": 0.5,
-  "n_runs": 2,
   "verbose": true,
-  "distribution": "univariate",
-  "dataset_path": "datasets/numerical/liver-disorders.arff",
-  "folds_path": "datasets/folds"
+  "output_path": "metadata"
 }

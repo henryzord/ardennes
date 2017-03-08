@@ -3,41 +3,34 @@
 """
 Performs tests in an 'industrial' fashion.
 """
-import glob
+
 import os
 import csv
+import time
 import json
 import shutil
-import subprocess
 import warnings
 import StringIO
-import pandas as pd
-import operator as op
-import networkx as nx
-import itertools as it
-import time
 
-from termcolor import colored
+import pandas as pd
+import networkx as nx
+import operator as op
+import itertools as it
+
+from sklearn.metrics import accuracy_score
+
+from preprocessing import __split__, get_dataset_name
 from treelib.node import *
 from treelib import Ardennes
 
+from termcolor import colored
 from datetime import datetime as dt
-from multiprocessing import Process, Manager
-
-from sklearn.metrics import confusion_matrix
-
-from preprocessing.dataset import read_dataset, get_batch, get_fold_iter
 from matplotlib import pyplot as plt
+from sklearn.metrics import confusion_matrix
+from multiprocessing import Process, Manager
+from preprocessing.dataset import load_dataframe, get_folds_index
 
 __author__ = 'Henry Cagnini'
-
-
-def __clean_macros__(macros):
-    for sets in macros.itervalues():
-        os.remove(sets['train'])
-        os.remove(sets['test'])
-        if 'val' in sets:
-            os.remove(sets['val'])
 
 
 # noinspection PyUnresolvedReferences
@@ -74,9 +67,12 @@ def evaluate_j48(datasets_path, intermediary_path):
 
             for n_fold in it.count():
                 try:
-                    train_s = loader.load_file(os.path.join(intermediary_path, '%s_fold_%d_train.arff' % (dataset_name, n_fold)))
-                    val_s = loader.load_file(os.path.join(intermediary_path, '%s_fold_%d_val.arff' % (dataset_name, n_fold)))
-                    test_s = loader.load_file(os.path.join(intermediary_path, '%s_fold_%d_test.arff' % (dataset_name, n_fold)))
+                    train_s = loader.load_file(
+                        os.path.join(intermediary_path, '%s_fold_%d_train.arff' % (dataset_name, n_fold)))
+                    val_s = loader.load_file(
+                        os.path.join(intermediary_path, '%s_fold_%d_val.arff' % (dataset_name, n_fold)))
+                    test_s = loader.load_file(
+                        os.path.join(intermediary_path, '%s_fold_%d_test.arff' % (dataset_name, n_fold)))
 
                     train_s.relationname = dataset_name
                     val_s.relationname = dataset_name
@@ -91,7 +87,8 @@ def evaluate_j48(datasets_path, intermediary_path):
                         train_s.add_instance(inst)
 
                     cls = Classifier(classname="weka.classifiers.trees.J48", options=["-C", "0.25", "-M", "2"])
-                    # cls = Classifier(classname="weka.classifiers.trees.REPTree", options=["-M", "2", "-V", "0.001", "-N", "3", "-S", "1", "-L", "-1", "-I", "0.0"])
+                    # cls = Classifier(classname="weka.classifiers.trees.REPTree",
+                    # options=["-M", "2", "-V", "0.001", "-N", "3", "-S", "1", "-L", "-1", "-I", "0.0"])
                     cls.build_classifier(train_s)
 
                     warnings.warn('WARNING: will only work for binary splits!')
@@ -99,8 +96,6 @@ def evaluate_j48(datasets_path, intermediary_path):
                     out = StringIO.StringIO(graph)
                     G = nx.Graph(nx.nx_pydot.read_dot(out))
 
-                    # TODO plotting!
-                    # TODO plotting!
                     # TODO plotting!
                     # fig = plt.figure(figsize=(40, 30))
                     # pos = graphviz_layout(G, root='N0', prog='dot')
@@ -120,8 +115,6 @@ def evaluate_j48(datasets_path, intermediary_path):
                     # plt.axis('off')
                     # plt.show()
                     # exit(0)
-                    # TODO plotting!
-                    # TODO plotting!
                     # TODO plotting!
 
                     heights += [max(map(len, nx.shortest_path(G, source='N0').itervalues()))]
@@ -153,7 +146,7 @@ def evaluate_j48(datasets_path, intermediary_path):
                 'n_nodes': n_nodes,
             }
 
-    # interprets
+        # interprets
         json_results = json.load(open('/home/henry/Desktop/j48/j48_results.json', 'r'))
 
         n_runs = len(json_results['runs'].keys())
@@ -236,7 +229,7 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
             if output_path is not None:
                 config_file['output_path'] = dataset_output_path
             try:
-                dt_dict = do_train(
+                dt_dict = __train__(
                     config_file=config_file,
                     evaluation_mode=validation_mode,
                     n_run=n_run
@@ -249,61 +242,6 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
                 import warnings
                 warnings.warn('Exception found when running %s!' % dataset)
                 print(e.message, e.args)
-
-
-def run_fold(n_fold, n_run, full, train_s, val_s, test_s, config_file, **kwargs):
-    try:
-        random_state = kwargs['random_state']
-    except KeyError:
-        random_state = None
-
-    tree_height = config_file['tree_height']
-
-    t1 = dt.now()
-
-    with Ardennes(
-        n_individuals=config_file['n_individuals'],
-        decile=config_file['decile'],
-        uncertainty=config_file['uncertainty'],
-        max_height=tree_height,
-        distribution=config_file['distribution'],
-        n_iterations=config_file['n_iterations'],
-        random_state=random_state
-    ) as inst:
-        inst.fit(
-            full=full,
-            train=train_s,
-            val=val_s,
-            test=test_s,
-            verbose=config_file['verbose'],
-            dataset_name=config_file['dataset_name'],
-            output_path=config_file['output_path'] if 'output_path' in config_file else None,
-            fold=n_fold,
-            run=n_run,
-            threshold_stop=config_file['threshold_stop'] if 'threshold_stop' in config_file else None,
-        )
-
-        ind = inst.best_individual
-        y_test_pred = list(ind.predict(test_s))
-        y_test_true = list(test_s[test_s.columns[-1]])
-
-        t2 = dt.now()
-
-    print 'Run %d of fold %d: Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
-        n_run, n_fold, ind.test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-    )
-
-    if 'dict_manager' in kwargs:
-        res = dict(
-            y_test_pred=y_test_pred,
-            y_test_true=y_test_true,
-            height=ind.height,
-            n_nodes=ind.n_nodes
-        )
-
-        kwargs['dict_manager'][n_fold] = res
-
-    return ind.test_acc_score
 
 
 def crunch_result_file(results_path):
@@ -368,158 +306,6 @@ def generation_statistics(path_results):
     gb = df.groupby(by='iteration')
     meta = gb.agg([np.min, np.max, np.median, np.mean, np.std])
     meta.to_csv('iteration_statistics.csv')
-
-
-def custom_pop_stat(general_path):
-    datasets = [o for o in os.listdir(general_path) if os.path.isdir(os.path.join(general_path, o))]
-
-    j = {'runs': {str(x): dict() for x in range(10)}}
-
-    for dataset_name in datasets:
-        for i in xrange(10):
-            j['runs'][str(i)][dataset_name] = {'folds': {str(x): dict() for x in range(10)}}
-
-        reports_full_path = os.path.join(general_path, dataset_name, '%s_evo_fold_[0-9]*_run_[0-9]*.csv' % dataset_name)
-        reports = glob.glob(reports_full_path)
-
-        for report in reports:
-            info = report
-            info = info.split('.')[0].split('/')[-1].replace('%s_evo_' % dataset_name, '')
-            info = info.replace('fold_', '').replace('run_', '')
-            fold, run = info.split("_")
-
-            df = pd.read_csv(report)
-
-            # TODO best test from last population
-            # last_pop = df.loc[df['iteration'] == df['iteration'].max()]
-            # best_fit = last_pop.loc[last_pop['validation accuracy'] == last_pop['validation accuracy'].max()]
-            # best_from_all = best_fit.loc[best_fit['test accuracy'] == best_fit['test accuracy'].max()].iloc[0]
-            # TODO best test from any generation
-            # best_from_all = df.loc[df['test_acc'] == df['test_acc'].max()].iloc[0]
-            # TODO best fitness from a given generation
-            temp = df.loc[df['iteration'] == min(100, df['iteration'].max())]
-            best_from_all = temp.loc[temp['fitness'] == temp['fitness'].max()].iloc[0]
-
-            j['runs'][str(int(run))][dataset_name]['folds'][str(int(fold))] = {
-                'train_acc': best_from_all['train_acc'],
-                'val_acc': best_from_all['val_acc'],
-                'acc': best_from_all['test_acc'],
-                'precision': best_from_all['test_precision'],
-                'f1_score': best_from_all['test_f1'],
-                'height': best_from_all['height'],
-                'n_nodes': best_from_all['n_nodes']
-            }
-
-    json.dump(j, open(os.path.join(general_path, 'new_results.json'), 'w'), indent=2)
-
-
-def grid_optimizer(config_file, datasets_path, output_path):
-    config_file['verbose'] = False
-
-    range_individuals = [500]
-    range_tree_height = [7]
-    range_iterations = [100]
-    range_decile = [.5, .95, .6, .8, .7, .9]
-    n_runs = 10
-
-    n_opts = reduce(
-        op.mul, map(
-            len,
-            [range_individuals, range_tree_height, range_iterations, range_decile],
-        )
-    )
-
-    count_row = 0
-
-    for n_individuals in range_individuals:
-        for tree_height in range_tree_height:
-            for n_iterations in range_iterations:
-                for decile in range_decile:
-
-                    _partial_str = '[n_individuals:%d][n_iterations:%d][tree_height:%d][decile:%d]' % \
-                                   (n_individuals, n_iterations, tree_height, int(decile * 100))
-
-                    print 'opts: %02.d/%02.d' % (count_row, n_opts) + ' ' + _partial_str
-
-                    _write_path = os.path.join(output_path, _partial_str)
-                    if os.path.exists(_write_path):
-                        shutil.rmtree(_write_path)
-                    os.mkdir(_write_path)
-
-                    config_file['n_individuals'] = n_individuals
-                    config_file['n_iterations'] = n_iterations
-                    config_file['tree_height'] = tree_height
-                    config_file['decile'] = decile
-                    config_file['n_runs'] = n_runs
-
-                    evaluate_ardennes(
-                        datasets_path=datasets_path,
-                        config_file=config_file,
-                        output_path=_write_path,
-                        validation_mode='cross-validation'
-                    )
-
-                    count_row += 1
-
-                    print '%02.d/%02.d' % (count_row, n_opts)
-
-
-# noinspection PyUnresolvedReferences
-def crunch_parametrization(path_file):
-    import plotly.graph_objs as go
-    from plotly.offline import plot
-
-    full = pd.read_csv(path_file)  # type: pd.DataFrame
-    df = full
-
-    attrX = 'n_individuals'
-    attrY = 'decile'
-    attrZ = 'n_iterations'
-
-    print 'attributes (x, y, z): (%s, %s, %s)' % (attrX, attrY, attrZ)
-
-    trace2 = go.Scatter3d(
-        x=df[attrX],
-        y=df[attrY],
-        z=df[attrZ],
-        mode='markers',
-        text=['%s: %2.2f<br>%s: %2.2f<br>%s: %2.2f<br>mean acc: %0.2f' %
-              (attrX, info[attrX], attrY, info[attrY], attrZ, info[attrZ], info['acc mean']) for (index, info) in df.iterrows()
-              ],
-        hoverinfo='text',
-        marker=dict(
-            color=df['acc mean'],
-            colorscale='RdBu',
-            colorbar=dict(
-                title='Mean accuracy',
-            ),
-            # cmin=0.,  # minimum color value
-            # cmax=1.,  # maximum color value
-            # cauto=False,  # do not automatically fit color values
-            size=12,
-            symbol='circle',
-            line=dict(
-                color='rgb(204, 204, 204)',
-                width=1
-            ),
-            opacity=0.9
-        )
-    )
-    layout = go.Layout(
-        margin=dict(
-            l=0,
-            r=0,
-            b=0,
-            t=0
-        ),
-        scene=dict(
-           xaxis=dict(title=attrX),
-           yaxis=dict(title=attrY),
-           zaxis=dict(title=attrZ)
-        )
-    )
-    fig = go.Figure(data=[trace2], layout=layout)
-    plot(fig, filename='parametrization.html')
 
 
 def crunch_graphical_model(pgm_path, path_datasets):
@@ -603,7 +389,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
 
     dataset_name = pgm_path.split(sep)[-1].split('_')[0]
 
-    dataset = read_dataset(os.path.join(path_datasets, dataset_name + '.arff'))
+    dataset = load_dataframe(os.path.join(path_datasets, dataset_name + '.arff'))
     columns = dataset.columns
     n_columns = dataset.shape[1]
     del dataset
@@ -641,160 +427,180 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def do_train(config_file, n_run, evaluation_mode='cross-validation'):
-    """
+def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwargs):
+    t1 = dt.now()
 
-    :param config_file:
-    :param n_run:
-    :param evaluation_mode:
-    :return:
-    """
+    n_fold = int(kwargs['n_fold']) if 'n_fold' in kwargs else None  # kwargs
+    n_run = int(kwargs['n_run']) if 'n_run' in kwargs else None  # kwargs
 
-    assert evaluation_mode in ['cross-validation', 'holdout'], \
-        ValueError('evaluation_mode must be either \'cross-validation\' or \'holdout!\'')
+    inst = Ardennes(
+        n_individuals=config_file['n_individuals'],
+        uncertainty=config_file['uncertainty'],
+        max_height=config_file['tree_height'],
+        n_iterations=config_file['n_iterations']
+    )
 
-    dataset_name = config_file['dataset_path'].split('/')[-1].split('.')[0]
-    config_file['dataset_name'] = dataset_name
-    print 'training ardennes for %s' % dataset_name
+    inst.fit(
+        full=full,
+        train=train_i,
+        decile=config_file['decile'],
+        validation=val_i,  # kwargs
+        fold=n_fold,  # kwargs
+        run=n_run,  # kwargs
+        test=test_i,  # kwargs
+        verbose=config_file['verbose'],  # kwargs
+        random_state=random_state,  # kwargs
+        n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
+        output_path=config_file['output_path'] if 'output_path' in config_file else None,  # kwargs
+    )
 
-    df = read_dataset(config_file['dataset_path'])
+    ind = inst.predictor
+    y_test_pred = list(ind.predict(full.loc[test_i]))
+    y_test_true = list(full.loc[test_i, full.columns[-1]])
+
+    test_acc_score = accuracy_score(y_test_true, y_test_pred)
+
+    t2 = dt.now()
+
+    if 'dict_manager' in kwargs:
+        print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
+            n_run, n_fold, int(test_acc_score * len(y_test_true)), len(y_test_true),
+            ind.height, ind.n_nodes, (t2 - t1).total_seconds()
+        )
+        res = dict(
+            y_test_pred=y_test_pred,
+            y_test_true=y_test_true,
+            height=ind.height,
+            n_nodes=ind.n_nodes
+        )
+
+        kwargs['dict_manager'][n_fold] = res
+    else:
+        print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
+            test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
+        )
+
+    return ind.test_acc_score
+
+
+def __train__(
+        dataset_path, config_file, evaluation_mode='cross-validation',
+        fold_path=None, train_size=0.5, n_runs=10, n_jobs=8, **kwargs):
+
+    assert evaluation_mode in ['cross-validation', 'holdout'], ValueError(
+        'evaluation_mode must be either \'cross-validation\' or \'holdout!\''
+    )
+
+    def running(_processes):
+        _sum = 0
+        for _process in _processes:
+            _sum += int(_process.is_alive())
+        return _sum
+
+    def block(_processes, _n_jobs):
+        """
+        Prevents a new thread from being initialized until a free slot is made available.
+
+        :param _processes: Array of processes, whether running or not.
+        :param _n_jobs: Maximum number of concurrent processes.
+        """
+
+        while running(_processes) >= _n_jobs:
+            time.sleep(1)
+
+    def create_dataset_path(_config_file):
+        output_path = _config_file['output_path']
+
+        if output_path is not None:
+            dataset_output_path = os.path.join(output_path, dataset_name)
+            _config_file['output_path'] = dataset_output_path
+            if os.path.exists(dataset_output_path):
+                shutil.rmtree(dataset_output_path)
+            os.mkdir(dataset_output_path)
+
+        return _config_file
+
+    dataset_name = get_dataset_name(dataset_path)
+
+    full = load_dataframe(dataset_path)
     random_state = config_file['random_state']
 
-    def __append__(_train_s, _val_s):
-        from sklearn.model_selection import train_test_split
-        warnings.warn('WARNING: Using 4.5 folds for training and 4.5 for validation!')
+    folds = get_folds_index(dataset_name=dataset_name, fold_path=fold_path)
 
-        mass = _train_s.append(_val_s, ignore_index=False)
-        _train_s, _val_s = train_test_split(mass, train_size=0.5)
-
-        return _train_s, _val_s
+    print 'training ardennes for dataset %s' % dataset_name
 
     if evaluation_mode == 'cross-validation':
-        assert 'folds_path' in config_file, ValueError('Performing a cross-validation is only possible with a json '
-                                                       'file for folds! Provide it through the \'folds_path\' '
-                                                       'parameter in the configuration file!')
+        assert 'folds_path' is not None, ValueError('Performing a cross-validation is only possible with a json '
+                                                    'file for folds! Provide it through the \'folds_path\' '
+                                                    'parameter in the configuration file!')
 
-        folds = get_fold_iter(df, os.path.join(config_file['folds_path'], dataset_name + '.json'))
+        config_file = create_dataset_path(config_file)
+        config_file['verbose'] = False
 
-        manager = Manager()
-        dict_manager = manager.dict()
-        manager_output = manager.dict()
+        for n_run in xrange(n_runs):
+            manager = Manager()
+            dict_manager = manager.dict()
 
-        processes = []
+            processes = []
 
-        for i, (train_s, val_s, test_s) in enumerate(folds):
+            for n_fold, test_i in folds.iteritems():
+                data = list(set(full.index) - set(test_i))
 
-            train_s, val_s = __append__(train_s, val_s)
+                train_i, val_i = __split__(data, train_size=train_size)
 
-            p = Process(
-                target=run_fold, kwargs=dict(
-                    n_fold=i, n_run=n_run, train_s=train_s, val_s=val_s,
-                    test_s=test_s, config_file=config_file, dict_manager=dict_manager, random_state=random_state,
-                    full=df, manager_output=manager_output
+                p = Process(
+                    target=__run__, kwargs=dict(
+                        n_fold=n_fold, n_run=n_run,
+                        train_i=train_i, val_i=val_i, test_i=test_i,
+                        config_file=config_file, dict_manager=dict_manager,
+                        random_state=random_state, full=full
+                    )
                 )
+                block(processes, n_jobs)
+                p.start()
+                processes.append(p)
+
+            for p in processes:
+                p.join()
+
+            dict_results = dict(dict_manager)
+
+            true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
+            pred = reduce(op.add, [dict_results[k]['y_test_pred'] for k in dict_results.iterkeys()])
+
+            conf_matrix = confusion_matrix(true, pred)
+
+            height = [dict_results[k]['height'] for k in dict_results.iterkeys()]
+            n_nodes = [dict_results[k]['n_nodes'] for k in dict_results.iterkeys()]
+
+            hit = np.diagonal(conf_matrix).sum()
+            total = conf_matrix.sum()
+
+            out_str = 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
+                hit / float(total),
+                float(np.mean(height)), float(np.std(height)),
+                float(np.mean(n_nodes)), float(np.std(n_nodes))
             )
-            p.start()
-            processes.append(p)
 
-        for p in processes:
-            p.join()
+            print colored(out_str, 'blue')
 
-        dict_results = dict(dict_manager)
-
-        true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
-        pred = reduce(op.add, [dict_results[k]['y_test_pred'] for k in dict_results.iterkeys()])
-
-        conf_matrix = confusion_matrix(true, pred)
-
-        height = [dict_results[k]['height'] for k in dict_results.iterkeys()]
-        n_nodes = [dict_results[k]['n_nodes'] for k in dict_results.iterkeys()]
-
-        hit = np.diagonal(conf_matrix).sum()
-        total = conf_matrix.sum()
-
-        out_str = 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
-            hit / float(total), float(np.mean(height)), float(np.std(height)), float(np.mean(n_nodes)), float(np.std(n_nodes))
-        )
-
-        print colored(out_str, 'blue')
-
-        return {
-            'confusion_matrix': conf_matrix.tolist(),
-            'height': height,
-            'n_nodes': n_nodes
-        }
+            return {
+                'confusion_matrix': conf_matrix.tolist(),
+                'height': height,
+                'n_nodes': n_nodes
+            }
 
     else:
-        train_s, val_s, test_s = get_batch(
-            df, train_size=config_file['train_size'], random_state=random_state
-        )
+        config_file['output_path'] = None  # TODO remove once completed!
 
-        run_fold(
-            n_fold=0, n_run=0, train_s=train_s, val_s=val_s,
-            test_s=test_s, config_file=config_file, random_state=random_state,
-            full=df
-        )
+        for n_run in xrange(n_runs):
+            test_i = folds[np.random.choice(folds.keys())]
+            data = list(set(full.index) - set(test_i))
 
+            train_i, val_i = __split__(data, train_size=train_size)
 
-# def convert_pdf_to_txt(path):
-#     from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-#     from pdfminer.converter import TextConverter
-#     from pdfminer.layout import LAParams
-#     from pdfminer.pdfpage import PDFPage
-#     from cStringIO import StringIO
-#
-#     rsrcmgr = PDFResourceManager()
-#     retstr = StringIO()
-#     codec = 'utf-8'
-#     laparams = LAParams()
-#     device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
-#     fp = file(path, 'rb')
-#     interpreter = PDFPageInterpreter(rsrcmgr, device)
-#     password = ""
-#     maxpages = 0
-#     caching = True
-#     pagenos=set()
-#
-#     for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password,caching=caching, check_extractable=True):
-#         interpreter.process_page(page)
-#
-#     text = retstr.getvalue()
-#
-#     fp.close()
-#     device.close()
-#     retstr.close()
-#     return text
-#
-#
-# def count_nodes(super_root):
-#     datasets = [name for name in os.listdir(super_root) if os.path.isdir(os.path.join(super_root, name))]
-#
-#     df = pd.DataFrame(index=np.arange(len(datasets * 10 * 10)), columns=['dataset', 'run', 'fold', 'n_nodes', 'height'], dtype=np.int32)
-#     df['dataset'] = df['dataset'].astype(np.object)
-#
-#     counter = 0
-#
-#     for dataset_name in datasets:
-#         pdfs = [name for name in os.listdir(os.path.join(super_root, dataset_name)) if '.pdf' in name]
-#         for pdf in pdfs:
-#             splitted = pdf.split('.')[0].split('_')
-#             run = int(splitted[-1])
-#             fold = int(splitted[-3])
-#
-#             text = convert_pdf_to_txt(os.path.join(super_root, dataset_name, pdf))
-#             n_nodes = text.count(':') - 3
-#             df.iloc[counter] = [dataset_name, run, fold, n_nodes]
-#             counter += 1
-#             print '%d/%d' % (counter, df.shape[0])
-#
-#     df.to_csv('/home/henry/Desktop/n_nodes.csv')
-
-# def count_nodes_1(df_path):
-#     df = pd.read_csv(df_path)
-#     gb = df.groupby(by='dataset')['dataset', 'n_nodes']
-#     final = gb.aggregate([np.mean, np.std])
-#     print final
-#     final.to_csv('/home/hehrn')
-#
-#     # grouped = df.groupby(by=['dataset'])['test_acc', 'height', 'n_nodes']
-#     # final = grouped.aggregate([np.mean, np.std])
+            __run__(
+                train_i=train_i, val_i=val_i, test_i=test_i,
+                config_file=config_file,
+                random_state=random_state, full=full
+            )
