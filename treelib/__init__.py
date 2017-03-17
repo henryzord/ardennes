@@ -89,7 +89,7 @@ class Ardennes(object):
 
     def fit(self, train, decile, verbose=True, **kwargs):
         """
-        Fits the
+        Fits the algorithm to the provided data.
 
         :param train: train set.
         :type decile: float
@@ -127,7 +127,7 @@ class Ardennes(object):
         to_replace_index = np.arange(self.n_individuals, dtype=np.int32)
 
         '''
-            # --- Main loop --- #
+        Main loop
         '''
         iteration = 0
 
@@ -189,7 +189,7 @@ class Ardennes(object):
     def split_population(self, decile, population):
         integer_decile = int(self.n_individuals * decile)
 
-        to_replace_index = [ind.ind_id for ind in population[integer_decile:]]
+        to_replace_index = range(self.n_individuals)[integer_decile:]
         fittest_pop = population[:integer_decile]
 
         return to_replace_index, fittest_pop
