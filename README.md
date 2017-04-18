@@ -57,6 +57,9 @@ sudo apt-get install ocl-icd-opencl-dev
 pip install mako
 ```
 Then follow instructions from https://wiki.tiker.net/PyOpenCL/Installation/Linux, or optionally:
+
+**NOTICE:** If you use a virtual environment, you must activate it before running the following commands. 
+
 ```sh
 tar xfz additional_packages/pyopencl-2016.2.1.tar.gz
 cd pyopencl-2016.2.1
@@ -101,5 +104,4 @@ Test acc: 0.64 Height: 9 n_nodes: 27 Time: 342.39 secs
 * `config.json`: Where you will input the algorithm parameters, such as **number of individuals, number of iterations, decile and maximum tree height**.
 * `main.py`: starting point for running the algorithm.
 * `evaluate.py`: the module which is called from `main.py`. It has several functions which perform holdout, cross-validation and such operations.
-* `treelib`: directory for the main Ardennes code.
-    * 
+* `treelib`: directory for the main Ardennes code. 
