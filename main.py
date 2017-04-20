@@ -37,11 +37,7 @@ if __name__ == '__main__':
     # )
     # # --------------------------------------------------- #
     __train__(
-        dataset_path='datasets/numerical/liver-disorders.arff',
-        fold_path=_folds_path,
-        config_file=_config_file,
-        evaluation_mode='holdout',
-        n_runs=1,
-        n_jobs=8,
-        train_size=0.5,
+        dataset_path='datasets/gene expression/Breast Cancer',
+        dataset_name='breastCancer',
+        config_file=_config_file
     )

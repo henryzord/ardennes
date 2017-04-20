@@ -28,24 +28,24 @@ def load_arff(dataset_path):
     return af
 
 
-def load_dataframe(dataset):
+def load_dataframe(dataset_filename):
     """
-    Given either a dictionary or a path to a .arff file, returns a dataset in the form of a DataFrame.
+    Given either a dictionary or a path to a .arff file, returns a dataset as a pandas.DataFrame.
 
-    :type dataset: str or dict
-    :param dataset: Either a path to the dataset with the file extension, or an arff file (i.e "my_dataset.arff")
+    :type dataset_filename: str or dict
+    :param dataset_filename: Either a path to the dataset with the file extension, or an arff file (i.e "my_dataset.arff")
     :return: a DataFrame with the dataset.
     :rtype: pandas.DataFrame
     """
 
-    assert isinstance(dataset, dict) or isinstance(dataset, str), TypeError(
+    assert isinstance(dataset_filename, dict) or isinstance(dataset_filename, str), TypeError(
         'Invalid type for dataset! Must be either a path to the dataset or an arff file!'
     )
 
-    af = load_arff(dataset) if isinstance(dataset, str) else dataset
-    dataset = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
+    af = load_arff(dataset_filename) if isinstance(dataset_filename, str) else dataset_filename
+    df = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
 
-    return dataset
+    return df
 
 
 def generate_folds(dataset_path, output_folder, n_folds=10, random_state=None):

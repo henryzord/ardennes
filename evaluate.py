@@ -427,7 +427,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwargs):
+def __run__(full, train_set, config_file, val_set=None, test_set=None, random_state=None, **kwargs):
     t1 = dt.now()
 
     n_fold = int(kwargs['n_fold']) if 'n_fold' in kwargs else None  # kwargs
@@ -442,12 +442,12 @@ def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwar
 
     inst.fit(
         full=full,
-        train=train_i,
+        train_set=train_set,
         decile=config_file['decile'],
-        validation=val_i,  # kwargs
+        val_set=val_set,  # kwargs
         fold=n_fold,  # kwargs
         run=n_run,  # kwargs
-        test=test_i,  # kwargs
+        test_set=test_set,  # kwargs
         verbose=config_file['verbose'],  # kwargs
         random_state=random_state,  # kwargs
         n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
@@ -455,8 +455,8 @@ def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwar
     )
 
     ind = inst.predictor
-    y_test_pred = list(ind.predict(full.loc[test_i]))
-    y_test_true = list(full.loc[test_i, full.columns[-1]])
+    y_test_pred = list(ind.predict(full.loc[test_set]))
+    y_test_true = list(full.loc[test_set, full.columns[-1]])
 
     test_acc_score = accuracy_score(y_test_true, y_test_pred)
 
@@ -483,15 +483,26 @@ def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwar
     return ind.test_acc_score
 
 
-def __train__(
-        dataset_path, config_file, evaluation_mode='cross-validation',
-        fold_path=None, train_size=0.5, n_runs=10, n_jobs=8, **kwargs):
+def __train__(dataset_path, dataset_name, config_file):
+    """
+    Datasets must be presented in the following format:
 
-    assert evaluation_mode in ['cross-validation', 'holdout'], ValueError(
-        'evaluation_mode must be either \'cross-validation\' or \'holdout!\''
-    )
+    * A file containing all the instances. Example: lung_cancer_full.csv
+    * At least one file, to be used as training set. Example: lung_cancer_train.csv
+    * At least one file, to be used as testing set. Example: lung_cancer_test.csv
+
+    :param dataset_path: Path where the files are
+    :param dataset_name: Name of the dataset. Example: lung_cancer
+    :param config_file: A file with the EDA parameters
+    """
 
     def running(_processes):
+        """
+        Gets the number of running processes.
+
+        :param _processes: List of processes.
+        :return: Number of running processes.
+        """
         _sum = 0
         for _process in _processes:
             _sum += int(_process.is_alive())
@@ -509,6 +520,12 @@ def __train__(
             time.sleep(1)
 
     def create_dataset_path(_config_file):
+        """
+        Creates a folder for the current dataset in the output path.
+
+        :param _config_file: Configuration file. Must contain an field 'output_path' where metadata is to be stored.
+        :return: A new _config_file with output configured.
+        """
         output_path = _config_file['output_path']
 
         if output_path is not None:
@@ -520,19 +537,14 @@ def __train__(
 
         return _config_file
 
-    dataset_name = get_dataset_name(dataset_path)
-
-    full = load_dataframe(dataset_path)
+    files = [f.replace(dataset_name + '_', '').replace('.arff', '') for f in os.listdir(dataset_path)]
+    full = load_dataframe(os.path.join(dataset_path, dataset_name + '_full' + '.arff'))
     random_state = config_file['random_state']
-
-    folds = get_folds_index(dataset_name=dataset_name, fold_path=fold_path)
 
     print 'training ardennes for dataset %s' % dataset_name
 
-    if evaluation_mode == 'cross-validation':
-        assert 'folds_path' is not None, ValueError('Performing a cross-validation is only possible with a json '
-                                                    'file for folds! Provide it through the \'folds_path\' '
-                                                    'parameter in the configuration file!')
+    if 'train' not in files or 'test' not in files:
+        raise NotImplementedError('not implemented yet!')
 
         config_file = create_dataset_path(config_file)
         config_file['verbose'] = False
@@ -591,16 +603,13 @@ def __train__(
             }
 
     else:
-        config_file['output_path'] = None  # TODO remove once completed!
+        train_set = load_dataframe(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
+        test_set = load_dataframe(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
 
-        for n_run in xrange(n_runs):
-            test_i = folds[np.random.choice(folds.keys())]
-            data = list(set(full.index) - set(test_i))
-
-            train_i, val_i = __split__(data, train_size=train_size)
-
-            __run__(
-                train_i=train_i, val_i=val_i, test_i=test_i,
-                config_file=config_file,
-                random_state=random_state, full=full
-            )
+        __run__(
+            full=full,
+            train_set=train_set,
+            test_set=test_set,
+            config_file=config_file,
+            random_state=random_state,
+        )

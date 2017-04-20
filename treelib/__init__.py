@@ -32,6 +32,8 @@ class Ardennes(object):
 
     @staticmethod
     def __initialize_argsets__(dataset, train, val, test):
+        raise NotImplementedError('not implemented yet!')
+
         _arg_sets = dict()
 
         train_index = np.zeros(dataset.shape[0], dtype=np.bool)
@@ -58,25 +60,25 @@ class Ardennes(object):
         random.seed(random_state)
         np.random.seed(random_state)
 
-        dataset = kwargs['full'] if 'full' in kwargs else train
+        full = kwargs['full'] if 'full' in kwargs else train
         val = kwargs['validation'] if 'validation' in kwargs else train
         test = kwargs['test'] if 'test' in kwargs else train
 
-        arg_sets = self.__initialize_argsets__(dataset, train, val, test)
+        arg_sets = self.__initialize_argsets__(full, train, val, test)
 
-        dataset_info = MetaDataset(dataset)
+        dataset_info = MetaDataset(full)
 
-        mdevice = AvailableDevice(dataset, dataset_info)
+        mdevice = AvailableDevice(full, dataset_info)
 
         DecisionTree.set_values(
             arg_sets=arg_sets,
-            y_train_true=dataset.loc[arg_sets['train'], dataset_info.target_attr],
-            y_val_true=dataset.loc[arg_sets['val'], dataset_info.target_attr],
-            y_test_true=dataset.loc[test, dataset_info.target_attr] if test is not None else None,
+            y_train_true=full.loc[arg_sets['train'], dataset_info.target_attr],
+            y_val_true=full.loc[arg_sets['val'], dataset_info.target_attr],
+            y_test_true=full.loc[test, dataset_info.target_attr] if test is not None else None,
             processor=mdevice,
             dataset_info=dataset_info,
             max_height=self.D,
-            dataset=dataset,
+            full=full,
             mdevice=mdevice
         )
 
@@ -87,11 +89,11 @@ class Ardennes(object):
 
         return gm
 
-    def fit(self, train, decile, verbose=True, **kwargs):
+    def fit(self, train_set, decile, verbose=True, **kwargs):
         """
         Fits the algorithm to the provided data.
 
-        :param train: train set.
+        :param train_set: train set.
         :type decile: float
         :param decile: decile of individuals which will be used for inducing the graphical model.
         :type verbose: bool
@@ -112,14 +114,10 @@ class Ardennes(object):
         :param output_path: optional - path to output metadata.
         """
 
-        '''
-        output_path=config_file['output_path'] if 'output_path' in config_file else None,  # kwargs
-        '''
-
         assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(train=train, **kwargs)
+        gm = self.__setup__(train=train_set, **kwargs)
 
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
