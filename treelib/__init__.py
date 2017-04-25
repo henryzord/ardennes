@@ -1,5 +1,5 @@
 # coding=utf-8
-
+import copy
 import csv
 import os
 import random
@@ -10,6 +10,7 @@ from classes import type_check, value_check, MetaDataset
 from graphical_model import *
 from individual import Individual
 from device import AvailableDevice
+from preprocessing.dataset import load_dataframe
 from treelib.individual import DecisionTree
 import cPickle
 
@@ -17,6 +18,10 @@ __author__ = 'Henry Cagnini'
 
 
 class Ardennes(object):
+    val_str = 'val_arff'
+    train_str = 'train_arff'
+    test_str = 'test_arff'
+
     global_best = None  # TODO remove once problem with suboptimal individuals is solved
 
     def __init__(self, n_individuals, n_iterations, uncertainty=0.001, max_height=3):
@@ -31,18 +36,16 @@ class Ardennes(object):
         self.predictor = None
 
     @staticmethod
-    def __initialize_argsets__(dataset, train, val, test):
-        raise NotImplementedError('not implemented yet!')
-
+    def __initialize_argsets__(full, train, val, test):
         _arg_sets = dict()
 
-        train_index = np.zeros(dataset.shape[0], dtype=np.bool)
-        val_index = np.zeros(dataset.shape[0], dtype=np.bool)
-        test_index = np.zeros(dataset.shape[0], dtype=np.bool)
+        train_index = np.zeros(full.shape[0], dtype=np.bool)
+        val_index = np.zeros(full.shape[0], dtype=np.bool)
+        test_index = np.zeros(full.shape[0], dtype=np.bool)
 
-        train_index[train] = 1
-        val_index[val] = 1
-        test_index[test] = 1
+        train_index[train.index] = 1
+        val_index[val.index] = 1
+        test_index[test.index] = 1
 
         _arg_sets['train'] = train_index
         _arg_sets['val'] = val_index
@@ -50,7 +53,15 @@ class Ardennes(object):
 
         return _arg_sets
 
-    def __setup__(self, train, **kwargs):
+    def __setup__(self, train_arff, **kwargs):
+        """
+
+        :type train_set: pandas.DataFrame
+        :param train_set:
+        :param kwargs:
+        :return:
+        """
+
         if 'random_state' in kwargs and kwargs['random_state'] is not None:
             random_state = kwargs['random_state']
             warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
@@ -60,11 +71,28 @@ class Ardennes(object):
         random.seed(random_state)
         np.random.seed(random_state)
 
-        full = kwargs['full'] if 'full' in kwargs else train
-        val = kwargs['validation'] if 'validation' in kwargs else train
-        test = kwargs['test'] if 'test' in kwargs else train
+        train_set = load_dataframe(train_arff)
 
-        arg_sets = self.__initialize_argsets__(full, train, val, test)
+        train_set.reset_index(inplace=True)
+        full = copy.deepcopy(train_set)
+
+        if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
+            val_set = load_dataframe(kwargs[Ardennes.val_str])  # type: pd.DataFrame
+            val_set.reset_index(inplace=True)
+            val_set.index += full.index[-1] + 1
+            full = full.append(val_set, ignore_index=True)
+        else:
+            val_set = train_set  # type: pd.DataFrame
+
+        if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
+            test_set = load_dataframe(kwargs[Ardennes.test_str])  # type: pd.DataFrame
+            test_set.reset_index(inplace=True)
+            test_set.index += full.index[-1] + 1
+            full = full.append(test_set, ignore_index=True)
+        else:
+            test_set = train_set  # type: pd.DataFrame
+
+        arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
 
         dataset_info = MetaDataset(full)
 
@@ -74,11 +102,11 @@ class Ardennes(object):
             arg_sets=arg_sets,
             y_train_true=full.loc[arg_sets['train'], dataset_info.target_attr],
             y_val_true=full.loc[arg_sets['val'], dataset_info.target_attr],
-            y_test_true=full.loc[test, dataset_info.target_attr] if test is not None else None,
+            y_test_true=full.loc[arg_sets['test'], dataset_info.target_attr],
             processor=mdevice,
             dataset_info=dataset_info,
             max_height=self.D,
-            full=full,
+            dataset=full,
             mdevice=mdevice
         )
 
@@ -89,35 +117,15 @@ class Ardennes(object):
 
         return gm
 
-    def fit(self, train_set, decile, verbose=True, **kwargs):
+    def fit(self, train_arff, decile, verbose=True, **kwargs):
         """
         Fits the algorithm to the provided data.
-
-        :param train_set: train set.
-        :type decile: float
-        :param decile: decile of individuals which will be used for inducing the graphical model.
-        :type verbose: bool
-        :param verbose: optional - whether to print metadata to console.
-        :param full: optional - full dataset. Will use train if not provided.
-        :param validation: optional - Validation set.
-        :param test: optional - test set.
-        :type fold: int
-        :param fold: optional - current fold.
-        :type run: int
-        :param run: optional - current run.
-        :type random_state: int
-        :param random_state: optional - random seed, which affects values sampled in the graphical model.
-        :type n_stop: int
-        :param n_stop: optional - maximum number of generations with the same best individual unchanged. Upon reaching
-            this value the evolutionary procedure will stop.
-        :type output_path: str
-        :param output_path: optional - path to output metadata.
         """
 
         assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(train=train_set, **kwargs)
+        gm = self.__setup__(train_arff=train_arff, **kwargs)
 
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
@@ -241,7 +249,7 @@ class Ardennes(object):
             ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
         if output_path is not None:
-            evo_file = os.path.join(output_path, dataset_name + '_evo_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
+            evo_file = os.path.join(output_path, dataset_name + '_evo_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))  # TODO supply n_fold, n_run or set it as something else!
             pgm_file = os.path.join(output_path, dataset_name + '_pgm_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
 
             with open(pgm_file, 'a') as f:

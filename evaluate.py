@@ -28,7 +28,7 @@ from datetime import datetime as dt
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 from multiprocessing import Process, Manager
-from preprocessing.dataset import load_dataframe, get_folds_index
+from preprocessing.dataset import load_dataframe, get_folds_index, load_arff
 
 __author__ = 'Henry Cagnini'
 
@@ -427,7 +427,7 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(full, train_set, config_file, val_set=None, test_set=None, random_state=None, **kwargs):
+def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state=None, **kwargs):
     t1 = dt.now()
 
     n_fold = int(kwargs['n_fold']) if 'n_fold' in kwargs else None  # kwargs
@@ -441,13 +441,12 @@ def __run__(full, train_set, config_file, val_set=None, test_set=None, random_st
     )
 
     inst.fit(
-        full=full,
-        train_set=train_set,
+        train_arff=train_arff,
         decile=config_file['decile'],
-        val_set=val_set,  # kwargs
+        val_arff=val_arff,  # kwargs
         fold=n_fold,  # kwargs
         run=n_run,  # kwargs
-        test_set=test_set,  # kwargs
+        test_arff=test_arff,  # kwargs
         verbose=config_file['verbose'],  # kwargs
         random_state=random_state,  # kwargs
         n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
@@ -455,8 +454,8 @@ def __run__(full, train_set, config_file, val_set=None, test_set=None, random_st
     )
 
     ind = inst.predictor
-    y_test_pred = list(ind.predict(full.loc[test_set]))
-    y_test_true = list(full.loc[test_set, full.columns[-1]])
+    y_test_pred = list(ind.predict(full.loc[test_arff]))
+    y_test_true = list(full.loc[test_arff, full.columns[-1]])
 
     test_acc_score = accuracy_score(y_test_true, y_test_pred)
 
@@ -538,7 +537,6 @@ def __train__(dataset_path, dataset_name, config_file):
         return _config_file
 
     files = [f.replace(dataset_name + '_', '').replace('.arff', '') for f in os.listdir(dataset_path)]
-    full = load_dataframe(os.path.join(dataset_path, dataset_name + '_full' + '.arff'))
     random_state = config_file['random_state']
 
     print 'training ardennes for dataset %s' % dataset_name
@@ -603,13 +601,12 @@ def __train__(dataset_path, dataset_name, config_file):
             }
 
     else:
-        train_set = load_dataframe(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
-        test_set = load_dataframe(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
+        train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
+        test_arff = load_arff(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
 
         __run__(
-            full=full,
-            train_set=train_set,
-            test_set=test_set,
+            train_arff=train_arff,
+            test_arff=test_arff,
             config_file=config_file,
             random_state=random_state,
         )

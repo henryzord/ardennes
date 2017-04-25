@@ -29,7 +29,6 @@ class CLDevice(Device):
         self._func_gain_ratio = self.prg.gain_ratio
         self._func_predict = self.prg.predict
 
-
     def get_gain_ratios(self, subset_index, attribute, candidates):
         n_candidates = candidates.shape[0]
         candidates = candidates.astype(np.float32)

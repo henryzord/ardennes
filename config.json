@@ -6,6 +6,5 @@
   "n_stop": 10,
   "tree_height": 9,
   "uncertainty": 0.001,
-  "verbose": true,
-  "output_path": "metadata"
+  "verbose": true
 }

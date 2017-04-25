@@ -21,15 +21,15 @@ If you find this code useful in your work, please cite it:
 ```
 
 ## Capabilities
-* Datasets with numerical predictive attributes
-* Categorical class attributes
-* Multiclass and binary problems
-* More types of datasets will be added in next iterations of the algorithm
+* Datasets with numerical predictive attributes;
+* Categorical class attributes;
+* Multiclass and binary problems;
+* More types of datasets will be added in next updates.
 
 ## Limitations
 
 This algorithm will only work:
-* for datasets with class at the last attribute;
+* **for datasets with class as the last attribute**;
 * for datasets with numerical predictive attributes, and categorical class attribute;
 * only binary splits;
 * Tested only on Ubuntu 16.04, but will probably work in any other SO once you figure out the corresponding libraries described in [Installation]().

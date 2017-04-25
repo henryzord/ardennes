@@ -9,6 +9,8 @@ import weka.core.jvm as jvm
 from sklearn.model_selection import StratifiedKFold
 from weka.core.converters import Loader, Saver
 
+from treelib import MetaDataset
+
 __author__ = 'Henry Cagnini'
 
 
@@ -28,22 +30,24 @@ def load_arff(dataset_path):
     return af
 
 
-def load_dataframe(dataset_filename):
-    """
-    Given either a dictionary or a path to a .arff file, returns a dataset as a pandas.DataFrame.
+def load_dataframe(af):
+    assert isinstance(af, dict), TypeError('You must pass a dictionary comprising an arff dataset to this function!')
+    import numpy as np
 
-    :type dataset_filename: str or dict
-    :param dataset_filename: Either a path to the dataset with the file extension, or an arff file (i.e "my_dataset.arff")
-    :return: a DataFrame with the dataset.
-    :rtype: pandas.DataFrame
-    """
-
-    assert isinstance(dataset_filename, dict) or isinstance(dataset_filename, str), TypeError(
-        'Invalid type for dataset! Must be either a path to the dataset or an arff file!'
+    df = pd.DataFrame(
+        data=af['data'],
+        columns=[x[0] for x in af['attributes']]
     )
+    # df = df.replace('?', df.replace(['?'], [None]))  # replaces missing data with None
+    df = df.replace('?', np.nan)
 
-    af = load_arff(dataset_filename) if isinstance(dataset_filename, str) else dataset_filename
-    df = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
+    for attr, dtype in af['attributes']:
+        if isinstance(dtype, list):
+            pass
+        elif MetaDataset.arff_data_types[dtype.lower()] == MetaDataset.numerical.lower():
+            df[attr] = pd.to_numeric(df[attr])
+        elif dtype == MetaDataset.categorical:
+            df[attr].dtype = np.object
 
     return df
 

@@ -83,6 +83,12 @@ class MetaDataset(object):
         mid = self.mid_type_dict[raw_type]
         return mid
 
+    arff_type_dict = {
+        'numeric': 'float',
+        'real': 'float',
+        'continuous': 'float',
+    }
+
     raw_type_dict = {
         'int': 'int',
         'int_': 'int',
@@ -117,3 +123,15 @@ class MetaDataset(object):
         'float': 'numerical',
         'bool': 'categorical'
     }
+
+    arff_data_types = {
+        'date': 'numerical',
+        'string': 'categorical',
+        'integer': 'numerical',
+        'numeric': 'numerical',
+        'continuous': 'numerical',
+        'real': 'numerical'
+    }
+
+    numerical = 'numerical'
+    categorical = 'categorical'
