@@ -6,6 +6,8 @@ import random
 import warnings
 from datetime import datetime as dt
 
+from sklearn.metrics import accuracy_score
+
 from classes import type_check, value_check, MetaDataset
 from graphical_model import *
 from individual import Individual
@@ -72,22 +74,18 @@ class Ardennes(object):
         np.random.seed(random_state)
 
         train_set = load_dataframe(train_arff)
-
-        train_set.reset_index(inplace=True)
         full = copy.deepcopy(train_set)
 
         if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
             val_set = load_dataframe(kwargs[Ardennes.val_str])  # type: pd.DataFrame
-            val_set.reset_index(inplace=True)
-            val_set.index += full.index[-1] + 1
+            val_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + val_set.shape[0], 1)
             full = full.append(val_set, ignore_index=True)
         else:
             val_set = train_set  # type: pd.DataFrame
 
         if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
             test_set = load_dataframe(kwargs[Ardennes.test_str])  # type: pd.DataFrame
-            test_set.reset_index(inplace=True)
-            test_set.index += full.index[-1] + 1
+            test_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + test_set.shape[0], 1)
             full = full.append(test_set, ignore_index=True)
         else:
             test_set = train_set  # type: pd.DataFrame
@@ -146,6 +144,12 @@ class Ardennes(object):
 
             gm.update(fittest_pop)
 
+            # TODO testing!
+            # warnings.warn('WARNING: testing and dangerous new ideas!')
+            # best_individual = self.get_best_individual(population)
+            # DecisionTree.max_height = best_individual.height
+            # TODO testing!
+
             t2 = dt.now()
             self.__report__(
                 iteration=iteration,
@@ -185,8 +189,8 @@ class Ardennes(object):
         population.flat[to_replace_index] = func(
             ind_id=to_replace_index, gm=gm, iteration=iteration
         )
-        population.sort()
-        population = population[::-1]
+        population.sort()  # sorts using quicksort, worst individual to best
+        population = population[::-1]  # reverses list so the best individual is in the beginning
 
         fitness = np.array([x.fitness for x in population])
 
@@ -293,3 +297,8 @@ class Ardennes(object):
     @staticmethod
     def __early_stop__(population):
         return population.min() == population.max()
+
+    def predict(self, test_arff):
+        test_set = load_dataframe(test_arff)
+        y_test_pred = list(self.predictor.predict(test_set))
+        return y_test_pred

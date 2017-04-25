@@ -75,4 +75,11 @@ class GraphicalModel(object):
         self.attributes = self.attributes.apply(local_update, axis=0)
 
     def observe(self, node_id, evidence=None):
+        """
+        Makes observations about a given variable.
+
+        :param node_id: ID of the node (i.e. variable) being observed.
+        :param evidence: optional - evidence used for observing the variable. May be None if the variable is independent.
+        :return: Observation of the variable, which is a value sampled from the variable's distribution.
+        """
         return np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])

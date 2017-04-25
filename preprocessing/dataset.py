@@ -31,6 +31,14 @@ def load_arff(dataset_path):
 
 
 def load_dataframe(af):
+    """
+
+    :type af: dict
+    :param af: Arff dataset.
+    :rtype: pandas.DataFrame
+    :return: a DataFrame with the dataset.
+    """
+
     assert isinstance(af, dict), TypeError('You must pass a dictionary comprising an arff dataset to this function!')
     import numpy as np
 

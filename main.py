@@ -37,7 +37,7 @@ if __name__ == '__main__':
     # )
     # # --------------------------------------------------- #
     __train__(
-        dataset_path='datasets/gene expression/Breast Cancer',
-        dataset_name='breastCancer',
+        # dataset_path='datasets/gene expression/Breast Cancer',
+        dataset_path='datasets/numerical/iris',
         config_file=_config_file
     )

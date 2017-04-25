@@ -454,8 +454,8 @@ def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state
     )
 
     ind = inst.predictor
-    y_test_pred = list(ind.predict(full.loc[test_arff]))
-    y_test_true = list(full.loc[test_arff, full.columns[-1]])
+    y_test_pred = inst.predict(test_arff)
+    y_test_true = [x[-1] for x in test_arff['data']]
 
     test_acc_score = accuracy_score(y_test_true, y_test_pred)
 
@@ -482,19 +482,7 @@ def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state
     return ind.test_acc_score
 
 
-def __train__(dataset_path, dataset_name, config_file):
-    """
-    Datasets must be presented in the following format:
-
-    * A file containing all the instances. Example: lung_cancer_full.csv
-    * At least one file, to be used as training set. Example: lung_cancer_train.csv
-    * At least one file, to be used as testing set. Example: lung_cancer_test.csv
-
-    :param dataset_path: Path where the files are
-    :param dataset_name: Name of the dataset. Example: lung_cancer
-    :param config_file: A file with the EDA parameters
-    """
-
+def __train__(dataset_path, config_file):
     def running(_processes):
         """
         Gets the number of running processes.
@@ -535,6 +523,8 @@ def __train__(dataset_path, dataset_name, config_file):
             os.mkdir(dataset_output_path)
 
         return _config_file
+
+    dataset_name = dataset_path.split('/')[-1]
 
     files = [f.replace(dataset_name + '_', '').replace('.arff', '') for f in os.listdir(dataset_path)]
     random_state = config_file['random_state']

@@ -176,7 +176,7 @@ class DecisionTree(object):
             if level >= DecisionTree.max_height:
                 label = DecisionTree.dataset_info.target_attr
             else:
-                raise ke
+                raise KeyError('Node %s not in graphical model!' % ke.message)
 
         '''
         if the current node has only one class,
