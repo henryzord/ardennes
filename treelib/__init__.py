@@ -144,12 +144,6 @@ class Ardennes(object):
 
             gm.update(fittest_pop)
 
-            # TODO testing!
-            # warnings.warn('WARNING: testing and dangerous new ideas!')
-            # best_individual = self.get_best_individual(population)
-            # DecisionTree.max_height = best_individual.height
-            # TODO testing!
-
             t2 = dt.now()
             self.__report__(
                 iteration=iteration,
