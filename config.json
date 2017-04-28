@@ -1,6 +1,6 @@
 {
   "random_state": null,
-  "n_individuals": 200,
+  "n_individuals": 1000,
   "n_iterations": 100,
   "decile": 0.5,
   "n_stop": 10,
