@@ -20,9 +20,9 @@ __author__ = 'Henry Cagnini'
 
 
 class Ardennes(object):
-    val_str = 'val_arff'
-    train_str = 'train_arff'
-    test_str = 'test_arff'
+    val_str = 'val_df'
+    train_str = 'train_df'
+    test_str = 'test_df'
 
     global_best = None  # TODO remove once problem with suboptimal individuals is solved
 
@@ -55,7 +55,7 @@ class Ardennes(object):
 
         return _arg_sets
 
-    def __setup__(self, train_arff, **kwargs):
+    def __setup__(self, train_set, **kwargs):
         """
 
         :type train_set: pandas.DataFrame
@@ -73,18 +73,17 @@ class Ardennes(object):
         random.seed(random_state)
         np.random.seed(random_state)
 
-        train_set = load_dataframe(train_arff)
         full = copy.deepcopy(train_set)
 
         if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
-            val_set = load_dataframe(kwargs[Ardennes.val_str])  # type: pd.DataFrame
+            val_set = kwargs[Ardennes.val_str]
             val_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + val_set.shape[0], 1)
             full = full.append(val_set, ignore_index=True)
         else:
             val_set = train_set  # type: pd.DataFrame
 
         if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
-            test_set = load_dataframe(kwargs[Ardennes.test_str])  # type: pd.DataFrame
+            test_set = kwargs[Ardennes.test_str]
             test_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + test_set.shape[0], 1)
             full = full.append(test_set, ignore_index=True)
         else:
@@ -115,7 +114,7 @@ class Ardennes(object):
 
         return gm
 
-    def fit(self, train_arff, decile, verbose=True, **kwargs):
+    def fit(self, train_df, decile, verbose=True, **kwargs):
         """
         Fits the algorithm to the provided data.
         """
@@ -123,7 +122,7 @@ class Ardennes(object):
         assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(train_arff=train_arff, **kwargs)
+        gm = self.__setup__(train_set=train_df, **kwargs)
 
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
@@ -297,7 +296,6 @@ class Ardennes(object):
     def __early_stop__(population):
         return population.min() == population.max()
 
-    def predict(self, test_arff):
-        test_set = load_dataframe(test_arff)
+    def predict(self, test_set):
         y_test_pred = list(self.predictor.predict(test_set))
         return y_test_pred

@@ -19,7 +19,6 @@ import itertools as it
 
 from sklearn.metrics import accuracy_score
 
-from preprocessing import __split__, get_dataset_name
 from treelib.node import *
 from treelib import Ardennes
 
@@ -28,7 +27,7 @@ from datetime import datetime as dt
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 from multiprocessing import Process, Manager
-from preprocessing.dataset import load_dataframe, get_folds_index, load_arff
+from preprocessing.dataset import load_dataframe, load_arff
 
 __author__ = 'Henry Cagnini'
 
@@ -230,7 +229,7 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
                 config_file['output_path'] = dataset_output_path
             try:
                 dt_dict = __train__(
-                    config_file=config_file,
+                    kwargs=config_file,
                     evaluation_mode=validation_mode,
                     n_run=n_run
                 )
@@ -427,11 +426,8 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state=None, **kwargs):
+def __run__(train_df, config_file, test_df=None, random_state=None, **kwargs):
     t1 = dt.now()
-
-    n_fold = int(kwargs['n_fold']) if 'n_fold' in kwargs else None  # kwargs
-    n_run = int(kwargs['n_run']) if 'n_run' in kwargs else None  # kwargs
 
     inst = Ardennes(
         n_individuals=config_file['n_individuals'],
@@ -441,12 +437,9 @@ def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state
     )
 
     inst.fit(
-        train_arff=train_arff,
+        train_df=train_df,
         decile=config_file['decile'],
-        val_arff=val_arff,  # kwargs
-        fold=n_fold,  # kwargs
-        run=n_run,  # kwargs
-        test_arff=test_arff,  # kwargs
+        test_df=test_df,  # kwargs
         verbose=config_file['verbose'],  # kwargs
         random_state=random_state,  # kwargs
         n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
@@ -454,8 +447,8 @@ def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state
     )
 
     ind = inst.predictor
-    y_test_pred = inst.predict(test_arff)
-    y_test_true = [x[-1] for x in test_arff['data']]
+    y_test_pred = inst.predict(test_df[test_df.columns[:-1]])
+    y_test_true = test_df[test_df.columns[-1]]
 
     test_acc_score = accuracy_score(y_test_true, y_test_pred)
 
@@ -482,7 +475,7 @@ def __run__(train_arff, config_file, val_arff=None, test_arff=None, random_state
     return ind.test_acc_score
 
 
-def __train__(dataset_path, config_file):
+def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
     def running(_processes):
         """
         Gets the number of running processes.
@@ -524,18 +517,34 @@ def __train__(dataset_path, config_file):
 
         return _config_file
 
-    dataset_name = dataset_path.split('/')[-1]
+    if os.name == 'nt':  # if on windows
+        sep = '\\'
+    else:  # else on linux, mac
+        sep = '/'
+    dataset_name = dataset_path.split(sep)[-1]
 
-    files = [f.replace(dataset_name + '_', '').replace('.arff', '') for f in os.listdir(dataset_path)]
-    random_state = config_file['random_state']
+    files = [
+        f.replace(dataset_name + '_', '').replace('.arff', '')
+        for f in os.listdir(dataset_path) if os.path.isfile(os.path.join(dataset_path, f))
+    ]  # list only files in the given folder
 
     print 'training ardennes for dataset %s' % dataset_name
 
     if 'train' not in files or 'test' not in files:
-        raise NotImplementedError('not implemented yet!')
-
-        config_file = create_dataset_path(config_file)
-        config_file['verbose'] = False
+        # list of folds, as arff files
+        arffs = [load_arff(os.path.join(dataset_path, dataset_name + '_' + f + '.arff')) for f in files]
+        dfs = [  # list of folds, as pandas dataframes
+            load_dataframe(
+                f,
+                index=pd.RangeIndex(
+                    i * len(f['data']),  # start index
+                    (i + 1) * len(f['data']),  # stop index
+                    1  # step
+                )
+            )
+            for i, f in enumerate(arffs)
+        ]
+        full_df = reduce(lambda x, y: x.append(y), dfs)  # type: pd.DataFrame
 
         for n_run in xrange(n_runs):
             manager = Manager()
@@ -543,17 +552,14 @@ def __train__(dataset_path, config_file):
 
             processes = []
 
-            for n_fold, test_i in folds.iteritems():
-                data = list(set(full.index) - set(test_i))
-
-                train_i, val_i = __split__(data, train_size=train_size)
-
+            for fold in dfs:
                 p = Process(
                     target=__run__, kwargs=dict(
-                        n_fold=n_fold, n_run=n_run,
-                        train_i=train_i, val_i=val_i, test_i=test_i,
-                        config_file=config_file, dict_manager=dict_manager,
-                        random_state=random_state, full=full
+                        train_df=full_df.drop(fold.index).reset_index(drop=True),
+                        test_df=fold.reset_index(drop=True),
+                        config_file=kwargs,
+                        dict_manager=dict_manager,
+                        random_state=random_state
                     )
                 )
                 block(processes, n_jobs)
@@ -563,6 +569,7 @@ def __train__(dataset_path, config_file):
             for p in processes:
                 p.join()
 
+            raise NotImplementedError('not implemented yet!')
             dict_results = dict(dict_manager)
 
             true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
@@ -590,13 +597,16 @@ def __train__(dataset_path, config_file):
                 'n_nodes': n_nodes
             }
 
-    else:
+    else:  # for training with train and test folds
         train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
         test_arff = load_arff(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
 
+        train_df = load_dataframe(train_arff)
+        test_df = load_dataframe(test_arff)
+
         __run__(
-            train_arff=train_arff,
-            test_arff=test_arff,
-            config_file=config_file,
+            train_df=train_df,
+            test_df=test_df,
+            config_file=kwargs,
             random_state=random_state,
         )

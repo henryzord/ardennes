@@ -14,6 +14,23 @@ from treelib import MetaDataset
 __author__ = 'Henry Cagnini'
 
 
+def join_arff(a, b):
+    """
+    Joins two arff files.
+
+    :type a: dict
+    :param a: First arff file.
+    type b: dict
+    :param b: Second arff file.
+    :rtype: dict
+    :return: The junction of the two files.
+    """
+
+    c = a
+    c['data'] += b['data']
+    return c
+
+
 def load_arff(dataset_path):
     """
     Given a path to a dataset, reads and returns a dictionary which comprises an arff file.
@@ -30,11 +47,13 @@ def load_arff(dataset_path):
     return af
 
 
-def load_dataframe(af):
+def load_dataframe(af, index=None):
     """
 
     :type af: dict
     :param af: Arff dataset.
+    :type index: pandas.RangeIndex
+    :param index: optional - custom index to use in the dataframe. Defaults to [0, length]
     :rtype: pandas.DataFrame
     :return: a DataFrame with the dataset.
     """
@@ -44,9 +63,10 @@ def load_dataframe(af):
 
     df = pd.DataFrame(
         data=af['data'],
-        columns=[x[0] for x in af['attributes']]
+        columns=[x[0] for x in af['attributes']],
+        index=index
     )
-    # df = df.replace('?', df.replace(['?'], [None]))  # replaces missing data with None
+
     df = df.replace('?', np.nan)
 
     for attr, dtype in af['attributes']:
