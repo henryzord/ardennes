@@ -28,6 +28,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 from multiprocessing import Process, Manager
 from preprocessing.dataset import load_dataframe, load_arff
+from treelib.utils import DatabaseHandler
 
 __author__ = 'Henry Cagnini'
 
@@ -442,8 +443,7 @@ def __run__(train_df, config_file, test_df=None, random_state=None, **kwargs):
         test_df=test_df,  # kwargs
         verbose=config_file['verbose'],  # kwargs
         random_state=random_state,  # kwargs
-        n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
-        output_path=config_file['output_path'] if 'output_path' in config_file else None,  # kwargs
+        dbhandler=kwargs['dbhandler'] if 'dbhandler' in kwargs else None,  # kwargs
     )
 
     ind = inst.predictor
@@ -454,28 +454,31 @@ def __run__(train_df, config_file, test_df=None, random_state=None, **kwargs):
 
     t2 = dt.now()
 
-    if 'dict_manager' in kwargs:
-        print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
-            n_run, n_fold, int(test_acc_score * len(y_test_true)), len(y_test_true),
-            ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-        )
-        res = dict(
-            y_test_pred=y_test_pred,
-            y_test_true=y_test_true,
-            height=ind.height,
-            n_nodes=ind.n_nodes
-        )
+    raise NotImplementedError('not implemented yet!')
 
-        kwargs['dict_manager'][n_fold] = res
-    else:
-        print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
-            test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-        )
+    # if 'dict_manager' in kwargs:
+    #     print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
+    #         n_run, n_fold, int(test_acc_score * len(y_test_true)), len(y_test_true),
+    #         ind.height, ind.n_nodes, (t2 - t1).total_seconds()
+    #     )
+    #     res = dict(
+    #         y_test_pred=y_test_pred,
+    #         y_test_true=y_test_true,
+    #         height=ind.height,
+    #         n_nodes=ind.n_nodes
+    #     )
+    #
+    #     kwargs['dict_manager'][n_fold] = res
+    # else:
+    #     print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
+    #         test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
+    #     )
+    #
+    return test_acc_score
 
-    return ind.test_acc_score
 
-
-def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
+# noinspection SqlNoDataSourceInspection
+def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, output_path=None, **kwargs):
     def running(_processes):
         """
         Gets the number of running processes.
@@ -499,24 +502,6 @@ def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
         while running(_processes) >= _n_jobs:
             time.sleep(1)
 
-    def create_dataset_path(_config_file):
-        """
-        Creates a folder for the current dataset in the output path.
-
-        :param _config_file: Configuration file. Must contain an field 'output_path' where metadata is to be stored.
-        :return: A new _config_file with output configured.
-        """
-        output_path = _config_file['output_path']
-
-        if output_path is not None:
-            dataset_output_path = os.path.join(output_path, dataset_name)
-            _config_file['output_path'] = dataset_output_path
-            if os.path.exists(dataset_output_path):
-                shutil.rmtree(dataset_output_path)
-            os.mkdir(dataset_output_path)
-
-        return _config_file
-
     if os.name == 'nt':  # if on windows
         sep = '\\'
     else:  # else on linux, mac
@@ -530,7 +515,15 @@ def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
 
     print 'training ardennes for dataset %s' % dataset_name
 
+    dbhandler = None
+
     if 'train' not in files or 'test' not in files:
+        if output_path is not None:
+            dbhandler = DatabaseHandler(
+                path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
+                tree_height=tree_height
+            )
+
         # list of folds, as arff files
         arffs = [load_arff(os.path.join(dataset_path, dataset_name + '_' + f + '.arff')) for f in files]
         dfs = [  # list of folds, as pandas dataframes
@@ -559,7 +552,8 @@ def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
                         test_df=fold.reset_index(drop=True),
                         config_file=kwargs,
                         dict_manager=dict_manager,
-                        random_state=random_state
+                        random_state=random_state,
+                        dbhandler=dbhandler
                     )
                 )
                 block(processes, n_jobs)
@@ -598,6 +592,12 @@ def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
             }
 
     else:  # for training with train and test folds
+        if output_path is not None:
+            dbhandler = DatabaseHandler(
+                path=os.path.join(output_path, dataset_name + ' holdout ' + str(dt.now()) + '.db'),
+                tree_height=tree_height
+            )
+
         train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
         test_arff = load_arff(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
 
@@ -609,4 +609,5 @@ def __train__(dataset_path, random_state=None, n_runs=10, n_jobs=8, **kwargs):
             test_df=test_df,
             config_file=kwargs,
             random_state=random_state,
+            dbhandler=dbhandler
         )

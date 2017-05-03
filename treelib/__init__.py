@@ -1,4 +1,5 @@
 # coding=utf-8
+import cPickle
 import copy
 import csv
 import os
@@ -6,15 +7,11 @@ import random
 import warnings
 from datetime import datetime as dt
 
-from sklearn.metrics import accuracy_score
-
-from classes import type_check, value_check, MetaDataset
+from device import AvailableDevice
 from graphical_model import *
 from individual import Individual
-from device import AvailableDevice
-from preprocessing.dataset import load_dataframe
 from treelib.individual import DecisionTree
-import cPickle
+from utils import MetaDataset
 
 __author__ = 'Henry Cagnini'
 
@@ -239,8 +236,7 @@ class Ardennes(object):
         # optional data
         n_run = None if 'run' not in kwargs else kwargs['run']
         n_fold = None if 'fold' not in kwargs else kwargs['fold']
-        output_path = None if 'output_path' not in kwargs else kwargs['output_path']
-        dataset_name = output_path.split(sep)[-1] if output_path is not None else None
+        dbhandler = None if 'dbhandler' not in kwargs else kwargs['dbhandler']
 
         if verbose:
             mean = np.mean(fitness)  # type: float
@@ -250,9 +246,8 @@ class Ardennes(object):
                 iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
             ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
-        if output_path is not None:
-            evo_file = os.path.join(output_path, dataset_name + '_evo_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))  # TODO supply n_fold, n_run or set it as something else!
-            pgm_file = os.path.join(output_path, dataset_name + '_pgm_fold_%03.d_run_%03.d.csv' % (n_fold, n_run))
+        if dbhandler is not None:
+            # TODO write to database!
 
             with open(pgm_file, 'a') as f:
                 csv_w = csv.writer(f, delimiter=',', quotechar='\"')

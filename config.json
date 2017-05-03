@@ -3,10 +3,10 @@
   "n_individuals": 100,
   "n_iterations": 100,
   "decile": 0.5,
-  "n_stop": 10,
   "tree_height": 9,
   "uncertainty": 0.001,
   "verbose": true,
   "save": true,
-  "n_runs": 1
+  "n_runs": 1,
+  "output_path": "metadata"
 }

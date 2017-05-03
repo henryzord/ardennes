@@ -24,7 +24,7 @@ def __test_gain_ratio__():
 
     subset_index = np.random.randint(2, size=df.shape[0])  # only a subset
 
-    from treelib.classes import MetaDataset
+    from treelib.utils import MetaDataset
     dataset_info = MetaDataset(df)
 
     processor = Processor(df, dataset_info)

@@ -1,35 +1,50 @@
 # coding=utf-8
 
 import numpy as np
+import sqlite3
+
+from treelib import get_total_nodes
 
 __author__ = 'Henry Cagnini'
 
 
-def type_check(var, val):
-    """
-    Checks the type of var (i.e, checks if var is in val). Raises an exception otherwise.
-    """
-    if type(var) not in val:
-        raise TypeError('Variable %s must have one of the following types: %s' % (var, str(val)))
+# noinspection SqlNoDataSourceInspection
+# noinspection SqlDialectInspection
+class DatabaseHandler(object):
+    def __init__(self, path, tree_height):
+        conn = sqlite3.connect(path)
 
+        cursor = conn.cursor()
+        cursor.execute("""
+          CREATE TABLE POPULATION (
+            individual INTEGER NOT NULL,
+            iteration INTEGER NOT NULL,
+            fold INTEGER NOT NULL,
+            fitness REAL NOT NULL,
+            height INTEGER NOT NULL,
+            n_nodes INTEGER NOT NULL,
+            train_correct INTEGER NOT NULL,
+            val_correct INTEGER DEFAULT NULL,
+            test_correct INTEGER DEFAULT NULL,
+            PRIMARY KEY (fold, iteration, individual)
+          )
+        """)
 
-def value_check(var, val):
-    """
-    Checks the value of var (i.e, checks if var is in val). Raises an exception otherwise.
-    """
-    if var not in val:
-        raise ValueError('Variable %s must have one of the following values: %s' % (var, str(val)))
+        n_variables = get_total_nodes(tree_height - 2)  # since the probability of generating the class at D is 100%
 
+        _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
-class SetterClass(object):
-    def __init__(self, **kwargs):
-        for k, v in kwargs.iteritems():
-            setattr(self, k, v)
+        cursor.execute("""
+          CREATE TABLE PROTOTYPE (
+            iteration INTEGER NOT NULL,
+            fold INTEGER NOT NULL,
+            %s
+            PRIMARY KEY (fold, iteration)
+           )
+         """ % _prototype_columns)
 
-    @classmethod
-    def set_class_values(cls, **kwargs):
-        for k, v in kwargs.iteritems():
-            setattr(cls, k, v)
+        cursor.close()
+        conn.close()
 
 
 class MetaDataset(object):
