@@ -144,10 +144,11 @@ class Ardennes(object):
 
             to_replace_index, fittest_pop = self.split_population(decile, population)
 
-            warnings.warn('WARNING: testing new ideas!')
-            best_individual = self.get_best_individual(population)
-            DecisionTree.max_height = best_individual.height  # TODO not working! trees are being generated with bigger heights!
-            warnings.warn('WARNING: testing new ideas!')
+            # TODO use only when in mtst!
+            # warnings.warn('WARNING: testing new ideas!')
+            # best_individual = self.get_best_individual(population)
+            # DecisionTree.max_height = best_individual.height
+            # warnings.warn('WARNING: testing new ideas!')
 
             gm.update(fittest_pop)
 

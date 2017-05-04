@@ -443,7 +443,7 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
         test_df=test_df,  # kwargs
         verbose=kwargs['verbose'],  # kwargs
         random_state=random_state,  # kwargs
-        dbhandler=kwargs['dbhandler'] if 'dbhandler' in kwargs else None,  # kwargs
+        dbhandler=kwargs['dbhandler'] if 'dbhandler' in kwargs else None  # kwargs
     )
 
     ind = inst.predictor
@@ -454,30 +454,13 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
 
     t2 = dt.now()
 
-    warnings.warn('WARNING: capture data from sqlite!')
+    print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
+        test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
+    )
 
-    # if 'dict_manager' in kwargs:
-    #     print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
-    #         n_run, n_fold, int(test_acc_score * len(y_test_true)), len(y_test_true),
-    #         ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-    #     )
-    #     res = dict(
-    #         y_test_pred=y_test_pred,
-    #         y_test_true=y_test_true,
-    #         height=ind.height,
-    #         n_nodes=ind.n_nodes
-    #     )
-    #
-    #     kwargs['dict_manager'][n_fold] = res
-    # else:
-    #     print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
-    #         test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-    #     )
-    #
     return test_acc_score
 
 
-# noinspection SqlNoDataSourceInspection
 def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, output_path=None, **kwargs):
     def running(_processes):
         """
@@ -613,6 +596,8 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             dbhandler=dbhandler,
             **kwargs
         )
+
+        dbhandler.plot_population()
 
     if not dbhandler.closed:
         dbhandler.close()

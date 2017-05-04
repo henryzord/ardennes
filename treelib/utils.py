@@ -4,6 +4,7 @@ import numpy as np
 import sqlite3
 
 from treelib import get_total_nodes
+from matplotlib import pyplot as plt
 
 __author__ = 'Henry Cagnini'
 
@@ -17,12 +18,17 @@ class DatabaseHandler(object):
         cursor = None
         try:
             # TODO create table for dataset! fulfill with metadataset data!
-
             self.conn = sqlite3.connect(path)
             cursor = self.conn.cursor()
 
+            # TODO check if table exists!
+
+            # cursor.execute("""
+            #   CREATE TABLE DATASET
+            # """)
+
             cursor.execute("""
-              CREATE TABLE POPULATION (
+              CREATE TABLE IF NOT EXISTS POPULATION (
                 individual INTEGER NOT NULL,
                 iteration INTEGER NOT NULL,
                 fold INTEGER NOT NULL,
@@ -42,7 +48,7 @@ class DatabaseHandler(object):
             _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
             cursor.execute("""
-              CREATE TABLE PROTOTYPE (
+              CREATE TABLE IF NOT EXISTS PROTOTYPE (
                 iteration INTEGER NOT NULL,
                 fold INTEGER NOT NULL,
                 %s
@@ -109,6 +115,44 @@ class DatabaseHandler(object):
         finally:
             if cursor is not None:
                 cursor.close()
+
+    def plot_population(self):
+        plt.figure()
+        ax = plt.subplot(111)
+
+        cursor = self.conn.cursor()
+
+        cursor.execute("""SELECT DISTINCT(ITERATION) FROM POPULATION ORDER BY ITERATION ASC;""")
+        n_iterations = cursor.fetchall()
+
+        medians = []
+        means = []
+        maxes = []
+        mins = []
+        for iteration in n_iterations:
+            cursor.execute("""SELECT FITNESS FROM POPULATION WHERE ITERATION = %d ORDER BY FITNESS ASC;""" % iteration)
+            vals = cursor.fetchall()
+            medians += [np.median(vals)]
+            means += [np.mean(vals)]
+            maxes += [np.max(vals)]
+            mins += [np.min(vals)]
+
+        cursor.close()
+
+        plt.plot(medians, label='median', c='green')
+        plt.plot(means, label='mean', c='orange')
+        plt.plot(maxes, label='max', c='blue')
+        plt.plot(mins, label='min', c='red')
+
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+        plt.show()
+
+    def plot_prototype(self):
+        pass
 
     def close(self):
         try:
