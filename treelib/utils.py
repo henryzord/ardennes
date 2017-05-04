@@ -11,40 +11,114 @@ __author__ = 'Henry Cagnini'
 # noinspection SqlNoDataSourceInspection
 # noinspection SqlDialectInspection
 class DatabaseHandler(object):
+
     def __init__(self, path, tree_height):
-        conn = sqlite3.connect(path)
+        self.conn = None
+        cursor = None
+        try:
+            # TODO create table for dataset! fulfill with metadataset data!
 
-        cursor = conn.cursor()
-        cursor.execute("""
-          CREATE TABLE POPULATION (
-            individual INTEGER NOT NULL,
-            iteration INTEGER NOT NULL,
-            fold INTEGER NOT NULL,
-            fitness REAL NOT NULL,
-            height INTEGER NOT NULL,
-            n_nodes INTEGER NOT NULL,
-            train_correct INTEGER NOT NULL,
-            val_correct INTEGER DEFAULT NULL,
-            test_correct INTEGER DEFAULT NULL,
-            PRIMARY KEY (fold, iteration, individual)
-          )
-        """)
+            self.conn = sqlite3.connect(path)
+            cursor = self.conn.cursor()
 
-        n_variables = get_total_nodes(tree_height - 2)  # since the probability of generating the class at D is 100%
+            cursor.execute("""
+              CREATE TABLE POPULATION (
+                individual INTEGER NOT NULL,
+                iteration INTEGER NOT NULL,
+                fold INTEGER NOT NULL,
+                fitness REAL NOT NULL,
+                height INTEGER NOT NULL,
+                n_nodes INTEGER NOT NULL,
+                train_correct INTEGER NOT NULL,
+                val_correct INTEGER DEFAULT NULL,
+                test_correct INTEGER DEFAULT NULL,
+                dot TEXT DEFAULT NULL,
+                PRIMARY KEY (fold, iteration, individual)
+              )
+            """)
 
-        _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
+            n_variables = get_total_nodes(tree_height - 2)  # since the probability of generating the class at D is 100%
 
-        cursor.execute("""
-          CREATE TABLE PROTOTYPE (
-            iteration INTEGER NOT NULL,
-            fold INTEGER NOT NULL,
-            %s
-            PRIMARY KEY (fold, iteration)
-           )
-         """ % _prototype_columns)
+            _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
-        cursor.close()
-        conn.close()
+            cursor.execute("""
+              CREATE TABLE PROTOTYPE (
+                iteration INTEGER NOT NULL,
+                fold INTEGER NOT NULL,
+                %s
+                PRIMARY KEY (fold, iteration)
+               )
+             """ % _prototype_columns)
+
+            self.closed = False
+        except:
+            if self.conn is not None:
+                self.conn.close()
+            self.closed = True
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+    def write_population(self, fold, iteration, population, has_val=False, has_test=False):
+        cursor = None
+        try:
+            cursor = self.conn.cursor()
+
+            for ind in population:
+                cursor.execute(
+                    """INSERT INTO POPULATION VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
+                        ind.ind_id, iteration, fold, ind.fitness, ind.height, ind.n_nodes,
+                        int(ind.train_acc_score * len(ind.y_train_true)),
+                        str(int(ind.val_acc_score * len(ind.y_val_true))) if has_val else 'NULL',
+                        str(int(ind.test_acc_score) * len(ind.y_test_true)) if has_test else 'NULL',
+                        ind.to_dot()
+                    )
+                )
+        except:
+            pass
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+        # cPickle.dump(best_individual, open(evo_file.split('.')[0].strip() + '.bin', 'w'))
+
+    def write_prototype(self, fold, iteration, gm):
+        """
+
+        :type fold: int
+        :param fold:
+        :type iteration: int
+        :param iteration:
+        :type gm: treelib.graphical_model.GraphicalModel
+        :param gm:
+        :return:
+        """
+        cursor = None
+        try:
+            cursor = self.conn.cursor()
+
+            cursor.execute("""
+               INSERT INTO PROTOTYPE VALUES (
+                %d, %d, %s
+               )
+            """ % (fold, iteration, ','.join([gm.attributes.values.ravel()]))
+            )
+            cursor.close()
+        except:
+            pass
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+    def close(self):
+        try:
+            if self.conn is not None and not self.closed:
+                self.conn.commit()
+                self.conn.close()
+        except:
+            pass
+        finally:
+            self.closed = True
 
 
 class MetaDataset(object):

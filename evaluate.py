@@ -427,21 +427,21 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(train_df, config_file, test_df=None, random_state=None, **kwargs):
+def __run__(train_df, test_df=None, random_state=None, **kwargs):
     t1 = dt.now()
 
     inst = Ardennes(
-        n_individuals=config_file['n_individuals'],
-        uncertainty=config_file['uncertainty'],
-        max_height=config_file['tree_height'],
-        n_iterations=config_file['n_iterations']
+        n_individuals=kwargs['n_individuals'],
+        uncertainty=kwargs['uncertainty'],
+        max_height=kwargs['tree_height'],
+        n_iterations=kwargs['n_iterations']
     )
 
     inst.fit(
         train_df=train_df,
-        decile=config_file['decile'],
+        decile=kwargs['decile'],
         test_df=test_df,  # kwargs
-        verbose=config_file['verbose'],  # kwargs
+        verbose=kwargs['verbose'],  # kwargs
         random_state=random_state,  # kwargs
         dbhandler=kwargs['dbhandler'] if 'dbhandler' in kwargs else None,  # kwargs
     )
@@ -454,7 +454,7 @@ def __run__(train_df, config_file, test_df=None, random_state=None, **kwargs):
 
     t2 = dt.now()
 
-    raise NotImplementedError('not implemented yet!')
+    warnings.warn('WARNING: capture data from sqlite!')
 
     # if 'dict_manager' in kwargs:
     #     print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
@@ -550,10 +550,11 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                     target=__run__, kwargs=dict(
                         train_df=full_df.drop(fold.index).reset_index(drop=True),
                         test_df=fold.reset_index(drop=True),
-                        config_file=kwargs,
-                        dict_manager=dict_manager,
                         random_state=random_state,
-                        dbhandler=dbhandler
+                        dict_manager=dict_manager,
+                        tree_height=tree_height,
+                        dbhandler=dbhandler,
+                        **kwargs
                     )
                 )
                 block(processes, n_jobs)
@@ -607,7 +608,11 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         __run__(
             train_df=train_df,
             test_df=test_df,
-            config_file=kwargs,
             random_state=random_state,
-            dbhandler=dbhandler
+            tree_height=tree_height,
+            dbhandler=dbhandler,
+            **kwargs
         )
+
+    if not dbhandler.closed:
+        dbhandler.close()

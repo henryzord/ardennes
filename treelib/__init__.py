@@ -76,15 +76,19 @@ class Ardennes(object):
             val_set = kwargs[Ardennes.val_str]
             val_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + val_set.shape[0], 1)
             full = full.append(val_set, ignore_index=True)
+            has_val = True
         else:
+            has_val = False
             val_set = train_set  # type: pd.DataFrame
 
         if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
             test_set = kwargs[Ardennes.test_str]
             test_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + test_set.shape[0], 1)
             full = full.append(test_set, ignore_index=True)
+            has_test = True
         else:
             test_set = train_set  # type: pd.DataFrame
+            has_test = False
 
         arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
 
@@ -109,7 +113,7 @@ class Ardennes(object):
             dataset_info=dataset_info,
         )
 
-        return gm
+        return gm, has_val, has_test
 
     def fit(self, train_df, decile, verbose=True, **kwargs):
         """
@@ -119,7 +123,9 @@ class Ardennes(object):
         assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(train_set=train_df, **kwargs)
+        gm, has_val, has_test = self.__setup__(train_set=train_df, **kwargs)
+
+        fold = hash(tuple(train_df.apply(lambda x: hash(tuple(x)), axis=1)))
 
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
@@ -153,6 +159,9 @@ class Ardennes(object):
                 verbose=verbose,
                 elapsed_time=(t2 - t1).total_seconds(),
                 gm=gm,
+                fold=fold,
+                has_val=has_val,
+                has_test=has_test,
                 **kwargs
             )
 
@@ -182,7 +191,9 @@ class Ardennes(object):
         """
 
         population.flat[to_replace_index] = func(
-            ind_id=to_replace_index, gm=gm, iteration=iteration
+            ind_id=[population[i].ind_id for i in to_replace_index] if iteration > 0 else to_replace_index,
+            gm=gm,
+            iteration=iteration
         )
         population.sort()  # sorts using quicksort, worst individual to best
         population = population[::-1]  # reverses list so the best individual is in the beginning
@@ -194,6 +205,7 @@ class Ardennes(object):
     def split_population(self, decile, population):
         integer_decile = int(self.n_individuals * decile)
 
+        # refers to indices in the array, not in the population (i.e. individual.ind_id)
         to_replace_index = range(self.n_individuals)[integer_decile:]
         fittest_pop = population[:integer_decile]
 
@@ -217,26 +229,14 @@ class Ardennes(object):
         elapsed_time = kwargs['elapsed_time']
         fitness = kwargs['fitness']
         gm = kwargs['gm']
-
-        sep = '/' if os.name is not 'nt' else '\\'
+        fold = kwargs['fold']
+        has_val = kwargs['has_val']
+        has_test = kwargs['has_test']
 
         best_individual = self.get_best_individual(population)
 
-        global_best = population[np.argmax([
-            0.33 * (ind.test_acc_score + ind.val_acc_score + ind.train_acc_score) for ind in population
-        ])]
-
-        if self.global_best is None:
-            self.global_best = global_best
-
-        if 0.33 * (global_best.test_acc_score + global_best.val_acc_score + global_best.train_acc_score) > \
-           0.33 * (self.global_best.test_acc_score + self.global_best.val_acc_score + self.global_best.train_acc_score):
-            self.global_best = global_best
-
         # optional data
-        n_run = None if 'run' not in kwargs else kwargs['run']
-        n_fold = None if 'fold' not in kwargs else kwargs['fold']
-        dbhandler = None if 'dbhandler' not in kwargs else kwargs['dbhandler']
+        dbhandler = None if 'dbhandler' not in kwargs else kwargs['dbhandler']  # type: utils.DatabaseHandler
 
         if verbose:
             mean = np.mean(fitness)  # type: float
@@ -247,45 +247,8 @@ class Ardennes(object):
             ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
         if dbhandler is not None:
-            # TODO write to database!
-
-            with open(pgm_file, 'a') as f:
-                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-                csv_w.writerow(gm.attributes.values.ravel())
-
-            with open(evo_file, 'w') as f:
-                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-
-                if iteration == 0:  # resets file
-                    csv_w.writerow([
-                        'individual', 'iteration', 'fitness', 'height', 'n_nodes',
-                        'train_correct', 'train_total', 'val_correct', 'val_total', 'test_correct', 'test_total'
-                    ])
-
-            with open(evo_file, 'a') as f:
-                csv_w = csv.writer(f, delimiter=',', quotechar='\"')
-
-                for ind in population:  # type: Individual
-                    if Individual.y_test_true is not None:
-                        add = [int(ind.test_acc_score * len(ind.y_test_true)), len(ind.y_test_true)]
-                    else:
-                        add = ['', '']
-
-                    csv_w.writerow([
-                        ind.ind_id, iteration, ind.fitness, ind.height, ind.n_nodes,
-                        int(ind.train_acc_score * len(ind.y_train_true)), len(ind.y_train_true),
-                        int(ind.val_acc_score * len(ind.y_val_true)), len(ind.y_val_true)] + add
-                    )
-
-            best_individual.plot(
-                savepath=evo_file.split('.')[0].strip() + '.pdf'
-            )
-
-            self.global_best.plot(
-                savepath=evo_file.split('.')[0].strip() + '_best_overall.pdf'
-            )
-
-            cPickle.dump(best_individual, open(evo_file.split('.')[0].strip() + '.bin', 'w'))
+            dbhandler.write_prototype(fold, iteration, gm)
+            dbhandler.write_population(fold, iteration, population, has_val, has_test)
 
     @staticmethod
     def __early_stop__(population):
