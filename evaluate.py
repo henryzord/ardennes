@@ -432,7 +432,6 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
 
     inst = Ardennes(
         n_individuals=kwargs['n_individuals'],
-        uncertainty=kwargs['uncertainty'],
         max_height=kwargs['tree_height'],
         n_iterations=kwargs['n_iterations']
     )
@@ -504,7 +503,10 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         if output_path is not None:
             dbhandler = DatabaseHandler(
                 path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
-                tree_height=tree_height
+                tree_height=tree_height,
+                random_state=random_state,
+                dataset_name=dataset_name,
+                **kwargs
             )
 
         # list of folds, as arff files
@@ -579,7 +581,10 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         if output_path is not None:
             dbhandler = DatabaseHandler(
                 path=os.path.join(output_path, dataset_name + ' holdout ' + str(dt.now()) + '.db'),
-                tree_height=tree_height
+                tree_height=tree_height,
+                random_state=random_state,
+                dataset_name=dataset_name,
+                **kwargs
             )
 
         train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))

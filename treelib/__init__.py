@@ -23,10 +23,9 @@ class Ardennes(object):
 
     global_best = None  # TODO remove once problem with suboptimal individuals is solved
 
-    def __init__(self, n_individuals, n_iterations, uncertainty=0.001, max_height=3):
+    def __init__(self, n_individuals, n_iterations, max_height=3):
 
         self.n_individuals = n_individuals
-        self.uncertainty = uncertainty
 
         self.D = max_height - 1
         self.n_iterations = n_iterations
@@ -78,8 +77,9 @@ class Ardennes(object):
         full = copy.deepcopy(train_set)
 
         metadatas = [dict(
-            relation_name='train', n_instances=train_set.shape[0],
-            n_attributes=train_set.shape[1], n_classes=len(train_set[train_set.columns[-1]].unique())
+            relation_name='train', fold=hash(tuple(train_set.apply(lambda x: hash(tuple(x)), axis=1))),
+            n_instances=train_set.shape[0], n_attributes=train_set.shape[1],
+            n_classes=len(train_set[train_set.columns[-1]].unique())
         )]
 
         if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
@@ -88,8 +88,9 @@ class Ardennes(object):
             full = full.append(val_set, ignore_index=True)
 
             metadatas += [dict(
-                relation_name='val', n_instances=val_set.shape[0],
-                n_attributes=val_set.shape[1], n_classes=len(val_set[val_set.columns[-1]].unique())
+                relation_name='val', fold=hash(tuple(val_set.apply(lambda x: hash(tuple(x)), axis=1))),
+                n_instances=val_set.shape[0], n_attributes=val_set.shape[1],
+                n_classes=len(val_set[val_set.columns[-1]].unique())
             )]
 
         else:
@@ -101,19 +102,21 @@ class Ardennes(object):
             full = full.append(test_set, ignore_index=True)
 
             metadatas += [dict(
-                relation_name='test', n_instances=test_set.shape[0],
-                n_attributes=test_set.shape[1], n_classes=len(test_set[test_set.columns[-1]].unique())
+                relation_name='test', fold=hash(tuple(test_set.apply(lambda x: hash(tuple(x)), axis=1))),
+                n_instances=test_set.shape[0], n_attributes=test_set.shape[1],
+                n_classes=len(test_set[test_set.columns[-1]].unique())
             )]
 
         else:
             test_set = train_set  # type: pd.DataFrame
 
         metadatas += [dict(
-            relation_name='full', n_instances=full.shape[0],
-            n_attributes=full.shape[1], n_classes=len(full[full.columns[-1]].unique())
+            relation_name='full', fold=hash(tuple(full.apply(lambda x: hash(tuple(x)), axis=1))),
+            n_instances=full.shape[0], n_attributes=full.shape[1],
+            n_classes=len(full[full.columns[-1]].unique())
         )]
 
-        dbhandler.write_metadata(metadatas)
+        dbhandler.write_sets(metadatas)
 
         arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
 
@@ -150,8 +153,6 @@ class Ardennes(object):
 
         gm = self.__setup__(train_set=train_df, **kwargs)
 
-        fold = hash(tuple(train_df.apply(lambda x: hash(tuple(x)), axis=1)))
-
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
         population = np.empty(shape=self.n_individuals, dtype=Individual)
@@ -185,7 +186,6 @@ class Ardennes(object):
                 verbose=verbose,
                 elapsed_time=(t2 - t1).total_seconds(),
                 gm=gm,
-                fold=fold,
                 **kwargs
             )
 
@@ -253,7 +253,6 @@ class Ardennes(object):
         elapsed_time = kwargs['elapsed_time']
         fitness = kwargs['fitness']
         gm = kwargs['gm']
-        fold = kwargs['fold']
 
         best_individual = self.get_best_individual(population)
 
@@ -269,8 +268,8 @@ class Ardennes(object):
             ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
         if dbhandler is not None:
-            dbhandler.write_prototype(fold, iteration, gm)
-            dbhandler.write_population(fold, iteration, population)
+            dbhandler.write_prototype(iteration, gm)
+            dbhandler.write_population(iteration, population)
 
     @staticmethod
     def __early_stop__(population):

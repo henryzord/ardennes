@@ -4,7 +4,6 @@
   "n_iterations": 100,
   "decile": 0.5,
   "tree_height": 9,
-  "uncertainty": 0.001,
   "verbose": true,
   "save": true,
   "n_runs": 1,

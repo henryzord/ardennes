@@ -13,23 +13,53 @@ __author__ = 'Henry Cagnini'
 # noinspection SqlDialectInspection
 class DatabaseHandler(object):
 
-    def __init__(self, path, tree_height):
-        self.has_val = False
-        self.has_test = False
-        self.has_full = False
-        self.has_train = False
-
+    def __init__(self, path, **kwargs):
         cursor = None
         self.conn = None
 
+        self.train_hash = None
+        self.test_hash = None
+        self.val_hash = None
+        self.full_hash = None
+
+        n_individuals = kwargs['n_individuals']
+        n_iterations = kwargs['n_iterations']
+        tree_height = kwargs['tree_height']
+        decile = kwargs['decile']
+        random_state = kwargs['random_state']
+        dataset_name = kwargs['dataset_name']
+
+        max_n_nodes = get_total_nodes(tree_height - 1)  # since the probability of generating the class at D is 100%
+
         try:
-            # TODO create table for dataset! fulfill with metadataset data!
             self.conn = sqlite3.connect(path)
             cursor = self.conn.cursor()
 
             cursor.execute("""
-              CREATE TABLE IF NOT EXISTS METADATA (
+              CREATE TABLE IF NOT EXISTS EVOLUTION (
+                dataset_name TEXT NOT NULL PRIMARY KEY,
+                n_individuals INTEGER NOT NULL,
+                n_iterations INTEGER NOT NULL,
+                max_tree_height INTEGER NOT NULL,
+                max_n_nodes INTEGER NOT NULL,
+                decile REAL NOT NULL,
+                random_state REAL
+              )""")
+
+            cursor.execute("""SELECT COUNT(*) FROM EVOLUTION""")
+            count = cursor.fetchone()[0]
+            if count == 0:
+                cursor.execute("""
+                  INSERT INTO EVOLUTION VALUES ('%s', %d, %d, %d, %d, %f, %s)""" % (
+                        dataset_name, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
+                        random_state if random_state is not None else '\'NULL\''
+                    )
+                )
+
+            cursor.execute("""
+              CREATE TABLE IF NOT EXISTS SETS (
                 relation_name TEXT NOT NULL PRIMARY KEY,
+                fold INTEGER NOT NULL,
                 n_instances INTEGER NOT NULL,
                 n_attributes INTEGER NOT NULL,
                 n_classes INTEGER NOT NULL
@@ -66,7 +96,7 @@ class DatabaseHandler(object):
              """ % _prototype_columns)
 
             self.closed = False
-        except:
+        except Exception, e:
             if self.conn is not None:
                 self.conn.close()
             self.closed = True
@@ -74,7 +104,7 @@ class DatabaseHandler(object):
             if cursor is not None:
                 cursor.close()
 
-    def write_metadata(self, data):
+    def write_sets(self, data):
         """
 
         :type data: list
@@ -86,11 +116,11 @@ class DatabaseHandler(object):
         try:
             cursor = self.conn.cursor()
             for d in data:  # type: dict
-                exec('self.has_%s = True' % d['relation_name'])
+                exec('self.%s_hash = %d' % (d['relation_name'], d['fold']))
 
-                cursor.execute("""INSERT INTO METADATA VALUES(
-                  '%s', %d, %d, %d
-                  )""" % (d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
+                cursor.execute("""INSERT INTO SETS VALUES(
+                  '%s', %d, %d, %d, %d
+                  )""" % (d['relation_name'], d['fold'], d['n_instances'], d['n_attributes'], d['n_classes'])
                 )
         except:
             pass
@@ -98,7 +128,7 @@ class DatabaseHandler(object):
             if cursor is not None:
                 cursor.close()
 
-    def write_population(self, fold, iteration, population):
+    def write_population(self, iteration, population):
         cursor = None
         try:
             cursor = self.conn.cursor()
@@ -106,10 +136,10 @@ class DatabaseHandler(object):
             for ind in population:
                 cursor.execute(
                     """INSERT INTO POPULATION VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
-                        ind.ind_id, iteration, fold, ind.fitness, ind.height, ind.n_nodes,
+                        ind.ind_id, iteration, self.train_hash, ind.fitness, ind.height, ind.n_nodes,
                         int(ind.train_acc_score * len(ind.y_train_true)),
-                        str(int(ind.val_acc_score * len(ind.y_val_true))) if self.has_val else 'NULL',
-                        str(int(ind.test_acc_score * len(ind.y_test_true))) if self.has_test else 'NULL',
+                        str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
+                        str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
                         ind.to_dot()
                     )
                 )
@@ -119,7 +149,7 @@ class DatabaseHandler(object):
             if cursor is not None:
                 cursor.close()
 
-    def write_prototype(self, fold, iteration, gm):
+    def write_prototype(self, iteration, gm):
         """
 
         :type fold: int
@@ -138,7 +168,7 @@ class DatabaseHandler(object):
                INSERT INTO PROTOTYPE VALUES (
                 %d, %d, %s
                )
-            """ % (fold, iteration, ','.join([gm.attributes.values.ravel()]))
+            """ % (self.train_hash, iteration, ','.join([gm.attributes.values.ravel()]))
             )
             cursor.close()
         except:
@@ -161,26 +191,43 @@ class DatabaseHandler(object):
         maxes = []
         mins = []
         max_tests = []
+        all_heights = []
+        all_n_nodes = []
 
-        cursor.execute("""SELECT N_INSTANCES FROM METADATA WHERE RELATION_NAME = 'test';""")
+        cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
         test_total = cursor.fetchone()[0]
 
+        cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
+        max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
+
         for iteration in n_iterations:
-            cursor.execute("""SELECT FITNESS, TEST_CORRECT FROM POPULATION WHERE ITERATION = %d ORDER BY FITNESS ASC;""" % iteration)
-            fitness, test_correct = zip(*cursor.fetchall())
+            cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
+                              FROM POPULATION
+                              WHERE ITERATION = %d
+                              ORDER BY FITNESS ASC;""" % iteration
+                           )
+            fitness, test_correct, tree_height, n_nodes = zip(*cursor.fetchall())
             medians += [np.median(fitness)]
             means += [np.mean(fitness)]
             maxes += [np.max(fitness)]
             mins += [np.min(fitness)]
-            max_tests += [np.max(test_correct) / float(test_total)]
+            all_heights += [np.mean(tree_height) / float(max_tree_height)]
+            all_n_nodes += [np.mean(n_nodes) / float(max_n_nodes)]
+            max_tests += [test_correct[np.argmax(fitness)] / float(test_total)]
 
         cursor.close()
 
-        plt.plot(medians, label='median', c='green')
-        plt.plot(means, label='mean', c='orange')
-        plt.plot(maxes, label='max', c='blue')
-        plt.plot(mins, label='min', c='red')
-        plt.plot(max_tests, label='best test score', c='pink')
+        plt.plot(medians, label='median fitness', c='green')
+        plt.plot(means, label='mean fitness', c='orange')
+        plt.plot(maxes, label='max fitness', c='blue')
+        plt.plot(mins, label='min fitness', c='pink')
+        plt.plot(max_tests, label='best individual\ntest accuracy', c='red')
+        plt.plot(all_heights, label='mean height /\n  max height', c='cyan')
+        plt.plot(all_n_nodes, label='mean nodes /\n  max nodes', c='magenta')
+
+        plt.title("Population statistics throughout evolution\nfor dataset %s" % dataset_name)
+
+        plt.xlabel('Iteration')
 
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
