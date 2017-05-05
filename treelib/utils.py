@@ -14,18 +14,27 @@ __author__ = 'Henry Cagnini'
 class DatabaseHandler(object):
 
     def __init__(self, path, tree_height):
-        self.conn = None
+        self.has_val = False
+        self.has_test = False
+        self.has_full = False
+        self.has_train = False
+
         cursor = None
+        self.conn = None
+
         try:
             # TODO create table for dataset! fulfill with metadataset data!
             self.conn = sqlite3.connect(path)
             cursor = self.conn.cursor()
 
-            # TODO check if table exists!
-
-            # cursor.execute("""
-            #   CREATE TABLE DATASET
-            # """)
+            cursor.execute("""
+              CREATE TABLE IF NOT EXISTS METADATA (
+                relation_name TEXT NOT NULL PRIMARY KEY,
+                n_instances INTEGER NOT NULL,
+                n_attributes INTEGER NOT NULL,
+                n_classes INTEGER NOT NULL
+              )
+            """)
 
             cursor.execute("""
               CREATE TABLE IF NOT EXISTS POPULATION (
@@ -65,7 +74,31 @@ class DatabaseHandler(object):
             if cursor is not None:
                 cursor.close()
 
-    def write_population(self, fold, iteration, population, has_val=False, has_test=False):
+    def write_metadata(self, data):
+        """
+
+        :type data: list
+        :param data:
+        :return:
+        """
+
+        cursor = None
+        try:
+            cursor = self.conn.cursor()
+            for d in data:  # type: dict
+                exec('self.has_%s = True' % d['relation_name'])
+
+                cursor.execute("""INSERT INTO METADATA VALUES(
+                  '%s', %d, %d, %d
+                  )""" % (d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
+                )
+        except:
+            pass
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+    def write_population(self, fold, iteration, population):
         cursor = None
         try:
             cursor = self.conn.cursor()
@@ -75,8 +108,8 @@ class DatabaseHandler(object):
                     """INSERT INTO POPULATION VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
                         ind.ind_id, iteration, fold, ind.fitness, ind.height, ind.n_nodes,
                         int(ind.train_acc_score * len(ind.y_train_true)),
-                        str(int(ind.val_acc_score * len(ind.y_val_true))) if has_val else 'NULL',
-                        str(int(ind.test_acc_score) * len(ind.y_test_true)) if has_test else 'NULL',
+                        str(int(ind.val_acc_score * len(ind.y_val_true))) if self.has_val else 'NULL',
+                        str(int(ind.test_acc_score * len(ind.y_test_true))) if self.has_test else 'NULL',
                         ind.to_dot()
                     )
                 )
@@ -85,8 +118,6 @@ class DatabaseHandler(object):
         finally:
             if cursor is not None:
                 cursor.close()
-
-        # cPickle.dump(best_individual, open(evo_file.split('.')[0].strip() + '.bin', 'w'))
 
     def write_prototype(self, fold, iteration, gm):
         """
@@ -129,13 +160,19 @@ class DatabaseHandler(object):
         means = []
         maxes = []
         mins = []
+        max_tests = []
+
+        cursor.execute("""SELECT N_INSTANCES FROM METADATA WHERE RELATION_NAME = 'test';""")
+        test_total = cursor.fetchone()[0]
+
         for iteration in n_iterations:
-            cursor.execute("""SELECT FITNESS FROM POPULATION WHERE ITERATION = %d ORDER BY FITNESS ASC;""" % iteration)
-            vals = cursor.fetchall()
-            medians += [np.median(vals)]
-            means += [np.mean(vals)]
-            maxes += [np.max(vals)]
-            mins += [np.min(vals)]
+            cursor.execute("""SELECT FITNESS, TEST_CORRECT FROM POPULATION WHERE ITERATION = %d ORDER BY FITNESS ASC;""" % iteration)
+            fitness, test_correct = zip(*cursor.fetchall())
+            medians += [np.median(fitness)]
+            means += [np.mean(fitness)]
+            maxes += [np.max(fitness)]
+            mins += [np.min(fitness)]
+            max_tests += [np.max(test_correct) / float(test_total)]
 
         cursor.close()
 
@@ -143,6 +180,7 @@ class DatabaseHandler(object):
         plt.plot(means, label='mean', c='orange')
         plt.plot(maxes, label='max', c='blue')
         plt.plot(mins, label='min', c='red')
+        plt.plot(max_tests, label='best test score', c='pink')
 
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])

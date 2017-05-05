@@ -67,28 +67,53 @@ class Ardennes(object):
         else:
             random_state = None
 
+        if 'dbhandler' in kwargs:
+            dbhandler = kwargs['dbhandler']  # type: utils.DatabaseHandler
+        else:
+            dbhandler = None
+
         random.seed(random_state)
         np.random.seed(random_state)
 
         full = copy.deepcopy(train_set)
 
+        metadatas = [dict(
+            relation_name='train', n_instances=train_set.shape[0],
+            n_attributes=train_set.shape[1], n_classes=len(train_set[train_set.columns[-1]].unique())
+        )]
+
         if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
             val_set = kwargs[Ardennes.val_str]
             val_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + val_set.shape[0], 1)
             full = full.append(val_set, ignore_index=True)
-            has_val = True
+
+            metadatas += [dict(
+                relation_name='val', n_instances=val_set.shape[0],
+                n_attributes=val_set.shape[1], n_classes=len(val_set[val_set.columns[-1]].unique())
+            )]
+
         else:
-            has_val = False
             val_set = train_set  # type: pd.DataFrame
 
         if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
             test_set = kwargs[Ardennes.test_str]
             test_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + test_set.shape[0], 1)
             full = full.append(test_set, ignore_index=True)
-            has_test = True
+
+            metadatas += [dict(
+                relation_name='test', n_instances=test_set.shape[0],
+                n_attributes=test_set.shape[1], n_classes=len(test_set[test_set.columns[-1]].unique())
+            )]
+
         else:
             test_set = train_set  # type: pd.DataFrame
-            has_test = False
+
+        metadatas += [dict(
+            relation_name='full', n_instances=full.shape[0],
+            n_attributes=full.shape[1], n_classes=len(full[full.columns[-1]].unique())
+        )]
+
+        dbhandler.write_metadata(metadatas)
 
         arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
 
@@ -113,7 +138,7 @@ class Ardennes(object):
             dataset_info=dataset_info,
         )
 
-        return gm, has_val, has_test
+        return gm
 
     def fit(self, train_df, decile, verbose=True, **kwargs):
         """
@@ -123,7 +148,7 @@ class Ardennes(object):
         assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm, has_val, has_test = self.__setup__(train_set=train_df, **kwargs)
+        gm = self.__setup__(train_set=train_df, **kwargs)
 
         fold = hash(tuple(train_df.apply(lambda x: hash(tuple(x)), axis=1)))
 
@@ -161,8 +186,6 @@ class Ardennes(object):
                 elapsed_time=(t2 - t1).total_seconds(),
                 gm=gm,
                 fold=fold,
-                has_val=has_val,
-                has_test=has_test,
                 **kwargs
             )
 
@@ -231,8 +254,6 @@ class Ardennes(object):
         fitness = kwargs['fitness']
         gm = kwargs['gm']
         fold = kwargs['fold']
-        has_val = kwargs['has_val']
-        has_test = kwargs['has_test']
 
         best_individual = self.get_best_individual(population)
 
@@ -249,7 +270,7 @@ class Ardennes(object):
 
         if dbhandler is not None:
             dbhandler.write_prototype(fold, iteration, gm)
-            dbhandler.write_population(fold, iteration, population, has_val, has_test)
+            dbhandler.write_population(fold, iteration, population)
 
     @staticmethod
     def __early_stop__(population):
