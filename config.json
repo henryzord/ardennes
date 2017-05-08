@@ -1,7 +1,7 @@
 {
   "random_state": null,
-  "n_individuals": 200,
-  "n_iterations": 100,
+  "n_individuals": 10,
+  "n_iterations": 2,
   "decile": 0.5,
   "tree_height": 9,
   "verbose": true,

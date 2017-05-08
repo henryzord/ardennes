@@ -1,8 +1,5 @@
 # coding=utf-8
-import cPickle
 import copy
-import csv
-import os
 import random
 import warnings
 from datetime import datetime as dt
@@ -11,7 +8,7 @@ from device import AvailableDevice
 from graphical_model import *
 from individual import Individual
 from treelib.individual import DecisionTree
-from utils import MetaDataset
+from utils import MetaDataset, DatabaseHandler
 
 __author__ = 'Henry Cagnini'
 
@@ -20,8 +17,6 @@ class Ardennes(object):
     val_str = 'val_df'
     train_str = 'train_df'
     test_str = 'test_df'
-
-    global_best = None  # TODO remove once problem with suboptimal individuals is solved
 
     def __init__(self, n_individuals, n_iterations, max_height=3):
 
@@ -77,7 +72,7 @@ class Ardennes(object):
         full = copy.deepcopy(train_set)
 
         metadatas = [dict(
-            relation_name='train', fold=hash(tuple(train_set.apply(lambda x: hash(tuple(x)), axis=1))),
+            relation_name='train', hashkey=DatabaseHandler.get_hash(train_set),
             n_instances=train_set.shape[0], n_attributes=train_set.shape[1],
             n_classes=len(train_set[train_set.columns[-1]].unique())
         )]
@@ -88,7 +83,7 @@ class Ardennes(object):
             full = full.append(val_set, ignore_index=True)
 
             metadatas += [dict(
-                relation_name='val', fold=hash(tuple(val_set.apply(lambda x: hash(tuple(x)), axis=1))),
+                relation_name='val', hashkey=DatabaseHandler.get_hash(val_set),
                 n_instances=val_set.shape[0], n_attributes=val_set.shape[1],
                 n_classes=len(val_set[val_set.columns[-1]].unique())
             )]
@@ -102,7 +97,7 @@ class Ardennes(object):
             full = full.append(test_set, ignore_index=True)
 
             metadatas += [dict(
-                relation_name='test', fold=hash(tuple(test_set.apply(lambda x: hash(tuple(x)), axis=1))),
+                relation_name='test', hashkey=DatabaseHandler.get_hash(test_set),
                 n_instances=test_set.shape[0], n_attributes=test_set.shape[1],
                 n_classes=len(test_set[test_set.columns[-1]].unique())
             )]
@@ -111,7 +106,7 @@ class Ardennes(object):
             test_set = train_set  # type: pd.DataFrame
 
         metadatas += [dict(
-            relation_name='full', fold=hash(tuple(full.apply(lambda x: hash(tuple(x)), axis=1))),
+            relation_name='full', hashkey=DatabaseHandler.get_hash(full),
             n_instances=full.shape[0], n_attributes=full.shape[1],
             n_classes=len(full[full.columns[-1]].unique())
         )]
@@ -138,7 +133,7 @@ class Ardennes(object):
 
         gm = GraphicalModel(
             D=self.D,
-            dataset_info=dataset_info,
+            dataset_info=dataset_info
         )
 
         return gm

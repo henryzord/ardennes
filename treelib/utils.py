@@ -12,9 +12,12 @@ __author__ = 'Henry Cagnini'
 # noinspection SqlNoDataSourceInspection
 # noinspection SqlDialectInspection
 class DatabaseHandler(object):
+    table_info_columns = {k: i for i, k in enumerate(['cid', 'name', 'type', 'notnull', 'default_value', 'primary_key'])}
 
-    def __init__(self, path, **kwargs):
-        cursor = None
+    def __init__(self, path, dataset_name=None, n_individuals=None, n_iterations=None,
+                 tree_height=None, decile=None, random_state=None, **kwargs):
+
+        self.path = path
         self.conn = None
 
         self.train_hash = None
@@ -25,44 +28,39 @@ class DatabaseHandler(object):
         # TODO resume evolution!
         # TODO add checkpoints for commiting changes!
 
-        n_individuals = kwargs['n_individuals']
-        n_iterations = kwargs['n_iterations']
-        tree_height = kwargs['tree_height']
-        decile = kwargs['decile']
-        random_state = kwargs['random_state']
-        dataset_name = kwargs['dataset_name']
+        self.conn = sqlite3.connect(path)
+        cursor = self.conn.cursor()
 
-        max_n_nodes = get_total_nodes(tree_height - 1)  # since the probability of generating the class at D is 100%
+        cursor.execute("""
+          CREATE TABLE IF NOT EXISTS EVOLUTION (
+            dataset_name TEXT NOT NULL PRIMARY KEY,
+            n_individuals INTEGER NOT NULL,
+            n_iterations INTEGER NOT NULL,
+            max_tree_height INTEGER NOT NULL,
+            max_n_nodes INTEGER NOT NULL,
+            decile REAL NOT NULL,
+            random_state REAL
+          )""")
 
-        try:
-            self.conn = sqlite3.connect(path)
-            cursor = self.conn.cursor()
+        cursor.execute("""SELECT COUNT(*) FROM EVOLUTION""")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            max_n_nodes = get_total_nodes(tree_height - 1)  # max nodes a tree can have
+            n_variables = get_total_nodes(tree_height - 2)  # useful variables in the prototype tree
+
+            _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
             cursor.execute("""
-              CREATE TABLE IF NOT EXISTS EVOLUTION (
-                dataset_name TEXT NOT NULL PRIMARY KEY,
-                n_individuals INTEGER NOT NULL,
-                n_iterations INTEGER NOT NULL,
-                max_tree_height INTEGER NOT NULL,
-                max_n_nodes INTEGER NOT NULL,
-                decile REAL NOT NULL,
-                random_state REAL
-              )""")
-
-            cursor.execute("""SELECT COUNT(*) FROM EVOLUTION""")
-            count = cursor.fetchone()[0]
-            if count == 0:
-                cursor.execute("""
-                  INSERT INTO EVOLUTION VALUES ('%s', %d, %d, %d, %d, %f, %s)""" % (
-                        dataset_name, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
-                        random_state if random_state is not None else '\'NULL\''
-                    )
+              INSERT INTO EVOLUTION VALUES ('%s', %d, %d, %d, %d, %f, %s)""" % (
+                    dataset_name, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
+                    random_state if random_state is not None else '\'NULL\''
                 )
+            )
 
             cursor.execute("""
               CREATE TABLE IF NOT EXISTS SETS (
-                relation_name TEXT NOT NULL PRIMARY KEY,
-                fold INTEGER NOT NULL,
+                relation_name TEXT NOT NULL,
+                hashkey INTEGER NOT NULL PRIMARY KEY,
                 n_instances INTEGER NOT NULL,
                 n_attributes INTEGER NOT NULL,
                 n_classes INTEGER NOT NULL
@@ -73,7 +71,7 @@ class DatabaseHandler(object):
               CREATE TABLE IF NOT EXISTS POPULATION (
                 individual INTEGER NOT NULL,
                 iteration INTEGER NOT NULL,
-                fold INTEGER NOT NULL,
+                hashkey INTEGER NOT NULL,
                 fitness REAL NOT NULL,
                 height INTEGER NOT NULL,
                 n_nodes INTEGER NOT NULL,
@@ -81,31 +79,58 @@ class DatabaseHandler(object):
                 val_correct INTEGER DEFAULT NULL,
                 test_correct INTEGER DEFAULT NULL,
                 dot TEXT DEFAULT NULL,
-                PRIMARY KEY (fold, iteration, individual)
+                PRIMARY KEY (hashkey, iteration, individual)
               )
             """)
-
-            n_variables = get_total_nodes(tree_height - 2)  # since the probability of generating the class at D is 100%
-
-            _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
             cursor.execute("""
               CREATE TABLE IF NOT EXISTS PROTOTYPE (
                 iteration INTEGER NOT NULL,
-                fold INTEGER NOT NULL,
+                hashkey INTEGER NOT NULL,
                 %s
-                PRIMARY KEY (fold, iteration)
+                PRIMARY KEY (hashkey, iteration)
                )
              """ % _prototype_columns)
+        else:
+            cursor.execute("""SELECT RELATION_NAME, HASHKEY FROM SETS""")
+            rows = cursor.fetchall()
 
-            self.closed = False
-        except Exception, e:
-            if self.conn is not None:
-                self.conn.close()
-            self.closed = True
-        finally:
-            if cursor is not None:
-                cursor.close()
+            for relation_name, hashkey in rows:
+                exec('self.%s_hash = %d' % (relation_name, hashkey))
+
+        self.closed = False
+
+    def get_cursor(self):
+        return self.conn.cursor()
+
+    def union(self, db):
+        def convert(value, _type):
+            if value == None:
+                return 'NULL'
+            if _type == 'TEXT':
+                return str(value).join("''")
+            return str(value)
+
+        if db.closed:
+            db = DatabaseHandler(db.path)
+
+        other_cursor = db.get_cursor()
+        self_cursor = self.conn.cursor()
+
+        tables = ['sets', 'population', 'prototype']
+        for table_name in tables:
+            columns = other_cursor.execute('PRAGMA TABLE_INFO(%s)' % table_name).fetchall()
+            column_names = ','.join([x[self.table_info_columns['name']] for x in columns])
+            column_types = [x[self.table_info_columns['type']] for x in columns]
+
+            other_data = other_cursor.execute("""SELECT %s FROM %s;""" % (column_names, table_name)).fetchall()
+
+            for data in other_data:
+                data_str = ','.join([convert(x, column_types[i]) for i, x in enumerate(data)])
+                self_cursor.execute("""INSERT INTO %s (%s) VALUES (%s);""" % (table_name, column_names, data_str))
+
+        other_cursor.close()
+        self_cursor.close()
 
     def write_sets(self, data):
         """
@@ -115,21 +140,15 @@ class DatabaseHandler(object):
         :return:
         """
 
-        cursor = None
-        try:
-            cursor = self.conn.cursor()
-            for d in data:  # type: dict
-                exec('self.%s_hash = %d' % (d['relation_name'], d['fold']))
+        cursor = self.conn.cursor()
+        for d in data:  # type: dict
+            exec('self.%s_hash = %d' % (d['relation_name'], d['hashkey']))
 
-                cursor.execute("""INSERT INTO SETS VALUES(
-                  '%s', %d, %d, %d, %d
-                  )""" % (d['relation_name'], d['fold'], d['n_instances'], d['n_attributes'], d['n_classes'])
-                )
-        except:
-            pass
-        finally:
-            if cursor is not None:
-                cursor.close()
+            cursor.execute("""INSERT INTO SETS VALUES(
+              '%s', %d, %d, %d, %d
+              )""" % (d['relation_name'], d['hashkey'], d['n_instances'], d['n_attributes'], d['n_classes'])
+            )
+        cursor.close()
 
     def write_population(self, iteration, population):
         cursor = None
@@ -155,8 +174,8 @@ class DatabaseHandler(object):
     def write_prototype(self, iteration, gm):
         """
 
-        :type fold: int
-        :param fold:
+        :type hashkey: int
+        :param hashkey:
         :type iteration: int
         :param iteration:
         :type gm: treelib.graphical_model.GraphicalModel
@@ -251,6 +270,10 @@ class DatabaseHandler(object):
             pass
         finally:
             self.closed = True
+
+    @staticmethod
+    def get_hash(dataset):
+        return hash(tuple(dataset.apply(lambda x: hash(tuple(x)), axis=1)))
 
 
 class MetaDataset(object):

@@ -428,6 +428,8 @@ def crunch_graphical_model(pgm_path, path_datasets):
 
 
 def __run__(train_df, test_df=None, random_state=None, **kwargs):
+    dbhandler = kwargs['dbhandler'] if 'dbhandler' in kwargs else None
+
     t1 = dt.now()
 
     inst = Ardennes(
@@ -442,7 +444,7 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
         test_df=test_df,  # kwargs
         verbose=kwargs['verbose'],  # kwargs
         random_state=random_state,  # kwargs
-        dbhandler=kwargs['dbhandler'] if 'dbhandler' in kwargs else None  # kwargs
+        dbhandler=dbhandler  # kwargs
     )
 
     ind = inst.predictor
@@ -456,6 +458,10 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
     print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
         test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
     )
+
+    if 'dict_manager' in kwargs:
+        dbhandler.close()
+        kwargs['dict_manager'][kwargs['hashkey']] = dbhandler
 
     return test_acc_score
 
@@ -484,11 +490,44 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         while running(_processes) >= _n_jobs:
             time.sleep(1)
 
-    if os.name == 'nt':  # if on windows
-        sep = '\\'
-    else:  # else on linux, mac
-        sep = '/'
-    dataset_name = dataset_path.split(sep)[-1]
+    def create_db(_output_path, _dataset_name, _creation_date, _mode, hashkey=None):
+        """
+
+        :type _output_path: str
+        :param _output_path:
+        :type _dataset_name: str
+        :param _dataset_name:
+        :type _creation_date: datetime.datetime
+        :param _creation_date:
+        :type _mode: str
+        :param _mode:
+        :type hashkey: int
+        :param hashkey:
+        :return: utils.DatabaseHandler
+        :return:
+        """
+
+        _dbhandler = DatabaseHandler(
+            path=os.path.join(
+                _output_path,
+                ' '.join([_dataset_name, _mode, str(hashkey) if hashkey is not None else '', str(_creation_date)]) + '.db'
+            ),
+            tree_height=tree_height,
+            random_state=random_state,
+            dataset_name=_dataset_name,
+            **kwargs
+        )
+        return _dbhandler
+
+    def get_dataset_name(_dataset_path):
+        if os.name == 'nt':  # if on windows
+            sep = '\\'
+        else:  # else on linux, mac
+            sep = '/'
+        _dataset_name = dataset_path.split(sep)[-1]
+        return _dataset_name
+
+    dataset_name = get_dataset_name(dataset_path)
 
     files = [
         f.replace(dataset_name + '_', '').replace('.arff', '')
@@ -499,16 +538,9 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
 
     dbhandler = None
 
-    if 'train' not in files or 'test' not in files:
-        if output_path is not None:
-            dbhandler = DatabaseHandler(
-                path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
-                tree_height=tree_height,
-                random_state=random_state,
-                dataset_name=dataset_name,
-                **kwargs
-            )
+    now = dt.now()
 
+    if 'train' not in files or 'test' not in files:
         # list of folds, as arff files
         arffs = [load_arff(os.path.join(dataset_path, dataset_name + '_' + f + '.arff')) for f in files]
         dfs = [  # list of folds, as pandas dataframes
@@ -531,17 +563,26 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             processes = []
 
             for fold in dfs:
+                train_df = full_df.drop(fold.index).reset_index(drop=True)
+
+                hashkey = DatabaseHandler.get_hash(train_df)
+
+                if output_path is not None:
+                    dbhandler = create_db(output_path, dataset_name, now, 'cross-validation', hashkey)
+
                 p = Process(
                     target=__run__, kwargs=dict(
-                        train_df=full_df.drop(fold.index).reset_index(drop=True),
+                        train_df=train_df,
                         test_df=fold.reset_index(drop=True),
                         random_state=random_state,
                         dict_manager=dict_manager,
                         tree_height=tree_height,
                         dbhandler=dbhandler,
+                        hashkey=hashkey,
                         **kwargs
                     )
                 )
+
                 block(processes, n_jobs)
                 p.start()
                 processes.append(p)
@@ -549,33 +590,21 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             for p in processes:
                 p.join()
 
+            # from now on, all databases were already created
+
+            dball = create_db(output_path, dataset_name, now, 'cross-validation')  # type: DatabaseHandler
+
+            dict_dbs = dict(dict_manager)
+            for db in dict_dbs.itervalues():
+                dball.union(db)
+                os.remove(db.path)
+
+            dball.close()
+
+            # TODO plot population from all folds!
+            # TODO delete fold databases!
+            # TODO close main database!
             raise NotImplementedError('not implemented yet!')
-            dict_results = dict(dict_manager)
-
-            true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
-            pred = reduce(op.add, [dict_results[k]['y_test_pred'] for k in dict_results.iterkeys()])
-
-            conf_matrix = confusion_matrix(true, pred)
-
-            height = [dict_results[k]['height'] for k in dict_results.iterkeys()]
-            n_nodes = [dict_results[k]['n_nodes'] for k in dict_results.iterkeys()]
-
-            hit = np.diagonal(conf_matrix).sum()
-            total = conf_matrix.sum()
-
-            out_str = 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
-                hit / float(total),
-                float(np.mean(height)), float(np.std(height)),
-                float(np.mean(n_nodes)), float(np.std(n_nodes))
-            )
-
-            print colored(out_str, 'blue')
-
-            return {
-                'confusion_matrix': conf_matrix.tolist(),
-                'height': height,
-                'n_nodes': n_nodes
-            }
 
     else:  # for training with train and test folds
         if output_path is not None:
@@ -603,6 +632,3 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         )
 
         dbhandler.plot_population()
-
-    if not dbhandler.closed:
-        dbhandler.close()
