@@ -22,6 +22,9 @@ class DatabaseHandler(object):
         self.val_hash = None
         self.full_hash = None
 
+        # TODO resume evolution!
+        # TODO add checkpoints for commiting changes!
+
         n_individuals = kwargs['n_individuals']
         n_iterations = kwargs['n_iterations']
         tree_height = kwargs['tree_height']
