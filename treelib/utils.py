@@ -12,10 +12,17 @@ __author__ = 'Henry Cagnini'
 # noinspection SqlNoDataSourceInspection
 # noinspection SqlDialectInspection
 class DatabaseHandler(object):
-    table_info_columns = {k: i for i, k in enumerate(['cid', 'name', 'type', 'notnull', 'default_value', 'primary_key'])}
+    # columns return by the pragma table_info() command in sqlite3
+    table_info_columns = {
+        k: i for i, k in enumerate(['cid', 'name', 'type', 'notnull', 'default_value', 'primary_key'])
+    }
 
-    def __init__(self, path, dataset_name=None, n_individuals=None, n_iterations=None,
-                 tree_height=None, decile=None, random_state=None, **kwargs):
+    modes = ['holdout', 'cross-validation']
+
+    commit_every = 10  # commits data at every N generations
+
+    def __init__(self, path, dataset_name=None, mode=None, n_runs=None, n_individuals=None,
+                 n_iterations=None, tree_height=None, decile=None, random_state=None):
 
         self.path = path
         self.conn = None
@@ -25,6 +32,10 @@ class DatabaseHandler(object):
         self.val_hash = None
         self.full_hash = None
 
+        self.attributes = None
+
+        self.run = None
+
         # TODO resume evolution!
         # TODO add checkpoints for commiting changes!
 
@@ -32,17 +43,71 @@ class DatabaseHandler(object):
         cursor = self.conn.cursor()
 
         cursor.execute("""
+          CREATE TABLE IF NOT EXISTS EVALUATION_MODES(
+            mode TEXT NOT NULL PRIMARY KEY
+          );
+        """)
+
+        cursor.execute("""
+          CREATE TABLE IF NOT EXISTS ATTRIBUTES(
+            attribute TEXT NOT NULL PRIMARY KEY
+          );
+        """)
+
+        cursor.execute("""
           CREATE TABLE IF NOT EXISTS EVOLUTION (
-            dataset_name TEXT NOT NULL PRIMARY KEY,
+            dataset_name TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            n_runs INTEGER NOT NULL,
             n_individuals INTEGER NOT NULL,
             n_iterations INTEGER NOT NULL,
             max_tree_height INTEGER NOT NULL,
             max_n_nodes INTEGER NOT NULL,
             decile REAL NOT NULL,
-            random_state REAL
-          )""")
+            random_state INTEGER DEFAULT NULL,
+            PRIMARY KEY (
+              dataset_name, mode, n_runs, n_individuals, n_iterations,
+              max_tree_height, max_n_nodes, decile, random_state
+            ),
+            FOREIGN KEY(mode) REFERENCES EVALUATION_MODES(mode)
+          );
+        """)
+        cursor.execute("""
+          CREATE TABLE IF NOT EXISTS SETS (
+            hashkey INTEGER NOT NULL PRIMARY KEY,
+            relation_name TEXT NOT NULL,
+            n_instances INTEGER NOT NULL,
+            n_attributes INTEGER NOT NULL,
+            n_classes INTEGER NOT NULL
+        );""")
+        cursor.execute("""
+          CREATE TABLE IF NOT EXISTS RUNS (
+            run INTEGER NOT NULL PRIMARY KEY,
+            train_hashkey INTEGER NOT NULL,
+            val_hashkey INTEGER DEFAULT NULL,
+            test_hashkey INTEGER DEFAULT NULL,
+            FOREIGN KEY(train_hashkey) REFERENCES SETS(hashkey),
+            FOREIGN KEY(val_hashkey) REFERENCES SETS(hashkey),
+            FOREIGN KEY(test_hashkey) REFERENCES SETS(hashkey)
+        );""")
+        cursor.execute("""
+          CREATE TABLE IF NOT EXISTS POPULATION (
+            run INTEGER NOT NULL,
+            iteration INTEGER NOT NULL,
+            individual INTEGER NOT NULL,
+            fitness REAL NOT NULL,
+            height INTEGER NOT NULL,
+            n_nodes INTEGER NOT NULL,
+            train_correct INTEGER NOT NULL,
+            val_correct INTEGER DEFAULT NULL,
+            test_correct INTEGER DEFAULT NULL,
+            dot TEXT DEFAULT NULL,
+            PRIMARY KEY (run, iteration, individual),
+            FOREIGN KEY(run) REFERENCES RUNS(run)
+          );
+        """)
 
-        cursor.execute("""SELECT COUNT(*) FROM EVOLUTION""")
+        cursor.execute("""SELECT COUNT(*) FROM EVOLUTION;""")
         count = cursor.fetchone()[0]
         if count == 0:
             max_n_nodes = get_total_nodes(tree_height - 1)  # max nodes a tree can have
@@ -51,48 +116,32 @@ class DatabaseHandler(object):
             _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
             cursor.execute("""
-              INSERT INTO EVOLUTION VALUES ('%s', %d, %d, %d, %d, %f, %s)""" % (
-                    dataset_name, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
+              CREATE TABLE IF NOT EXISTS PROTOTYPE (
+                run INTEGER NOT NULL,
+                iteration INTEGER NOT NULL,
+                attribute TEXT NOT NULL,
+                %s
+                FOREIGN KEY (run) REFERENCES RUNS(run),
+                FOREIGN KEY (attribute) REFERENCES ATTRIBUTES(attribute),
+                PRIMARY KEY (run, iteration, attribute)
+               )
+             """ % _prototype_columns)
+
+            for mode in DatabaseHandler.modes:
+                cursor.execute("""
+                  INSERT INTO EVALUATION_MODES (mode) VALUES ('%s')
+                """ % mode)
+
+            cursor.execute("""
+              INSERT INTO EVOLUTION (dataset_name, mode, n_runs, n_individuals,
+                n_iterations, max_tree_height, max_n_nodes, decile, random_state) VALUES (
+                '%s', '%s', %d, %d, %d, %d, %d, %f, %s)""" % (
+                    dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
                     random_state if random_state is not None else '\'NULL\''
                 )
             )
-
-            cursor.execute("""
-              CREATE TABLE IF NOT EXISTS SETS (
-                relation_name TEXT NOT NULL,
-                hashkey INTEGER NOT NULL PRIMARY KEY,
-                n_instances INTEGER NOT NULL,
-                n_attributes INTEGER NOT NULL,
-                n_classes INTEGER NOT NULL
-              )
-            """)
-
-            cursor.execute("""
-              CREATE TABLE IF NOT EXISTS POPULATION (
-                individual INTEGER NOT NULL,
-                iteration INTEGER NOT NULL,
-                hashkey INTEGER NOT NULL,
-                fitness REAL NOT NULL,
-                height INTEGER NOT NULL,
-                n_nodes INTEGER NOT NULL,
-                train_correct INTEGER NOT NULL,
-                val_correct INTEGER DEFAULT NULL,
-                test_correct INTEGER DEFAULT NULL,
-                dot TEXT DEFAULT NULL,
-                PRIMARY KEY (hashkey, iteration, individual)
-              )
-            """)
-
-            cursor.execute("""
-              CREATE TABLE IF NOT EXISTS PROTOTYPE (
-                iteration INTEGER NOT NULL,
-                hashkey INTEGER NOT NULL,
-                %s
-                PRIMARY KEY (hashkey, iteration)
-               )
-             """ % _prototype_columns)
         else:
-            cursor.execute("""SELECT RELATION_NAME, HASHKEY FROM SETS""")
+            cursor.execute("""SELECT RELATION_NAME, HASHKEY FROM SETS;""")
             rows = cursor.fetchall()
 
             for relation_name, hashkey in rows:
@@ -100,8 +149,115 @@ class DatabaseHandler(object):
 
         self.closed = False
 
+    def set_run(self, run):
+        self.run = run
+
     def get_cursor(self):
         return self.conn.cursor()
+
+    def close(self):
+        # try:
+        if self.conn is not None and not self.closed:
+            self.conn.commit()
+            self.conn.close()
+        # except:
+        #     pass
+        # finally:
+        self.closed = True
+
+    def commit(self):
+        if not self.closed:
+            self.conn.commit()
+
+    @staticmethod
+    def get_hash(dataset):
+        return hash(tuple(dataset.apply(lambda x: hash(tuple(x)), axis=1)))
+
+    def write_attributes(self, attributes):
+        cursor = self.conn.cursor()
+
+        for attribute in attributes:
+            cursor.execute("""INSERT INTO ATTRIBUTES (attribute) VALUES ('%s')""" % attribute)
+
+        self.attributes = attributes
+        cursor.close()
+
+    def write_sets(self, data):
+        """
+
+        :type data: list
+        :param data:
+        :return:
+        """
+
+        cursor = self.conn.cursor()
+
+        for d in data:  # type: dict
+            exec('self.%s_hash = %d' % (d['relation_name'], d['hashkey']))
+
+            cursor.execute("""INSERT INTO SETS (hashkey, relation_name, n_instances, n_attributes, n_classes) VALUES (
+              %d, '%s', %d, %d, %d
+              )""" % (d['hashkey'], d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
+            )
+
+        cursor.execute("""
+          INSERT INTO RUNS (run, train_hashkey, val_hashkey, test_hashkey) VALUES (%d, %d, %s, %s)
+        """ % (
+                self.run,
+                self.train_hash,
+                str(self.val_hash) if self.val_hash is not None else 'NULL',
+                str(self.test_hash) if self.test_hash is not None else 'NULL'
+            )
+        )
+
+        cursor.close()
+
+    def write_population(self, iteration, population):
+        cursor = self.conn.cursor()
+
+        for ind in population:
+            cursor.execute("""
+              INSERT INTO POPULATION (
+                run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
+                ) VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
+                    self.run, iteration, ind.ind_id, ind.fitness, ind.height, ind.n_nodes,
+                    int(ind.train_acc_score * len(ind.y_train_true)),
+                    str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
+                    str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
+                    ind.to_dot()
+                )
+            )
+
+        cursor.close()
+
+        if iteration % self.commit_every == 0:
+            self.conn.commit()
+
+    def write_prototype(self, iteration, gm):
+        """
+        :type iteration: int
+        :param iteration:
+        :type gm: treelib.graphical_model.GraphicalModel
+        :param gm:
+        :return:
+        """
+        cursor = self.conn.cursor()
+
+        for attr in self.attributes:
+            # run INTEGER NOT NULL,
+            # iteration INTEGER NOT NULL,
+            # attribute TEXT NOT NULL,
+
+            cursor.execute("""
+               INSERT INTO PROTOTYPE VALUES (
+                %d, %d, '%s', %s
+               )
+            """ % (self.run, iteration, attr, ','.join([str(x) for x in gm.attributes.loc[attr]]))
+            )
+        cursor.close()
+
+        if iteration % self.commit_every == 0:
+            self.conn.commit()
 
     def union(self, db):
         def convert(value, _type):
@@ -132,78 +288,19 @@ class DatabaseHandler(object):
         other_cursor.close()
         self_cursor.close()
 
-    def write_sets(self, data):
-        """
-
-        :type data: list
-        :param data:
-        :return:
-        """
-
-        cursor = self.conn.cursor()
-        for d in data:  # type: dict
-            exec('self.%s_hash = %d' % (d['relation_name'], d['hashkey']))
-
-            cursor.execute("""INSERT INTO SETS VALUES(
-              '%s', %d, %d, %d, %d
-              )""" % (d['relation_name'], d['hashkey'], d['n_instances'], d['n_attributes'], d['n_classes'])
-            )
-        cursor.close()
-
-    def write_population(self, iteration, population):
-        cursor = None
-        try:
-            cursor = self.conn.cursor()
-
-            for ind in population:
-                cursor.execute(
-                    """INSERT INTO POPULATION VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
-                        ind.ind_id, iteration, self.train_hash, ind.fitness, ind.height, ind.n_nodes,
-                        int(ind.train_acc_score * len(ind.y_train_true)),
-                        str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
-                        str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
-                        ind.to_dot()
-                    )
-                )
-        except:
-            pass
-        finally:
-            if cursor is not None:
-                cursor.close()
-
-    def write_prototype(self, iteration, gm):
-        """
-
-        :type hashkey: int
-        :param hashkey:
-        :type iteration: int
-        :param iteration:
-        :type gm: treelib.graphical_model.GraphicalModel
-        :param gm:
-        :return:
-        """
-        cursor = None
-        try:
-            cursor = self.conn.cursor()
-
-            cursor.execute("""
-               INSERT INTO PROTOTYPE VALUES (
-                %d, %d, %s
-               )
-            """ % (self.train_hash, iteration, ','.join([gm.attributes.values.ravel()]))
-            )
-            cursor.close()
-        except:
-            pass
-        finally:
-            if cursor is not None:
-                cursor.close()
-
     def plot_population(self):
+
+        raise NotImplementedError('not implemented yet!')
+
+
+        # TODO must support when plotting from cross-validation!
+
         plt.figure()
         ax = plt.subplot(111)
 
         cursor = self.conn.cursor()
+
+        # TODO for each run!
 
         cursor.execute("""SELECT DISTINCT(ITERATION) FROM POPULATION ORDER BY ITERATION ASC;""")
         n_iterations = cursor.fetchall()
@@ -260,20 +357,6 @@ class DatabaseHandler(object):
 
     def plot_prototype(self):
         pass
-
-    def close(self):
-        try:
-            if self.conn is not None and not self.closed:
-                self.conn.commit()
-                self.conn.close()
-        except:
-            pass
-        finally:
-            self.closed = True
-
-    @staticmethod
-    def get_hash(dataset):
-        return hash(tuple(dataset.apply(lambda x: hash(tuple(x)), axis=1)))
 
 
 class MetaDataset(object):
