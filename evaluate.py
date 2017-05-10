@@ -423,10 +423,25 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(train_df, test_df=None, random_state=None, **kwargs):
-    dbhandler = kwargs['dbhandler'] if 'dbhandler' in kwargs else None  # type: DatabaseHandler
-
+def __run__(train_df, test_df=None, **kwargs):
     t1 = dt.now()
+
+    if 'output_path' in kwargs and kwargs['output_path'] is not None:
+        dbhandler = DatabaseHandler(
+            path=os.path.join(kwargs['output_path'], kwargs['dataset_name'] + ' cross-validation ' + str(t1) + '.db'),
+            dataset_name=kwargs['dataset_name'],
+            mode=kwargs['mode'],
+            n_runs=kwargs['n_runs'],
+            n_individuals=kwargs['n_individuals'],
+            n_iterations=kwargs['n_iterations'],
+            tree_height=kwargs['tree_height'],
+            decile=kwargs['decile'],
+            random_state=kwargs['random_state']
+        )
+        dbhandler.set_run(kwargs['run'])
+        dbhandler.write_attributes(train_df.columns)
+    else:
+        dbhandler = None
 
     inst = Ardennes(
         n_individuals=kwargs['n_individuals'],
@@ -439,7 +454,7 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
         decile=kwargs['decile'],
         test_df=test_df,  # kwargs
         verbose=kwargs['verbose'],  # kwargs
-        random_state=random_state,  # kwargs
+        random_state=kwargs['random_state'],  # kwargs
         dbhandler=dbhandler  # kwargs
     )
 
@@ -454,8 +469,8 @@ def __run__(train_df, test_df=None, random_state=None, **kwargs):
     print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
         test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
     )
-
     if dbhandler is not None:
+        # TODO plot before closing connection!
         dbhandler.close()
 
     if 'dict_manager' in kwargs:
@@ -508,8 +523,6 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
 
     dbhandler = None
 
-    now = dt.now()
-
     if 'train' not in files or 'test' not in files:
         # list of folds, as arff files
         arffs = [load_arff(os.path.join(dataset_path, dataset_name + '_' + f + '.arff')) for f in files]
@@ -526,7 +539,9 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         ]
         full_df = reduce(lambda x, y: x.append(y), dfs)  # type: pd.DataFrame
 
-        for run in xrange(n_runs):  # TODO treat this later!
+        partial_dbs = []  # all databases
+
+        for run in xrange(n_runs):
             manager = Manager()
             dict_manager = manager.dict()
 
@@ -535,9 +550,10 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             for fold in dfs:
                 train_df = full_df.drop(fold.index).reset_index(drop=True)  # type: pd.DataFrame
 
-                if output_path is not None:
-                    dbhandler = DatabaseHandler(
-                        path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
+                p = Process(
+                    target=__run__, kwargs=dict(
+                        train_df=train_df,
+                        test_df=fold.reset_index(drop=True),
                         dataset_name=dataset_name,
                         mode='cross-validation',
                         n_runs=n_runs,
@@ -545,22 +561,11 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                         n_iterations=kwargs['n_iterations'],
                         tree_height=tree_height,
                         decile=kwargs['decile'],
-                        random_state=random_state
-                    )
-                    dbhandler.set_run(run)
-                    dbhandler.write_attributes(train_df.columns)
-                else:
-                    dbhandler = None
-
-                p = Process(
-                    target=__run__, kwargs=dict(
-                        train_df=train_df,
-                        test_df=fold.reset_index(drop=True),
+                        run=run,
+                        verbose=kwargs['verbose'],
+                        output_path=output_path,
                         random_state=random_state,
                         dict_manager=dict_manager,
-                        tree_height=tree_height,
-                        dbhandler=dbhandler,
-                        **kwargs
                     )
                 )
 
@@ -571,54 +576,37 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             for p in processes:
                 p.join()
 
-            # TODO inside runs scope!
-
-            raise NotImplementedError('not implemented yet!')
-
-            # from now on, all databases were already created
-            dball = DatabaseHandler(
-                path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
-                dataset_name=dataset_name,
-                mode='cross-validation',
-                n_runs=n_runs,
-                n_individuals=kwargs['n_individuals'],
-                n_iterations=kwargs['n_iterations'],
-                tree_height=tree_height,
-                decile=kwargs['decile'],
-                random_state=random_state
-            )
+            # TODO within runs scope!
 
             dict_dbs = dict(dict_manager)
-            for db in dict_dbs.itervalues():
-                dball.union(db)
-                os.remove(db.path)
+            partial_dbs += dict_dbs.values()
 
-            dball.plot_population()  # TODO implementing!
-            dball.close()
+        # from now on, all databases were already created
+        dball = DatabaseHandler(
+            path=os.path.join(output_path, dataset_name + ' cross-validation ' + str(dt.now()) + '.db'),
+            dataset_name=dataset_name,
+            mode='cross-validation',
+            n_runs=n_runs,
+            n_individuals=kwargs['n_individuals'],
+            n_iterations=kwargs['n_iterations'],
+            tree_height=tree_height,
+            decile=kwargs['decile'],
+            random_state=random_state
+        )
 
-            # TODO plot population from all folds!
-            # TODO delete fold databases!
-            # TODO close main database!
+        for db in partial_dbs:
+            dball.union(db)
+            os.remove(db.path)
+
+        dball.plot_population()
+        dball.close()
+
         raise NotImplementedError('not implemented yet!')
-        # TODO join all in one by run!
 
     else:  # for training with train and test folds
         # TODO treat in terms of runs!!!
         # TODO treat in terms of runs!!!
         # TODO treat in terms of runs!!!
-
-        if output_path is not None:
-            dbhandler = DatabaseHandler(
-                path=os.path.join(output_path, dataset_name + ' holdout ' + str(dt.now()) + '.db'),
-                dataset_name=dataset_name,
-                mode='holdout',
-                n_runs=n_runs,
-                n_individuals=kwargs['n_individuals'],
-                n_iterations=kwargs['n_iterations'],
-                tree_height=tree_height,
-                decile=kwargs['decile'],
-                random_state=random_state
-            )
 
         train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
         test_arff = load_arff(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
@@ -626,19 +614,19 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         train_df = load_dataframe(train_arff)
         test_df = load_dataframe(test_arff)
 
-        dbhandler.write_attributes(train_df.columns)
-
         for run in xrange(n_runs):
-            dbhandler.set_run(run)
-
             __run__(
                 train_df=train_df,
                 test_df=test_df,
-                random_state=random_state,
+                dataset_name=dataset_name,
+                mode='holdout',
+                n_runs=n_runs,
+                n_individuals=kwargs['n_individuals'],
+                n_iterations=kwargs['n_iterations'],
                 tree_height=tree_height,
-                dbhandler=dbhandler,
-                **kwargs
+                decile=kwargs['decile'],
+                run=run,
+                verbose=kwargs['verbose'],
+                output_path=output_path,
+                random_state=random_state,
             )
-
-        raise NotImplementedError('not implemented yet!')
-        dbhandler.plot_population()

@@ -25,16 +25,16 @@ class DatabaseHandler(object):
                  n_iterations=None, tree_height=None, decile=None, random_state=None):
 
         self.path = path
-        self.conn = None
 
         self.train_hash = None
         self.test_hash = None
         self.val_hash = None
         self.full_hash = None
 
+        self.run = None  # contextual run
+        self.id_run = None  # unique id of run
         self.attributes = None
-
-        self.run = None
+        self.dataset_name = dataset_name
 
         # TODO resume evolution!
         # TODO add checkpoints for commiting changes!
@@ -43,19 +43,24 @@ class DatabaseHandler(object):
         cursor = self.conn.cursor()
 
         cursor.execute("""
-          CREATE TABLE IF NOT EXISTS EVALUATION_MODES(
+          CREATE TABLE IF NOT EXISTS EVALUATION_MODES (
             mode TEXT NOT NULL PRIMARY KEY
           );
         """)
 
         cursor.execute("""
-          CREATE TABLE IF NOT EXISTS ATTRIBUTES(
-            attribute TEXT NOT NULL PRIMARY KEY
+          CREATE TABLE IF NOT EXISTS ATTRIBUTES (
+            id_attribute INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            dataset_name TEXT NOT NULL,
+            attribute TEXT NOT NULL,
+            FOREIGN KEY (dataset_name) REFERENCES EVOLUTION(dataset_name),
+            CONSTRAINT unique_columns_attributes UNIQUE (dataset_name, attribute)
           );
         """)
 
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS EVOLUTION (
+            id_evolution INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             dataset_name TEXT NOT NULL,
             mode TEXT NOT NULL,
             n_runs INTEGER NOT NULL,
@@ -65,7 +70,7 @@ class DatabaseHandler(object):
             max_n_nodes INTEGER NOT NULL,
             decile REAL NOT NULL,
             random_state INTEGER DEFAULT NULL,
-            PRIMARY KEY (
+            CONSTRAINT unique_columns_evolution UNIQUE (
               dataset_name, mode, n_runs, n_individuals, n_iterations,
               max_tree_height, max_n_nodes, decile, random_state
             ),
@@ -75,24 +80,29 @@ class DatabaseHandler(object):
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS SETS (
             hashkey INTEGER NOT NULL PRIMARY KEY,
+            dataset_name TEXT NOT NULL,
             relation_name TEXT NOT NULL,
             n_instances INTEGER NOT NULL,
             n_attributes INTEGER NOT NULL,
-            n_classes INTEGER NOT NULL
+            n_classes INTEGER NOT NULL,
+            FOREIGN KEY (dataset_name) REFERENCES EVOLUTION (dataset_name)
         );""")
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS RUNS (
-            run INTEGER NOT NULL PRIMARY KEY,
+            id_run INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            run INTEGER NOT NULL,
             train_hashkey INTEGER NOT NULL,
             val_hashkey INTEGER DEFAULT NULL,
             test_hashkey INTEGER DEFAULT NULL,
             FOREIGN KEY(train_hashkey) REFERENCES SETS(hashkey),
             FOREIGN KEY(val_hashkey) REFERENCES SETS(hashkey),
-            FOREIGN KEY(test_hashkey) REFERENCES SETS(hashkey)
+            FOREIGN KEY(test_hashkey) REFERENCES SETS(hashkey),
+            CONSTRAINT unique_columns_runs UNIQUE (run, train_hashkey, val_hashkey, test_hashkey)
         );""")
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS POPULATION (
-            run INTEGER NOT NULL,
+            id_population INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            id_run INTEGER NOT NULL,
             iteration INTEGER NOT NULL,
             individual INTEGER NOT NULL,
             fitness REAL NOT NULL,
@@ -102,8 +112,8 @@ class DatabaseHandler(object):
             val_correct INTEGER DEFAULT NULL,
             test_correct INTEGER DEFAULT NULL,
             dot TEXT DEFAULT NULL,
-            PRIMARY KEY (run, iteration, individual),
-            FOREIGN KEY(run) REFERENCES RUNS(run)
+            FOREIGN KEY(id_run) REFERENCES RUNS(id_run),
+            CONSTRAINT unique_columns_population UNIQUE (id_run, iteration, individual)
           );
         """)
 
@@ -115,22 +125,23 @@ class DatabaseHandler(object):
 
             _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
 
-            cursor.execute("""
-              CREATE TABLE IF NOT EXISTS PROTOTYPE (
-                run INTEGER NOT NULL,
-                iteration INTEGER NOT NULL,
-                attribute TEXT NOT NULL,
-                %s
-                FOREIGN KEY (run) REFERENCES RUNS(run),
-                FOREIGN KEY (attribute) REFERENCES ATTRIBUTES(attribute),
-                PRIMARY KEY (run, iteration, attribute)
-               )
-             """ % _prototype_columns)
-
             for mode in DatabaseHandler.modes:
                 cursor.execute("""
                   INSERT INTO EVALUATION_MODES (mode) VALUES ('%s')
                 """ % mode)
+
+            cursor.execute("""
+              CREATE TABLE IF NOT EXISTS PROTOTYPE (
+                id_prototype INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                id_run INTEGER NOT NULL,
+                iteration INTEGER NOT NULL,
+                attribute TEXT NOT NULL,
+                %s
+                FOREIGN KEY (id_run) REFERENCES RUNS(id_run),
+                FOREIGN KEY (attribute) REFERENCES ATTRIBUTES(attribute),
+                CONSTRAINT unique_columns_prototype UNIQUE (id_run, iteration, attribute)
+               )
+             """ % _prototype_columns)
 
             cursor.execute("""
               INSERT INTO EVOLUTION (dataset_name, mode, n_runs, n_individuals,
@@ -141,6 +152,11 @@ class DatabaseHandler(object):
                 )
             )
         else:
+            self.dataset_name = cursor.execute("""SELECT DATASET_NAME FROM EVOLUTION;""").fetchone()[0]
+
+            self.id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
+            self.attributes = [x[0] for x in cursor.execute("""SELECT ATTRIBUTE FROM ATTRIBUTES;""").fetchall()]
+
             cursor.execute("""SELECT RELATION_NAME, HASHKEY FROM SETS;""")
             rows = cursor.fetchall()
 
@@ -156,13 +172,9 @@ class DatabaseHandler(object):
         return self.conn.cursor()
 
     def close(self):
-        # try:
         if self.conn is not None and not self.closed:
             self.conn.commit()
             self.conn.close()
-        # except:
-        #     pass
-        # finally:
         self.closed = True
 
     def commit(self):
@@ -177,27 +189,23 @@ class DatabaseHandler(object):
         cursor = self.conn.cursor()
 
         for attribute in attributes:
-            cursor.execute("""INSERT INTO ATTRIBUTES (attribute) VALUES ('%s')""" % attribute)
+            cursor.execute("""
+                INSERT INTO ATTRIBUTES (dataset_name, attribute) VALUES ('%s', '%s')
+              """ % (self.dataset_name, attribute)
+            )
 
         self.attributes = attributes
         cursor.close()
 
     def write_sets(self, data):
-        """
-
-        :type data: list
-        :param data:
-        :return:
-        """
-
         cursor = self.conn.cursor()
 
         for d in data:  # type: dict
             exec('self.%s_hash = %d' % (d['relation_name'], d['hashkey']))
 
-            cursor.execute("""INSERT INTO SETS (hashkey, relation_name, n_instances, n_attributes, n_classes) VALUES (
-              %d, '%s', %d, %d, %d
-              )""" % (d['hashkey'], d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
+            cursor.execute("""INSERT INTO SETS (hashkey, dataset_name, relation_name, n_instances, n_attributes, n_classes) VALUES (
+              %d, '%s', '%s', %d, %d, %d
+              )""" % (d['hashkey'], self.dataset_name, d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
             )
 
         cursor.execute("""
@@ -210,6 +218,8 @@ class DatabaseHandler(object):
             )
         )
 
+        self.id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
+
         cursor.close()
 
     def write_population(self, iteration, population):
@@ -218,9 +228,9 @@ class DatabaseHandler(object):
         for ind in population:
             cursor.execute("""
               INSERT INTO POPULATION (
-                run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
+                id_run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
                 ) VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
-                    self.run, iteration, ind.ind_id, ind.fitness, ind.height, ind.n_nodes,
+                    self.id_run, iteration, ind.ind_id, ind.fitness, ind.height, ind.n_nodes,
                     int(ind.train_acc_score * len(ind.y_train_true)),
                     str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
                     str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
@@ -244,15 +254,11 @@ class DatabaseHandler(object):
         cursor = self.conn.cursor()
 
         for attr in self.attributes:
-            # run INTEGER NOT NULL,
-            # iteration INTEGER NOT NULL,
-            # attribute TEXT NOT NULL,
-
             cursor.execute("""
                INSERT INTO PROTOTYPE VALUES (
                 %d, %d, '%s', %s
                )
-            """ % (self.run, iteration, attr, ','.join([str(x) for x in gm.attributes.loc[attr]]))
+            """ % (self.id_run, iteration, attr, ','.join([str(x) for x in gm.attributes.loc[attr]]))
             )
         cursor.close()
 
@@ -267,34 +273,40 @@ class DatabaseHandler(object):
                 return str(value).join("''")
             return str(value)
 
+        def __insert__(self_cursor, other_cursor, tables, treat=False):
+            for table_name in tables:
+                columns = other_cursor.execute('PRAGMA TABLE_INFO(%s)' % table_name).fetchall()
+                column_names = ','.join([x[self.table_info_columns['name']] for x in columns])
+                column_types = [x[self.table_info_columns['type']] for x in columns]
+
+                other_data = other_cursor.execute("""SELECT %s FROM %s;""" % (column_names, table_name)).fetchall()
+
+                for data in other_data:
+                    try:
+                        data_str = ','.join([convert(x, column_types[i]) for i, x in enumerate(data)])
+                        self_cursor.execute("""INSERT INTO %s (%s) VALUES (%s);""" % (table_name, column_names, data_str))
+                    except Exception, e:
+                        if treat:
+                            pass
+                        else:
+                            raise e
+
         if db.closed:
             db = DatabaseHandler(db.path)
 
         other_cursor = db.get_cursor()
         self_cursor = self.conn.cursor()
 
-        tables = ['sets', 'population', 'prototype']
-        for table_name in tables:
-            columns = other_cursor.execute('PRAGMA TABLE_INFO(%s)' % table_name).fetchall()
-            column_names = ','.join([x[self.table_info_columns['name']] for x in columns])
-            column_types = [x[self.table_info_columns['type']] for x in columns]
+        tables = ['evolution', 'attributes', 'sets']
+        __insert__(self_cursor, other_cursor, tables, treat=True)
 
-            other_data = other_cursor.execute("""SELECT %s FROM %s;""" % (column_names, table_name)).fetchall()
-
-            for data in other_data:
-                data_str = ','.join([convert(x, column_types[i]) for i, x in enumerate(data)])
-                self_cursor.execute("""INSERT INTO %s (%s) VALUES (%s);""" % (table_name, column_names, data_str))
+        tables = ['runs', 'population', 'prototype']
+        __insert__(self_cursor, other_cursor, tables, treat=False)
 
         other_cursor.close()
         self_cursor.close()
 
     def plot_population(self):
-
-        raise NotImplementedError('not implemented yet!')
-
-
-        # TODO must support when plotting from cross-validation!
-
         plt.figure()
         ax = plt.subplot(111)
 
@@ -305,13 +317,7 @@ class DatabaseHandler(object):
         cursor.execute("""SELECT DISTINCT(ITERATION) FROM POPULATION ORDER BY ITERATION ASC;""")
         n_iterations = cursor.fetchall()
 
-        medians = []
-        means = []
-        maxes = []
-        mins = []
-        max_tests = []
-        all_heights = []
-        all_n_nodes = []
+        medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = [], [], [], [], [], [], []
 
         cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
         test_total = cursor.fetchone()[0]
@@ -354,6 +360,7 @@ class DatabaseHandler(object):
         plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
         plt.show()
+        raise NotImplementedError('not implemented yet!')
 
     def plot_prototype(self):
         pass
