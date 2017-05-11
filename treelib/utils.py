@@ -31,16 +31,16 @@ class DatabaseHandler(object):
         self.val_hash = None
         self.full_hash = None
 
-        self.run = None  # contextual run
-        self.id_run = None  # unique id of run
+        self._run = None  # contextual run
+        self._id_run = None  # unique id of run
         self.attributes = None
         self.dataset_name = dataset_name
 
         # TODO resume evolution!
-        # TODO add checkpoints for commiting changes!
+        # TODO add checkpoints for committing changes!
 
-        self.conn = sqlite3.connect(path)
-        cursor = self.conn.cursor()
+        self._conn = sqlite3.connect(path)
+        cursor = self._conn.cursor()
 
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS EVALUATION_MODES (
@@ -50,17 +50,16 @@ class DatabaseHandler(object):
 
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS ATTRIBUTES (
-            id_attribute INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             dataset_name TEXT NOT NULL,
             attribute TEXT NOT NULL,
             FOREIGN KEY (dataset_name) REFERENCES EVOLUTION(dataset_name),
-            CONSTRAINT unique_columns_attributes UNIQUE (dataset_name, attribute)
+            CONSTRAINT unique_columns_attributes PRIMARY KEY (dataset_name, attribute)
           );
         """)
 
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS EVOLUTION (
-            id_evolution INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            id_evolution INTEGER NOT NULL PRIMARY KEY,
             dataset_name TEXT NOT NULL,
             mode TEXT NOT NULL,
             n_runs INTEGER NOT NULL,
@@ -89,7 +88,7 @@ class DatabaseHandler(object):
         );""")
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS RUNS (
-            id_run INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            id_run INTEGER NOT NULL PRIMARY KEY,
             run INTEGER NOT NULL,
             train_hashkey INTEGER NOT NULL,
             val_hashkey INTEGER DEFAULT NULL,
@@ -101,7 +100,6 @@ class DatabaseHandler(object):
         );""")
         cursor.execute("""
           CREATE TABLE IF NOT EXISTS POPULATION (
-            id_population INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             id_run INTEGER NOT NULL,
             iteration INTEGER NOT NULL,
             individual INTEGER NOT NULL,
@@ -123,38 +121,39 @@ class DatabaseHandler(object):
             max_n_nodes = get_total_nodes(tree_height - 1)  # max nodes a tree can have
             n_variables = get_total_nodes(tree_height - 2)  # useful variables in the prototype tree
 
-            _prototype_columns = '\n'.join(['NODE_%d REAL NOT NULL,' % i for i in xrange(n_variables)])
+            _prototype_columns_insert = ', '.join(['NODE_%d REAL NOT NULL' % i for i in xrange(n_variables)])
+            self._prototype_columns = ', '.join(['NODE_%d' % i for i in xrange(n_variables)])
 
-            for mode in DatabaseHandler.modes:
+            for p_mode in DatabaseHandler.modes:
                 cursor.execute("""
                   INSERT INTO EVALUATION_MODES (mode) VALUES ('%s')
-                """ % mode)
+                """ % p_mode)
 
             cursor.execute("""
               CREATE TABLE IF NOT EXISTS PROTOTYPE (
-                id_prototype INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 id_run INTEGER NOT NULL,
                 iteration INTEGER NOT NULL,
                 attribute TEXT NOT NULL,
-                %s
+                %s,
                 FOREIGN KEY (id_run) REFERENCES RUNS(id_run),
                 FOREIGN KEY (attribute) REFERENCES ATTRIBUTES(attribute),
                 CONSTRAINT unique_columns_prototype UNIQUE (id_run, iteration, attribute)
                )
-             """ % _prototype_columns)
+             """ % _prototype_columns_insert)
 
+            evolution_columns = (dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile, random_state)
             cursor.execute("""
-              INSERT INTO EVOLUTION (dataset_name, mode, n_runs, n_individuals,
+              INSERT INTO EVOLUTION (id_evolution, dataset_name, mode, n_runs, n_individuals,
                 n_iterations, max_tree_height, max_n_nodes, decile, random_state) VALUES (
-                '%s', '%s', %d, %d, %d, %d, %d, %f, %s)""" % (
-                    dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
+                %d, '%s', '%s', %d, %d, %d, %d, %d, %f, %s)""" % (
+                    hash(tuple(evolution_columns)), dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
                     random_state if random_state is not None else '\'NULL\''
                 )
             )
         else:
             self.dataset_name = cursor.execute("""SELECT DATASET_NAME FROM EVOLUTION;""").fetchone()[0]
 
-            self.id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
+            self._id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
             self.attributes = [x[0] for x in cursor.execute("""SELECT ATTRIBUTE FROM ATTRIBUTES;""").fetchall()]
 
             cursor.execute("""SELECT RELATION_NAME, HASHKEY FROM SETS;""")
@@ -166,27 +165,27 @@ class DatabaseHandler(object):
         self.closed = False
 
     def set_run(self, run):
-        self.run = run
+        self._run = run
 
     def get_cursor(self):
-        return self.conn.cursor()
+        return self._conn.cursor()
 
     def close(self):
-        if self.conn is not None and not self.closed:
-            self.conn.commit()
-            self.conn.close()
+        if self._conn is not None and not self.closed:
+            self._conn.commit()
+            self._conn.close()
         self.closed = True
 
     def commit(self):
         if not self.closed:
-            self.conn.commit()
+            self._conn.commit()
 
     @staticmethod
     def get_hash(dataset):
         return hash(tuple(dataset.apply(lambda x: hash(tuple(x)), axis=1)))
 
     def write_attributes(self, attributes):
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
 
         for attribute in attributes:
             cursor.execute("""
@@ -198,50 +197,57 @@ class DatabaseHandler(object):
         cursor.close()
 
     def write_sets(self, data):
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
 
         for d in data:  # type: dict
             exec('self.%s_hash = %d' % (d['relation_name'], d['hashkey']))
 
-            cursor.execute("""INSERT INTO SETS (hashkey, dataset_name, relation_name, n_instances, n_attributes, n_classes) VALUES (
+            cursor.execute("""
+              INSERT INTO SETS (hashkey, dataset_name, relation_name, n_instances, n_attributes, n_classes) VALUES (
               %d, '%s', '%s', %d, %d, %d
-              )""" % (d['hashkey'], self.dataset_name, d['relation_name'], d['n_instances'], d['n_attributes'], d['n_classes'])
+              )""" % (
+                    d['hashkey'], self.dataset_name, d['relation_name'],
+                    d['n_instances'], d['n_attributes'], d['n_classes']
+                )
             )
 
+        self._id_run = hash((self._run, self.train_hash, self.val_hash, self.test_hash))
+
         cursor.execute("""
-          INSERT INTO RUNS (run, train_hashkey, val_hashkey, test_hashkey) VALUES (%d, %d, %s, %s)
+          INSERT INTO RUNS (id_run, run, train_hashkey, val_hashkey, test_hashkey) VALUES (%d, %d, %d, %s, %s)
         """ % (
-                self.run,
+                self._id_run,
+                self._run,
                 self.train_hash,
                 str(self.val_hash) if self.val_hash is not None else 'NULL',
                 str(self.test_hash) if self.test_hash is not None else 'NULL'
             )
         )
 
-        self.id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
+        self._id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
 
         cursor.close()
 
     def write_population(self, iteration, population):
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
 
         for ind in population:
             cursor.execute("""
               INSERT INTO POPULATION (
                 id_run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
                 ) VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
-                    self.id_run, iteration, ind.ind_id, ind.fitness, ind.height, ind.n_nodes,
-                    int(ind.train_acc_score * len(ind.y_train_true)),
-                    str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
-                    str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
-                    ind.to_dot()
+                self._id_run, iteration, ind.ind_id, ind.fitness, ind.height, ind.n_nodes,
+                int(ind.train_acc_score * len(ind.y_train_true)),
+                str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
+                str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
+                ind.to_dot()
                 )
             )
 
         cursor.close()
 
         if iteration % self.commit_every == 0:
-            self.conn.commit()
+            self._conn.commit()
 
     def write_prototype(self, iteration, gm):
         """
@@ -251,19 +257,19 @@ class DatabaseHandler(object):
         :param gm:
         :return:
         """
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
 
         for attr in self.attributes:
             cursor.execute("""
-               INSERT INTO PROTOTYPE VALUES (
+               INSERT INTO PROTOTYPE (id_run, iteration, attribute, %s) VALUES (
                 %d, %d, '%s', %s
                )
-            """ % (self.id_run, iteration, attr, ','.join([str(x) for x in gm.attributes.loc[attr]]))
+            """ % (self._prototype_columns, self._id_run, iteration, attr, ','.join([str(x) for x in gm.attributes.loc[attr]]))
             )
         cursor.close()
 
         if iteration % self.commit_every == 0:
-            self.conn.commit()
+            self._conn.commit()
 
     def union(self, db):
         def convert(value, _type):
@@ -276,6 +282,7 @@ class DatabaseHandler(object):
         def __insert__(self_cursor, other_cursor, tables, treat=False):
             for table_name in tables:
                 columns = other_cursor.execute('PRAGMA TABLE_INFO(%s)' % table_name).fetchall()
+
                 column_names = ','.join([x[self.table_info_columns['name']] for x in columns])
                 column_types = [x[self.table_info_columns['type']] for x in columns]
 
@@ -295,13 +302,17 @@ class DatabaseHandler(object):
             db = DatabaseHandler(db.path)
 
         other_cursor = db.get_cursor()
-        self_cursor = self.conn.cursor()
+        self_cursor = self._conn.cursor()
 
+        # those values must be unique in the main database, but will repeat in partial databases
         tables = ['evolution', 'attributes', 'sets']
         __insert__(self_cursor, other_cursor, tables, treat=True)
 
+        # those values are also unique, must do not and should not
+        # repeat among databases. throw an exception if this happens!
         tables = ['runs', 'population', 'prototype']
         __insert__(self_cursor, other_cursor, tables, treat=False)
+        # TODO ignores id but then two other values are not unique!
 
         other_cursor.close()
         self_cursor.close()
@@ -310,57 +321,63 @@ class DatabaseHandler(object):
         plt.figure()
         ax = plt.subplot(111)
 
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
 
-        # TODO for each run!
+        mode = cursor.execute("""SELECT MODE FROM EVOLUTION""").fetchone()[0]
 
-        cursor.execute("""SELECT DISTINCT(ITERATION) FROM POPULATION ORDER BY ITERATION ASC;""")
-        n_iterations = cursor.fetchall()
+        if mode == 'holdout':
+            # TODO group by run!
+            # TODO group by run!
+            # TODO group by run!
+            n_iterations = cursor.execute("""SELECT MAX(ITERATION) FROM POPULATION GROUP BY ID_RUN;""").fetchall()
 
-        medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = [], [], [], [], [], [], []
+            medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = [], [], [], [], [], [], []
 
-        cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
-        test_total = cursor.fetchone()[0]
+            cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
+            test_total = cursor.fetchone()[0]
 
-        cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
-        max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
+            cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
+            max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
 
-        for iteration in n_iterations:
-            cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
-                              FROM POPULATION
-                              WHERE ITERATION = %d
-                              ORDER BY FITNESS ASC;""" % iteration
-                           )
-            fitness, test_correct, tree_height, n_nodes = zip(*cursor.fetchall())
-            medians += [np.median(fitness)]
-            means += [np.mean(fitness)]
-            maxes += [np.max(fitness)]
-            mins += [np.min(fitness)]
-            all_heights += [np.mean(tree_height) / float(max_tree_height)]
-            all_n_nodes += [np.mean(n_nodes) / float(max_n_nodes)]
-            max_tests += [test_correct[np.argmax(fitness)] / float(test_total)]
+            for iteration in n_iterations:
+                cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
+                                          FROM POPULATION
+                                          WHERE ITERATION = %d
+                                          ORDER BY FITNESS ASC;""" % iteration
+                               )
+                fitness, test_correct, tree_height, n_nodes = zip(*cursor.fetchall())
+                medians += [np.median(fitness)]
+                means += [np.mean(fitness)]
+                maxes += [np.max(fitness)]
+                mins += [np.min(fitness)]
+                all_heights += [np.mean(tree_height) / float(max_tree_height)]
+                all_n_nodes += [np.mean(n_nodes) / float(max_n_nodes)]
+                max_tests += [test_correct[np.argmax(fitness)] / float(test_total)]
 
-        cursor.close()
+            cursor.close()
 
-        plt.plot(medians, label='median fitness', c='green')
-        plt.plot(means, label='mean fitness', c='orange')
-        plt.plot(maxes, label='max fitness', c='blue')
-        plt.plot(mins, label='min fitness', c='pink')
-        plt.plot(max_tests, label='best individual\ntest accuracy', c='red')
-        plt.plot(all_heights, label='mean height /\n  max height', c='cyan')
-        plt.plot(all_n_nodes, label='mean nodes /\n  max nodes', c='magenta')
+            plt.plot(medians, label='median fitness', c='green')
+            plt.plot(means, label='mean fitness', c='orange')
+            plt.plot(maxes, label='max fitness', c='blue')
+            plt.plot(mins, label='min fitness', c='pink')
+            plt.plot(max_tests, label='best individual\ntest accuracy', c='red')
+            plt.plot(all_heights, label='mean height /\n  max height', c='cyan')
+            plt.plot(all_n_nodes, label='mean nodes /\n  max nodes', c='magenta')
 
-        plt.title("Population statistics throughout evolution\nfor dataset %s" % dataset_name)
+            plt.title("Population statistics throughout evolution\nfor dataset %s" % dataset_name)
 
-        plt.xlabel('Iteration')
+            plt.xlabel('Iteration')
 
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-        plt.show()
-        raise NotImplementedError('not implemented yet!')
+            plt.show()
+
+        elif mode == 'cross-validation':
+            # TODO for each run!
+            pass  # TODO show other type of data!
 
     def plot_prototype(self):
         pass
