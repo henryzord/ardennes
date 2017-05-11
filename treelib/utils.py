@@ -37,7 +37,6 @@ class DatabaseHandler(object):
         self.dataset_name = dataset_name
 
         # TODO resume evolution!
-        # TODO add checkpoints for committing changes!
 
         self._conn = sqlite3.connect(path)
         cursor = self._conn.cursor()
@@ -325,52 +324,57 @@ class DatabaseHandler(object):
 
         mode = cursor.execute("""SELECT MODE FROM EVOLUTION""").fetchone()[0]
 
+        medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = 0, 1, 2, 3, 4, 5, 6
+        n_data = 7
+
         if mode == 'holdout':
-            # TODO group by run!
-            # TODO group by run!
-            # TODO group by run!
-            n_iterations = cursor.execute("""SELECT MAX(ITERATION) FROM POPULATION GROUP BY ID_RUN;""").fetchall()
+            ns_iterations = cursor.execute("""SELECT MAX(ITERATION) FROM POPULATION GROUP BY ID_RUN;""").fetchall()
+            ns_iterations = [x[0] + 1 for x in ns_iterations]
 
-            medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = [], [], [], [], [], [], []
+            # TODO must have an additional axis for runs!
+            metadata = np.zeros((n_data, len(ns_iterations), max(ns_iterations)), dtype=np.float32)
 
-            cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
-            test_total = cursor.fetchone()[0]
+            for n_run, n_iterations in enumerate(ns_iterations):
+                cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
+                test_total = cursor.fetchone()[0]
 
-            cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
-            max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
+                cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
+                max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
 
-            for iteration in n_iterations:
-                cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
-                                          FROM POPULATION
-                                          WHERE ITERATION = %d
-                                          ORDER BY FITNESS ASC;""" % iteration
-                               )
-                fitness, test_correct, tree_height, n_nodes = zip(*cursor.fetchall())
-                medians += [np.median(fitness)]
-                means += [np.mean(fitness)]
-                maxes += [np.max(fitness)]
-                mins += [np.min(fitness)]
-                all_heights += [np.mean(tree_height) / float(max_tree_height)]
-                all_n_nodes += [np.mean(n_nodes) / float(max_n_nodes)]
-                max_tests += [test_correct[np.argmax(fitness)] / float(test_total)]
+                for iteration in xrange(n_iterations):
+                    cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
+                                              FROM POPULATION
+                                              WHERE ITERATION = %d
+                                              ORDER BY FITNESS ASC;""" % iteration
+                                   )
+
+                    _fitness, _test_correct, _tree_height, _n_nodes = zip(*cursor.fetchall())
+
+                    metadata[    medians, n_run, iteration] = np.median(_fitness)
+                    metadata[      means, n_run, iteration] = np.mean(_fitness)
+                    metadata[      maxes, n_run, iteration] = np.max(_fitness)
+                    metadata[       mins, n_run, iteration] = np.min(_fitness)
+                    metadata[all_heights, n_run, iteration] = np.mean(_tree_height) / float(max_tree_height)
+                    metadata[all_n_nodes, n_run, iteration] = np.mean(_n_nodes) / float(max_n_nodes)
+                    metadata[  max_tests, n_run, iteration] = _test_correct[np.argmax(_fitness)] / float(test_total)
 
             cursor.close()
 
-            plt.plot(medians, label='median fitness', c='green')
-            plt.plot(means, label='mean fitness', c='orange')
-            plt.plot(maxes, label='max fitness', c='blue')
-            plt.plot(mins, label='min fitness', c='pink')
-            plt.plot(max_tests, label='best individual\ntest accuracy', c='red')
-            plt.plot(all_heights, label='mean height /\n  max height', c='cyan')
-            plt.plot(all_n_nodes, label='mean nodes /\n  max nodes', c='magenta')
+            plt.plot(np.mean(    metadata[medians, :, :], axis=0), label='median fitness', c='green')
+            plt.plot(np.mean(      metadata[means, :, :], axis=0), label='mean fitness', c='orange')
+            plt.plot(np.mean(      metadata[maxes, :, :], axis=0), label='max fitness', c='blue')
+            plt.plot(np.mean(       metadata[mins, :, :], axis=0), label='min fitness', c='pink')
+            plt.plot(np.mean(  metadata[max_tests, :, :], axis=0), label='best individual\ntest accuracy', c='red')
+            plt.plot(np.mean(metadata[all_heights, :, :], axis=0), label='mean height /\n  max height', c='cyan')
+            plt.plot(np.mean(metadata[all_n_nodes, :, :], axis=0), label='mean nodes /\n  max nodes', c='magenta')
 
-            plt.title("Population statistics throughout evolution\nfor dataset %s" % dataset_name)
-
+            plt.title("Population statistics throughout evolution\nfor dataset %s\nmean of %d run(s)" % (
+                dataset_name, len(ns_iterations))
+            )
             plt.xlabel('Iteration')
 
             box = ax.get_position()
             ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-
             plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
             plt.show()

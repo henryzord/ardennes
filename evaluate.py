@@ -473,8 +473,9 @@ def __run__(train_df, test_df=None, **kwargs):
         dbhandler.close()
 
     if 'dict_manager' in kwargs:
-        hashkey = DatabaseHandler.get_hash(train_df)
-        kwargs['dict_manager'][hashkey] = dbhandler
+        train_hash = DatabaseHandler.get_hash(train_df)
+        hashdb = hash((train_hash, kwargs['run']))
+        kwargs['dict_manager'][hashdb] = dbhandler
 
     return test_acc_score
 
