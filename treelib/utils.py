@@ -375,8 +375,6 @@ class DatabaseHandler(object):
 
         cursor.close()
 
-        # TODO cannot be the whole mean! must take into account the length of iterations!!!!
-
         plots = [
             dict(data=    metadata[medians, :, :], label='median fitness', c='green'),
             dict(data=      metadata[means, :, :], label='mean fitness', c='orange'),
@@ -388,7 +386,9 @@ class DatabaseHandler(object):
         ]
         for plot in plots:
             plt.plot(
-                np.divide(np.sum(plot['data'], axis=0), np.count_nonzero(plot['data'], axis=0)), label=plot['label'], c=plot['c']
+                np.divide(np.sum(plot['data'], axis=0), np.count_nonzero(plot['data'], axis=0)) * n_folds,
+                label=plot['label'],
+                c=plot['c']
             )
 
         plt.title("Population statistics throughout evolution\nfor dataset %s\nmean of %d run(s)" % (
