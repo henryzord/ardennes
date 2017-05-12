@@ -152,6 +152,7 @@ class DatabaseHandler(object):
         else:
             self.dataset_name = cursor.execute("""SELECT DATASET_NAME FROM EVOLUTION;""").fetchone()[0]
 
+            # TODO only works for when there's a single run!
             self._id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
             self.attributes = [x[0] for x in cursor.execute("""SELECT ATTRIBUTE FROM ATTRIBUTES;""").fetchall()]
 
@@ -222,8 +223,6 @@ class DatabaseHandler(object):
                 str(self.test_hash) if self.test_hash is not None else 'NULL'
             )
         )
-
-        self._id_run = cursor.execute("""SELECT ID_RUN FROM RUNS""").fetchone()[0]
 
         cursor.close()
 
@@ -311,7 +310,6 @@ class DatabaseHandler(object):
         # repeat among databases. throw an exception if this happens!
         tables = ['runs', 'population', 'prototype']
         __insert__(self_cursor, other_cursor, tables, treat=False)
-        # TODO ignores id but then two other values are not unique!
 
         other_cursor.close()
         self_cursor.close()
@@ -322,66 +320,87 @@ class DatabaseHandler(object):
 
         cursor = self._conn.cursor()
 
-        mode = cursor.execute("""SELECT MODE FROM EVOLUTION""").fetchone()[0]
-
+        # begin{index}
         medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = 0, 1, 2, 3, 4, 5, 6
         n_data = 7
+        # end{index}
 
-        if mode == 'holdout':
-            ns_iterations = cursor.execute("""SELECT MAX(ITERATION) FROM POPULATION GROUP BY ID_RUN;""").fetchall()
-            ns_iterations = [x[0] + 1 for x in ns_iterations]
+        n_runs = cursor.execute("""SELECT COUNT(DISTINCT(RUN)) FROM RUNS;""").fetchone()[0]
 
-            # TODO must have an additional axis for runs!
-            metadata = np.zeros((n_data, len(ns_iterations), max(ns_iterations)), dtype=np.float32)
+        max_iterations, max_tree_height, max_n_nodes, dataset_name = cursor.execute("""
+          SELECT N_ITERATIONS, MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;
+        """).fetchone()
 
-            for n_run, n_iterations in enumerate(ns_iterations):
-                cursor.execute("""SELECT N_INSTANCES FROM SETS WHERE RELATION_NAME = 'test';""")
-                test_total = cursor.fetchone()[0]
+        folds = [
+            x[0] for x in
+            cursor.execute("""SELECT DISTINCT(train_hashkey) FROM RUNS;""").fetchall()
+        ]
 
-                cursor.execute("""SELECT MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;""")
-                max_tree_height, max_n_nodes, dataset_name = cursor.fetchone()
+        n_folds = len(folds)
+
+        metadata = np.zeros((n_data, n_runs, max_iterations), dtype=np.float32)
+
+        for id_fold, fold in enumerate(folds):
+            for run in xrange(n_runs):
+                id_run, test_hashkey = cursor.execute("""
+                  SELECT id_run, test_hashkey FROM RUNS WHERE train_hashkey = %d AND run = %d
+                """ % (fold, run)).fetchone()
+
+                test_total, relation_name = cursor.execute("""
+                  SELECT N_INSTANCES, relation_name FROM SETS WHERE hashkey = %d
+                """ % test_hashkey).fetchone()  # AND RELATION_NAME = 'test';
+
+                n_iterations = cursor.execute("""
+                  SELECT MAX(iteration) FROM POPULATION WHERE id_run = %d
+                """ % id_run).fetchone()[0] + 1
 
                 for iteration in xrange(n_iterations):
-                    cursor.execute("""SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
-                                              FROM POPULATION
-                                              WHERE ITERATION = %d
-                                              ORDER BY FITNESS ASC;""" % iteration
-                                   )
+                    cursor.execute("""
+                      SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
+                      FROM POPULATION
+                      WHERE ID_RUN = %d
+                      AND ITERATION = %d
+                      ORDER BY FITNESS ASC;
+                    """ % (id_run, iteration))
 
                     _fitness, _test_correct, _tree_height, _n_nodes = zip(*cursor.fetchall())
 
-                    metadata[    medians, n_run, iteration] = np.median(_fitness)
-                    metadata[      means, n_run, iteration] = np.mean(_fitness)
-                    metadata[      maxes, n_run, iteration] = np.max(_fitness)
-                    metadata[       mins, n_run, iteration] = np.min(_fitness)
-                    metadata[all_heights, n_run, iteration] = np.mean(_tree_height) / float(max_tree_height)
-                    metadata[all_n_nodes, n_run, iteration] = np.mean(_n_nodes) / float(max_n_nodes)
-                    metadata[  max_tests, n_run, iteration] = _test_correct[np.argmax(_fitness)] / float(test_total)
+                    metadata[    medians, run, iteration] = (1./n_folds) * np.median(_fitness)
+                    metadata[      means, run, iteration] = (1./n_folds) * np.mean(_fitness)
+                    metadata[      maxes, run, iteration] = (1./n_folds) * np.max(_fitness)
+                    metadata[       mins, run, iteration] = (1./n_folds) * np.min(_fitness)
+                    metadata[all_heights, run, iteration] = (1./n_folds) * np.mean(_tree_height) / float(max_tree_height)
+                    metadata[all_n_nodes, run, iteration] = (1./n_folds) * np.mean(_n_nodes) / float(max_n_nodes)
+                    metadata[  max_tests, run, iteration] = (1./n_folds) * _test_correct[np.argmax(_fitness)] / float(test_total)
 
-            cursor.close()
+        cursor.close()
 
-            plt.plot(np.mean(    metadata[medians, :, :], axis=0), label='median fitness', c='green')
-            plt.plot(np.mean(      metadata[means, :, :], axis=0), label='mean fitness', c='orange')
-            plt.plot(np.mean(      metadata[maxes, :, :], axis=0), label='max fitness', c='blue')
-            plt.plot(np.mean(       metadata[mins, :, :], axis=0), label='min fitness', c='pink')
-            plt.plot(np.mean(  metadata[max_tests, :, :], axis=0), label='best individual\ntest accuracy', c='red')
-            plt.plot(np.mean(metadata[all_heights, :, :], axis=0), label='mean height /\n  max height', c='cyan')
-            plt.plot(np.mean(metadata[all_n_nodes, :, :], axis=0), label='mean nodes /\n  max nodes', c='magenta')
+        # TODO cannot be the whole mean! must take into account the length of iterations!!!!
 
-            plt.title("Population statistics throughout evolution\nfor dataset %s\nmean of %d run(s)" % (
-                dataset_name, len(ns_iterations))
+        plots = [
+            dict(data=    metadata[medians, :, :], label='median fitness', c='green'),
+            dict(data=      metadata[means, :, :], label='mean fitness', c='orange'),
+            dict(data=      metadata[maxes, :, :], label='max fitness', c='blue'),
+            dict(data=       metadata[mins, :, :], label='min fitness', c='pink'),
+            dict(data=  metadata[max_tests, :, :], label='best individual\n  test accuracy', c='red'),
+            dict(data=metadata[all_heights, :, :], label='mean height /\n  max height', c='cyan'),
+            dict(data=metadata[all_n_nodes, :, :], label='mean nodes /\n  max nodes', c='magenta')
+        ]
+        for plot in plots:
+            plt.plot(
+                np.divide(np.sum(plot['data'], axis=0), np.count_nonzero(plot['data'], axis=0)), label=plot['label'], c=plot['c']
             )
-            plt.xlabel('Iteration')
 
-            box = ax.get_position()
-            ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-            plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.title("Population statistics throughout evolution\nfor dataset %s\nmean of %d run(s)" % (
+            dataset_name, n_runs)
+        )
+        plt.xlabel('Iteration')
 
-            plt.show()
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-        elif mode == 'cross-validation':
-            # TODO for each run!
-            pass  # TODO show other type of data!
+        plt.show()
 
     def plot_prototype(self):
         pass

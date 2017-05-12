@@ -633,5 +633,6 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
         dball.union(db)
         os.remove(db.path)
 
+    dball.commit()
     dball.plot_population()
     dball.close()
