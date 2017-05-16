@@ -5,6 +5,7 @@ import sqlite3
 
 from treelib import get_total_nodes
 from matplotlib import pyplot as plt
+import pandas as pd
 
 __author__ = 'Henry Cagnini'
 
@@ -320,58 +321,50 @@ class DatabaseHandler(object):
 
         cursor = self._conn.cursor()
 
-        # begin{index}
-        medians, means, maxes, mins, max_tests, all_heights, all_n_nodes = 0, 1, 2, 3, 4, 5, 6
-        n_data = 7
-        # end{index}
-
-        n_runs = cursor.execute("""SELECT COUNT(DISTINCT(RUN)) FROM RUNS;""").fetchone()[0]
+        medians, means, maxes, mins, max_tests, all_heights, all_n_nodes, n_data = 0, 1, 2, 3, 4, 5, 6, 7
 
         max_iterations, max_tree_height, max_n_nodes, dataset_name = cursor.execute("""
           SELECT N_ITERATIONS, MAX_TREE_HEIGHT, MAX_N_NODES, DATASET_NAME FROM EVOLUTION;
         """).fetchone()
 
-        folds = [
-            x[0] for x in
-            cursor.execute("""SELECT DISTINCT(train_hashkey) FROM RUNS;""").fetchall()
-        ]
+        runs = cursor.execute("""SELECT DISTINCT(RUN) FROM RUNS""").fetchall()
 
-        n_folds = len(folds)
+        n_runs = len(runs)
 
         metadata = np.zeros((n_data, n_runs, max_iterations), dtype=np.float32)
 
-        for id_fold, fold in enumerate(folds):
-            for run in xrange(n_runs):
-                id_run, test_hashkey = cursor.execute("""
-                  SELECT id_run, test_hashkey FROM RUNS WHERE train_hashkey = %d AND run = %d
-                """ % (fold, run)).fetchone()
+        data = cursor.execute("""
+          SELECT TRAIN_HASHKEY, S.N_INSTANCES, RUN, ITERATION, FITNESS, TEST_CORRECT, HEIGHT, N_NODES
+          FROM POPULATION P
+          INNER JOIN RUNS R ON P.ID_RUN = R.ID_RUN
+          INNER JOIN SETS S ON S.HASHKEY = R.TEST_HASHKEY
+          ORDER BY ITERATION ASC;
+        """).fetchall()
 
-                test_total, relation_name = cursor.execute("""
-                  SELECT N_INSTANCES, relation_name FROM SETS WHERE hashkey = %d
-                """ % test_hashkey).fetchone()  # AND RELATION_NAME = 'test';
+        # all data
+        df = pd.DataFrame(
+            data,
+            columns=['train_hashkey', 'test_size', 'run', 'iteration', 'fitness', 'test_correct', 'height', 'n_nodes']
+        )
 
-                n_iterations = cursor.execute("""
-                  SELECT MAX(iteration) FROM POPULATION WHERE id_run = %d
-                """ % id_run).fetchone()[0] + 1
+        df1 = df.groupby(by=['train_hashkey'])
+        n_folds = len(df1)
+        df1 = df1.apply(lambda x: x / float(n_folds))  # decreases weight by number of folds
 
-                for iteration in xrange(n_iterations):
-                    cursor.execute("""
-                      SELECT FITNESS, TEST_CORRECT, HEIGHT, N_NODES
-                      FROM POPULATION
-                      WHERE ID_RUN = %d
-                      AND ITERATION = %d
-                      ORDER BY FITNESS ASC;
-                    """ % (id_run, iteration))
+        agg = df1.groupby(by=['run'])
 
-                    _fitness, _test_correct, _tree_height, _n_nodes = zip(*cursor.fetchall())
+        for run, group in agg:
+            agg1 = group.groupby(by=['iteration'])
 
-                    metadata[    medians, run, iteration] = (1./n_folds) * np.median(_fitness)
-                    metadata[      means, run, iteration] = (1./n_folds) * np.mean(_fitness)
-                    metadata[      maxes, run, iteration] = (1./n_folds) * np.max(_fitness)
-                    metadata[       mins, run, iteration] = (1./n_folds) * np.min(_fitness)
-                    metadata[all_heights, run, iteration] = (1./n_folds) * np.mean(_tree_height) / float(max_tree_height)
-                    metadata[all_n_nodes, run, iteration] = (1./n_folds) * np.mean(_n_nodes) / float(max_n_nodes)
-                    metadata[  max_tests, run, iteration] = (1./n_folds) * _test_correct[np.argmax(_fitness)] / float(test_total)
+            n_iterations = len(agg1)
+
+            metadata[    medians, int(run), :n_iterations] = n_folds * agg1['fitness'].median()
+            metadata[      means, int(run), :n_iterations] = n_folds * agg1['fitness'].mean()
+            metadata[      maxes, int(run), :n_iterations] = n_folds * agg1['fitness'].max()
+            metadata[       mins, int(run), :n_iterations] = n_folds * agg1['fitness'].min()
+            metadata[all_heights, int(run), :n_iterations] = n_folds * agg1['height'].mean() / float(max_tree_height)
+            metadata[all_n_nodes, int(run), :n_iterations] = n_folds * agg1['n_nodes'].mean() / float(max_n_nodes)
+            metadata[  max_tests, int(run), :n_iterations] = (agg1['test_correct'].mean() / agg1['test_size'].mean())
 
         cursor.close()
 
@@ -380,13 +373,14 @@ class DatabaseHandler(object):
             dict(data=      metadata[means, :, :], label='mean fitness', c='orange'),
             dict(data=      metadata[maxes, :, :], label='max fitness', c='blue'),
             dict(data=       metadata[mins, :, :], label='min fitness', c='pink'),
-            dict(data=  metadata[max_tests, :, :], label='best individual\n  test accuracy', c='red'),
             dict(data=metadata[all_heights, :, :], label='mean height /\n  max height', c='cyan'),
-            dict(data=metadata[all_n_nodes, :, :], label='mean nodes /\n  max nodes', c='magenta')
+            dict(data=metadata[all_n_nodes, :, :], label='mean nodes /\n  max nodes', c='magenta'),
+            dict(data=  metadata[max_tests, :, :], label='best individual\n  test accuracy', c='red')
         ]
+
         for plot in plots:
             plt.plot(
-                np.divide(np.sum(plot['data'], axis=0), np.count_nonzero(plot['data'], axis=0)) * n_folds,
+                np.sum(plot['data'], axis=0) / np.count_nonzero(plot['data'], axis=0),
                 label=plot['label'],
                 c=plot['c']
             )
