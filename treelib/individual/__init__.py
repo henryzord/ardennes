@@ -1,10 +1,9 @@
 # coding=utf-8
-import json
-
-import networkx as nx
-from matplotlib import pyplot as plt
 
 from __tree__ import DecisionTree
+import networkx as nx
+import StringIO
+from matplotlib import pyplot as plt
 
 __author__ = 'Henry Cagnini'
 
@@ -19,6 +18,14 @@ class Individual(DecisionTree):
         self.iteration = kwargs['iteration'] if 'iteration' in kwargs else None
 
         super(Individual, self).__init__(gm, **kwargs)
+
+    def to_dot(self):
+        output = StringIO.StringIO()
+        tree = self.tree  # type: nx.DiGraph
+        nx.drawing.nx_pydot.write_dot(tree, output)
+        _str = output.getvalue()
+        output.close()
+        return _str
 
     def plot(self, savepath=None):
         """

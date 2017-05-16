@@ -9,7 +9,26 @@ import weka.core.jvm as jvm
 from sklearn.model_selection import StratifiedKFold
 from weka.core.converters import Loader, Saver
 
+from treelib import MetaDataset
+
 __author__ = 'Henry Cagnini'
+
+
+def join_arff(a, b):
+    """
+    Joins two arff files.
+
+    :type a: dict
+    :param a: First arff file.
+    type b: dict
+    :param b: Second arff file.
+    :rtype: dict
+    :return: The junction of the two files.
+    """
+
+    c = a
+    c['data'] += b['data']
+    return c
 
 
 def load_arff(dataset_path):
@@ -28,24 +47,37 @@ def load_arff(dataset_path):
     return af
 
 
-def load_dataframe(dataset):
+def load_dataframe(af, index=None):
     """
-    Given either a dictionary or a path to a .arff file, returns a dataset in the form of a DataFrame.
 
-    :type dataset: str or dict
-    :param dataset: Either a path to the dataset with the file extension, or an arff file (i.e "my_dataset.arff")
-    :return: a DataFrame with the dataset.
+    :type af: dict
+    :param af: Arff dataset.
+    :type index: pandas.RangeIndex
+    :param index: optional - custom index to use in the dataframe. Defaults to [0, length]
     :rtype: pandas.DataFrame
+    :return: a DataFrame with the dataset.
     """
 
-    assert isinstance(dataset, dict) or isinstance(dataset, str), TypeError(
-        'Invalid type for dataset! Must be either a path to the dataset or an arff file!'
+    assert isinstance(af, dict), TypeError('You must pass a dictionary comprising an arff dataset to this function!')
+    import numpy as np
+
+    df = pd.DataFrame(
+        data=af['data'],
+        columns=[x[0] for x in af['attributes']],
+        index=index
     )
 
-    af = load_arff(dataset) if isinstance(dataset, str) else dataset
-    dataset = pd.DataFrame(af['data'], columns=[x[0] for x in af['attributes']])
+    df = df.replace('?', np.nan)
 
-    return dataset
+    for attr, dtype in af['attributes']:
+        if isinstance(dtype, list):
+            pass
+        elif MetaDataset.arff_data_types[dtype.lower()] == MetaDataset.numerical.lower():
+            df[attr] = pd.to_numeric(df[attr])
+        elif dtype == MetaDataset.categorical:
+            df[attr].dtype = np.object
+
+    return df
 
 
 def generate_folds(dataset_path, output_folder, n_folds=10, random_state=None):

@@ -4,31 +4,27 @@
 Performs tests in an 'industrial' fashion.
 """
 
-import os
-import csv
-import time
-import json
-import shutil
-import warnings
 import StringIO
-
-import pandas as pd
-import networkx as nx
-import operator as op
+import csv
 import itertools as it
-
-from sklearn.metrics import accuracy_score
-
-from preprocessing import __split__, get_dataset_name
-from treelib.node import *
-from treelib import Ardennes
-
-from termcolor import colored
+import json
+import os
+import shutil
+import time
+import warnings
 from datetime import datetime as dt
-from matplotlib import pyplot as plt
-from sklearn.metrics import confusion_matrix
 from multiprocessing import Process, Manager
-from preprocessing.dataset import load_dataframe, get_folds_index
+
+import networkx as nx
+import pandas as pd
+from matplotlib import pyplot as plt
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+
+from preprocessing.dataset import load_dataframe, load_arff
+from treelib import Ardennes
+from treelib.node import *
+from treelib.utils import DatabaseHandler
 
 __author__ = 'Henry Cagnini'
 
@@ -230,7 +226,7 @@ def evaluate_ardennes(datasets_path, config_file, output_path, validation_mode='
                 config_file['output_path'] = dataset_output_path
             try:
                 dt_dict = __train__(
-                    config_file=config_file,
+                    kwargs=config_file,
                     evaluation_mode=validation_mode,
                     n_run=n_run
                 )
@@ -427,71 +423,71 @@ def crunch_graphical_model(pgm_path, path_datasets):
         plot(fig, filename=pgm_path.split(sep)[-1] + '.html')
 
 
-def __run__(full, train_i, val_i, test_i, config_file, random_state=None, **kwargs):
+def __run__(train_df, test_df=None, **kwargs):
     t1 = dt.now()
 
-    n_fold = int(kwargs['n_fold']) if 'n_fold' in kwargs else None  # kwargs
-    n_run = int(kwargs['n_run']) if 'n_run' in kwargs else None  # kwargs
+    if 'output_path' in kwargs and kwargs['output_path'] is not None:
+        dbhandler = DatabaseHandler(
+            path=os.path.join(kwargs['output_path'], kwargs['dataset_name'] + kwargs['mode'].join("  ") + str(t1) + '.db'),
+            dataset_name=kwargs['dataset_name'],
+            mode=kwargs['mode'],
+            n_runs=kwargs['n_runs'],
+            n_individuals=kwargs['n_individuals'],
+            n_iterations=kwargs['n_iterations'],
+            tree_height=kwargs['tree_height'],
+            decile=kwargs['decile'],
+            random_state=kwargs['random_state']
+        )
+        dbhandler.set_run(kwargs['run'])
+        dbhandler.write_attributes(train_df.columns)
+    else:
+        dbhandler = None
 
     inst = Ardennes(
-        n_individuals=config_file['n_individuals'],
-        uncertainty=config_file['uncertainty'],
-        max_height=config_file['tree_height'],
-        n_iterations=config_file['n_iterations']
+        n_individuals=kwargs['n_individuals'],
+        max_height=kwargs['tree_height'],
+        n_iterations=kwargs['n_iterations']
     )
 
     inst.fit(
-        full=full,
-        train=train_i,
-        decile=config_file['decile'],
-        validation=val_i,  # kwargs
-        fold=n_fold,  # kwargs
-        run=n_run,  # kwargs
-        test=test_i,  # kwargs
-        verbose=config_file['verbose'],  # kwargs
-        random_state=random_state,  # kwargs
-        n_stop=config_file['n_stop'] if 'n_stop' in config_file else None,  # kwargs
-        output_path=config_file['output_path'] if 'output_path' in config_file else None,  # kwargs
+        train_df=train_df,
+        decile=kwargs['decile'],
+        test_df=test_df,  # kwargs
+        verbose=kwargs['verbose'],  # kwargs
+        random_state=kwargs['random_state'],  # kwargs
+        dbhandler=dbhandler  # kwargs
     )
 
     ind = inst.predictor
-    y_test_pred = list(ind.predict(full.loc[test_i]))
-    y_test_true = list(full.loc[test_i, full.columns[-1]])
+    y_test_pred = inst.predict(test_df[test_df.columns[:-1]])
+    y_test_true = test_df[test_df.columns[-1]]
 
     test_acc_score = accuracy_score(y_test_true, y_test_pred)
 
     t2 = dt.now()
 
-    if 'dict_manager' in kwargs:
-        print 'Run %d of fold %d: Correctly classified: %d/%d Height: %d n_nodes: %d Time: %02.2f secs' % (
-            n_run, n_fold, int(test_acc_score * len(y_test_true)), len(y_test_true),
-            ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-        )
-        res = dict(
-            y_test_pred=y_test_pred,
-            y_test_true=y_test_true,
-            height=ind.height,
-            n_nodes=ind.n_nodes
-        )
-
-        kwargs['dict_manager'][n_fold] = res
-    else:
-        print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
-            test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
-        )
-
-    return ind.test_acc_score
-
-
-def __train__(
-        dataset_path, config_file, evaluation_mode='cross-validation',
-        fold_path=None, train_size=0.5, n_runs=10, n_jobs=8, **kwargs):
-
-    assert evaluation_mode in ['cross-validation', 'holdout'], ValueError(
-        'evaluation_mode must be either \'cross-validation\' or \'holdout!\''
+    print 'Test acc: %02.2f Height: %d n_nodes: %d Time: %02.2f secs' % (
+        test_acc_score, ind.height, ind.n_nodes, (t2 - t1).total_seconds()
     )
+    if dbhandler is not None:
+        dbhandler.close()
 
+    if 'dict_manager' in kwargs:
+        train_hash = DatabaseHandler.get_hash(train_df)
+        hashdb = hash((train_hash, kwargs['run']))
+        kwargs['dict_manager'][hashdb] = dbhandler
+
+    return test_acc_score
+
+
+def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, output_path=None, **kwargs):
     def running(_processes):
+        """
+        Gets the number of running processes.
+
+        :param _processes: List of processes.
+        :return: Number of running processes.
+        """
         _sum = 0
         for _process in _processes:
             _sum += int(_process.is_alive())
@@ -508,54 +504,72 @@ def __train__(
         while running(_processes) >= _n_jobs:
             time.sleep(1)
 
-    def create_dataset_path(_config_file):
-        output_path = _config_file['output_path']
-
-        if output_path is not None:
-            dataset_output_path = os.path.join(output_path, dataset_name)
-            _config_file['output_path'] = dataset_output_path
-            if os.path.exists(dataset_output_path):
-                shutil.rmtree(dataset_output_path)
-            os.mkdir(dataset_output_path)
-
-        return _config_file
+    def get_dataset_name(_dataset_path):
+        if os.name == 'nt':  # if on windows
+            sep = '\\'
+        else:  # else on linux, mac
+            sep = '/'
+        _dataset_name = dataset_path.split(sep)[-1]
+        return _dataset_name
 
     dataset_name = get_dataset_name(dataset_path)
 
-    full = load_dataframe(dataset_path)
-    random_state = config_file['random_state']
-
-    folds = get_folds_index(dataset_name=dataset_name, fold_path=fold_path)
+    files = [
+        f.replace(dataset_name + '_', '').replace('.arff', '')
+        for f in os.listdir(dataset_path) if os.path.isfile(os.path.join(dataset_path, f))
+    ]  # list only files in the given folder
 
     print 'training ardennes for dataset %s' % dataset_name
 
-    if evaluation_mode == 'cross-validation':
-        assert 'folds_path' is not None, ValueError('Performing a cross-validation is only possible with a json '
-                                                    'file for folds! Provide it through the \'folds_path\' '
-                                                    'parameter in the configuration file!')
+    mode = None
+    partial_dbs = []
 
-        config_file = create_dataset_path(config_file)
-        config_file['verbose'] = False
+    if 'train' not in files or 'test' not in files:
+        mode = 'cross-validation'
 
-        for n_run in xrange(n_runs):
+        # list of folds, as arff files
+        arffs = [load_arff(os.path.join(dataset_path, dataset_name + '_' + f + '.arff')) for f in files]
+        dfs = [  # list of folds, as pandas dataframes
+            load_dataframe(
+                f,
+                index=pd.RangeIndex(
+                    i * len(f['data']),  # start index
+                    (i + 1) * len(f['data']),  # stop index
+                    1  # step
+                )
+            )
+            for i, f in enumerate(arffs)
+        ]
+        full_df = reduce(lambda x, y: x.append(y), dfs)  # type: pd.DataFrame
+
+        for run in xrange(n_runs):
             manager = Manager()
             dict_manager = manager.dict()
 
             processes = []
 
-            for n_fold, test_i in folds.iteritems():
-                data = list(set(full.index) - set(test_i))
-
-                train_i, val_i = __split__(data, train_size=train_size)
+            for fold in dfs:
+                train_df = full_df.drop(fold.index).reset_index(drop=True)  # type: pd.DataFrame
 
                 p = Process(
                     target=__run__, kwargs=dict(
-                        n_fold=n_fold, n_run=n_run,
-                        train_i=train_i, val_i=val_i, test_i=test_i,
-                        config_file=config_file, dict_manager=dict_manager,
-                        random_state=random_state, full=full
+                        train_df=train_df,
+                        test_df=fold.reset_index(drop=True),
+                        dataset_name=dataset_name,
+                        mode=mode,
+                        n_runs=n_runs,
+                        n_individuals=kwargs['n_individuals'],
+                        n_iterations=kwargs['n_iterations'],
+                        tree_height=tree_height,
+                        decile=kwargs['decile'],
+                        run=run,
+                        verbose=kwargs['verbose'],
+                        output_path=output_path,
+                        random_state=random_state,
+                        dict_manager=dict_manager,
                     )
                 )
+
                 block(processes, n_jobs)
                 p.start()
                 processes.append(p)
@@ -563,44 +577,62 @@ def __train__(
             for p in processes:
                 p.join()
 
-            dict_results = dict(dict_manager)
+            # TODO within runs scope!
 
-            true = reduce(op.add, [dict_results[k]['y_test_true'] for k in dict_results.iterkeys()])
-            pred = reduce(op.add, [dict_results[k]['y_test_pred'] for k in dict_results.iterkeys()])
+            dict_dbs = dict(dict_manager)
+            partial_dbs += dict_dbs.values()
 
-            conf_matrix = confusion_matrix(true, pred)
+    else:  # for training with train and test folds
+        # TODO treat in terms of runs!!!
+        # TODO treat in terms of runs!!!
+        # TODO treat in terms of runs!!!
+        mode = 'holdout'
 
-            height = [dict_results[k]['height'] for k in dict_results.iterkeys()]
-            n_nodes = [dict_results[k]['n_nodes'] for k in dict_results.iterkeys()]
+        train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
+        test_arff = load_arff(os.path.join(dataset_path, dataset_name + '_test' + '.arff'))
 
-            hit = np.diagonal(conf_matrix).sum()
-            total = conf_matrix.sum()
+        train_df = load_dataframe(train_arff)
+        test_df = load_dataframe(test_arff)
 
-            out_str = 'acc: %0.2f  tree height: %02.2f +- %02.2f  n_nodes: %02.2f +- %02.2f' % (
-                hit / float(total),
-                float(np.mean(height)), float(np.std(height)),
-                float(np.mean(n_nodes)), float(np.std(n_nodes))
-            )
+        dict_manager = dict()
 
-            print colored(out_str, 'blue')
-
-            return {
-                'confusion_matrix': conf_matrix.tolist(),
-                'height': height,
-                'n_nodes': n_nodes
-            }
-
-    else:
-        config_file['output_path'] = None  # TODO remove once completed!
-
-        for n_run in xrange(n_runs):
-            test_i = folds[np.random.choice(folds.keys())]
-            data = list(set(full.index) - set(test_i))
-
-            train_i, val_i = __split__(data, train_size=train_size)
-
+        for run in xrange(n_runs):
             __run__(
-                train_i=train_i, val_i=val_i, test_i=test_i,
-                config_file=config_file,
-                random_state=random_state, full=full
+                train_df=train_df,
+                test_df=test_df,
+                dataset_name=dataset_name,
+                mode=mode,
+                n_runs=n_runs,
+                n_individuals=kwargs['n_individuals'],
+                n_iterations=kwargs['n_iterations'],
+                tree_height=tree_height,
+                decile=kwargs['decile'],
+                run=run,
+                verbose=kwargs['verbose'],
+                output_path=output_path,
+                random_state=random_state,
+                dict_manager=dict_manager
             )
+
+        partial_dbs += dict_manager.values()
+
+    # from now on, all databases were already created
+    dball = DatabaseHandler(
+        path=os.path.join(output_path, dataset_name + mode.join("  ") + str(dt.now()) + '.db'),
+        dataset_name=dataset_name,
+        mode=mode,
+        n_runs=n_runs,
+        n_individuals=kwargs['n_individuals'],
+        n_iterations=kwargs['n_iterations'],
+        tree_height=tree_height,
+        decile=kwargs['decile'],
+        random_state=random_state
+    )
+
+    for db in partial_dbs:
+        dball.union(db)
+        os.remove(db.path)
+
+    dball.commit()
+    dball.plot_population()
+    dball.close()

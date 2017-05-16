@@ -119,7 +119,7 @@ class DecisionTree(object):
             gm=gm,
             tree=nx.DiGraph(),
             subset_index=arg_threshold,
-            level=0,
+            depth=0,
             parent_labels=[],
             coordinates=[],
         )  # type: nx.DiGraph
@@ -169,14 +169,16 @@ class DecisionTree(object):
 
         return matrix
 
-    def __set_node__(self, node_id, gm, tree, subset_index, level, parent_labels, coordinates):
+    def __set_node__(self, node_id, gm, tree, subset_index, depth, parent_labels, coordinates):
         try:
             label = gm.observe(node_id=node_id)
         except KeyError as ke:
-            if level >= DecisionTree.max_height:
+            if depth >= gm.D:
                 label = DecisionTree.dataset_info.target_attr
             else:
-                raise ke
+                # TODO sampling a node with 100% of being class!
+                print gm.attributes
+                raise KeyError('Node %s not in graphical model!' % ke.message)
 
         '''
         if the current node has only one class,
@@ -184,14 +186,14 @@ class DecisionTree(object):
         or the class was sampled
         '''
         if any((
-            DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
-            level >= DecisionTree.max_height,
-            label == DecisionTree.dataset_info.target_attr
+                    DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
+                    depth >= DecisionTree.max_height,
+                    label == DecisionTree.dataset_info.target_attr
         )):
             meta, subsets = self.__set_terminal__(
                 node_label=None,
                 node_id=node_id,
-                node_level=level,
+                node_level=depth,
                 subset_index=subset_index,
                 parent_labels=parent_labels,
                 coordinates=coordinates
@@ -201,7 +203,7 @@ class DecisionTree(object):
                 node_label=label,
                 parent_labels=parent_labels,
                 coordinates=coordinates,
-                node_level=level,
+                node_level=depth,
                 gm=gm,
                 subset_index=subset_index,
                 node_id=node_id
@@ -216,7 +218,7 @@ class DecisionTree(object):
                         tree=tree,
                         gm=gm,
                         subset_index=child_subset,
-                        level=level + 1,
+                        depth=depth + 1,
                         parent_labels=parent_labels + [label],
                         coordinates=coordinates + [c]
                     )
@@ -229,7 +231,7 @@ class DecisionTree(object):
                     meta, subsets = self.__set_terminal__(
                         node_label=None,
                         node_id=node_id,
-                        node_level=level,
+                        node_level=depth,
                         subset_index=subset_index,
                         parent_labels=parent_labels,
                         coordinates=coordinates

@@ -11,7 +11,7 @@ class Device(object):
 
         :type dataset: pandas.DataFrame
         :param dataset:
-        :type dataset_info: treelib.classes.MetaDataset
+        :type dataset_info: treelib.utils.MetaDataset
         :param dataset_info:
         """
 
@@ -140,7 +140,7 @@ class Device(object):
 
 def __test_gain_ratio__():
     from sklearn import datasets
-    from treelib.classes import MetaDataset
+    from treelib.utils import MetaDataset
     from opencl import CLDevice
     from termcolor import colored
     import itertools as it
