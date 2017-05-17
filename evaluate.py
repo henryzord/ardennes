@@ -436,6 +436,7 @@ def __run__(train_df, test_df=None, **kwargs):
             n_iterations=kwargs['n_iterations'],
             tree_height=kwargs['tree_height'],
             decile=kwargs['decile'],
+            multi_tests=kwargs['multi_tests'],
             random_state=kwargs['random_state']
         )
         dbhandler.set_run(kwargs['run'])
@@ -454,6 +455,7 @@ def __run__(train_df, test_df=None, **kwargs):
         decile=kwargs['decile'],
         test_df=test_df,  # kwargs
         verbose=kwargs['verbose'],  # kwargs
+        multi_tests=kwargs['multi_tests'],  # kwargs
         random_state=kwargs['random_state'],  # kwargs
         dbhandler=dbhandler  # kwargs
     )
@@ -480,7 +482,7 @@ def __run__(train_df, test_df=None, **kwargs):
     return test_acc_score
 
 
-def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, output_path=None, **kwargs):
+def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, multi_tests=1, output_path=None, **kwargs):
     def running(_processes):
         """
         Gets the number of running processes.
@@ -565,6 +567,7 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                         run=run,
                         verbose=kwargs['verbose'],
                         output_path=output_path,
+                        multi_tests=multi_tests,
                         random_state=random_state,
                         dict_manager=dict_manager,
                     )
@@ -577,15 +580,10 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             for p in processes:
                 p.join()
 
-            # TODO within runs scope!
-
             dict_dbs = dict(dict_manager)
             partial_dbs += dict_dbs.values()
 
     else:  # for training with train and test folds
-        # TODO treat in terms of runs!!!
-        # TODO treat in terms of runs!!!
-        # TODO treat in terms of runs!!!
         mode = 'holdout'
 
         train_arff = load_arff(os.path.join(dataset_path, dataset_name + '_train' + '.arff'))
@@ -609,6 +607,7 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                 decile=kwargs['decile'],
                 run=run,
                 verbose=kwargs['verbose'],
+                multi_tests=multi_tests,
                 output_path=output_path,
                 random_state=random_state,
                 dict_manager=dict_manager

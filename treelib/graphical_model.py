@@ -8,9 +8,10 @@ __author__ = 'Henry Cagnini'
 
 
 class GraphicalModel(object):
-    def __init__(self, D, dataset_info):
+    def __init__(self, D, dataset_info, multi_tests):
         self.D = D
         self.dataset_info = dataset_info
+        self.multi_tests = multi_tests
 
         self.attributes = self.__init_attributes__(D)
 
@@ -80,6 +81,18 @@ class GraphicalModel(object):
 
         :param node_id: ID of the node (i.e. variable) being observed.
         :param evidence: optional - evidence used for observing the variable. May be None if the variable is independent.
-        :return: Observation of the variable, which is a value sampled from the variable's distribution.
+        :return: Observation of the variable, which is a set of values sampled from the variable's distribution.
+            This method guarantees that no observation is repeated.
         """
-        return np.random.choice(a=self.attributes[node_id].index, p=self.attributes[node_id])
+        node_labels = []
+        variable = self.attributes[node_id]
+
+        for i in xrange(self.multi_tests):
+            label = np.random.choice(a=variable.index, p=variable)
+            node_labels += [label]
+            variable.loc[label] = 0
+            variable = variable / variable.sum()
+            rest = abs(variable.sum() - 1.)
+            variable.loc[np.random.choice(variable.index)] += rest
+
+        return node_labels

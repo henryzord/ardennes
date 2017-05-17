@@ -120,34 +120,41 @@ __kernel void gain_ratio(
 
 #define LEFT 0
 #define RIGHT 1
-#define ATTR 2
-#define THRES 3
-#define TERM 4
+#define TERM 2
+#define ATTR 3
 
 __kernel void predict(
     __global float *dataset, int n_objects, int n_attributes,
     __global float *tree, int n_data,
-    int n_predictions, __global int *predictions) {
+    int n_predictions, __global int *predictions,
+    int multi_tests) {
 
     const int idx = get_global_id(0);
 
     if (idx < n_predictions) {
         float current_node = 0;
         while(TRUE) {
-            float
-                attribute = at(tree, n_data, current_node, ATTR),
-                threshold = at(tree, n_data, current_node, THRES),
-                terminal = at(tree, n_data, current_node, TERM);
+            float terminal = at(tree, n_data, current_node, TERM);
 
             if(terminal) {
-                predictions[idx] = (int)attribute;
+                predictions[idx] = (int)at(tree, n_data, current_node, ATTR);
                 break;
             }
 
-            if(at(dataset, n_attributes, idx, attribute) <= threshold) {
-                current_node = at(tree, n_data, current_node, LEFT);
-            } else {
+            int i, go_right = 0;
+            float attribute, threshold;
+            for(i = 0; i < multi_tests; i++) {
+                attribute = at(tree, n_data, current_node, ATTR + (i * 2));
+                threshold = at(tree, n_data, current_node, ATTR + (i * 2) + 1);
+
+                if(at(dataset, n_attributes, idx, attribute) > threshold) {
+                    go_right += 1;
+                }
+            }
+            if(go_right > (multi_tests/2)) {
                 current_node = at(tree, n_data, current_node, RIGHT);
+            } else {
+                current_node = at(tree, n_data, current_node, LEFT);
             }
         }
     }

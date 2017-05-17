@@ -71,6 +71,7 @@ class CLDevice(Device):
 
     def predict(self, data, dt, inner=False):
         if inner is False:
+            raise NotImplementedError('not implemented yet!')
             return super(CLDevice, self).predict(data, dt, inner)
         else:
             n_predictions = data.shape[0]
@@ -104,6 +105,7 @@ class CLDevice(Device):
                 np.int32(dt_matrix.shape[1]),
                 np.int32(n_predictions),
                 _mem_predictions,
+                np.int32(dt.multi_tests),
             )
 
             cl.enqueue_copy(self.queue, predictions, _mem_predictions)  # returns an event, for blocking
