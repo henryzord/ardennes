@@ -71,7 +71,6 @@ class CLDevice(Device):
 
     def predict(self, data, dt, inner=False):
         if inner is False:
-            raise NotImplementedError('not implemented yet!')
             return super(CLDevice, self).predict(data, dt, inner)
         else:
             n_predictions = data.shape[0]

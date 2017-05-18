@@ -615,23 +615,24 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
 
         partial_dbs += dict_manager.values()
 
-    # from now on, all databases were already created
-    dball = DatabaseHandler(
-        path=os.path.join(output_path, dataset_name + mode.join("  ") + str(dt.now()) + '.db'),
-        dataset_name=dataset_name,
-        mode=mode,
-        n_runs=n_runs,
-        n_individuals=kwargs['n_individuals'],
-        n_iterations=kwargs['n_iterations'],
-        tree_height=tree_height,
-        decile=kwargs['decile'],
-        random_state=random_state
-    )
+    if output_path is not None:
+        # from now on, all databases were already created
+        dball = DatabaseHandler(
+            path=os.path.join(output_path, dataset_name + mode.join("  ") + str(dt.now()) + '.db'),
+            dataset_name=dataset_name,
+            mode=mode,
+            n_runs=n_runs,
+            n_individuals=kwargs['n_individuals'],
+            n_iterations=kwargs['n_iterations'],
+            tree_height=tree_height,
+            decile=kwargs['decile'],
+            random_state=random_state
+        )
 
-    for db in partial_dbs:
-        dball.union(db)
-        os.remove(db.path)
+        for db in partial_dbs:
+            dball.union(db)
+            os.remove(db.path)
 
-    dball.commit()
-    dball.plot_population()
-    dball.close()
+        dball.commit()
+        dball.plot_population()
+        dball.close()

@@ -1,8 +1,10 @@
 # coding=utf-8
+import copy
 
 from node import *
 import pandas as pd
 from collections import Counter
+import operator as op
 
 __author__ = 'Henry Cagnini'
 
@@ -51,8 +53,17 @@ class GraphicalModel(object):
                 else self.dataset_info.target_attr
             return label
 
+        def __concatenate__(labels):
+            all = []
+            for _set in labels:
+                if isinstance(_set, list):
+                    all += _set
+                else:
+                    all += [_set] * self.multi_tests  # TODO to increase chances of picking class
+            return all
+
         def local_update(column):
-            labels = [get_label(fit, column.name) for fit in fittest]
+            labels = __concatenate__([get_label(fit, column.name) for fit in fittest])
             n_unsampled = labels.count(None)
             labels = [x for x in labels if x is not None]  # removes none from unsampled
 
@@ -82,17 +93,17 @@ class GraphicalModel(object):
         :param node_id: ID of the node (i.e. variable) being observed.
         :param evidence: optional - evidence used for observing the variable. May be None if the variable is independent.
         :return: Observation of the variable, which is a set of values sampled from the variable's distribution.
-            This method guarantees that no observation is repeated.
         """
         node_labels = []
         variable = self.attributes[node_id]
+        # variable = self.attributes[node_id]
 
         for i in xrange(self.multi_tests):
             label = np.random.choice(a=variable.index, p=variable)
             node_labels += [label]
-            variable.loc[label] = 0
-            variable = variable / variable.sum()
-            rest = abs(variable.sum() - 1.)
-            variable.loc[np.random.choice(variable.index)] += rest
+            # variable.loc[label] = 0
+            # variable = variable / variable.sum()
+            # rest = abs(variable.sum() - 1.)
+            # variable.loc[np.random.choice(variable.index)] += rest
 
-        return node_labels
+        return np.array(node_labels)

@@ -32,7 +32,8 @@ online_predictions = make_predictions(
     data,
     tree,
     range(df.shape[0]),
-    attribute_index
+    attribute_index,
+    1  # number of multi tests
 )
 t3 = dt.now()
 

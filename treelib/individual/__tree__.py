@@ -222,7 +222,7 @@ class DecisionTree(object):
         if any((
                     DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
                     depth >= DecisionTree.max_height,
-                    np.count_nonzero(label == DecisionTree.dataset_info.target_attr) > 1
+                    np.count_nonzero(label == DecisionTree.dataset_info.target_attr) > 0
         )):
             meta, subsets = self.__set_terminal__(
                 node_label=None,
@@ -328,20 +328,33 @@ class DecisionTree(object):
 
         metas, s_subsets = zip(*outs)
 
+        turn_terminal = False
         for meta in metas:
             if meta['terminal'] is True:
-                raise NotImplementedError('not implemented yet!')  # TODO treat when a node is terminal!
+                turn_terminal = True
+                break
 
-        sub_left0, sub_right0 = np.sum(s_subsets, axis=0)
+        if turn_terminal:
+            meta, subsets = self.__set_terminal__(
+                node_label=None,
+                node_id=node_id,
+                node_level=node_level,
+                subset_index=subset_index,
+                parent_labels=parent_labels,
+                coordinates=coordinates
+            )
+        else:
+            sub_left0, sub_right0 = np.sum(s_subsets, axis=0)
 
-        subset_right = np.array(sub_right0 > 1)
-        subset_left = np.invert(subset_right)
+            subset_right = np.array(sub_right0 > 1)
+            subset_left = np.invert(subset_right)
+            subsets = [subset_left, subset_right]
 
-        meta = metas[0]
-        meta['threshold'] = [x['threshold'] for x in metas]
-        meta['label'] = [x['label'] for x in metas]
+            meta = metas[0]
+            meta['threshold'] = [x['threshold'] for x in metas]
+            meta['label'] = [x['label'] for x in metas]
 
-        return meta, [subset_left, subset_right]
+        return meta, subsets
 
     def __store_threshold__(self, node_label, parent_labels, coordinates, threshold):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
