@@ -13,62 +13,45 @@ static void predict_dataset(
     PyObject *attribute_index, int multi_tests
     ) {
 
-    int i, terminal, current_node, go_left, int_attr;
-    float threshold, val;
+    PyObject *node, *list_labels, *thresholds;
 
-    PyObject *list_labels;
-    char *label;
-
-    for(i = 0; i < n_objects; i++) {
-        current_node = 0;
+    for(int i = 0; i < n_objects; i++) {
+        int current_node = 0;
 
         while(true) {
-            PyObject *node = PyDict_GetItem(tree, Py_BuildValue("i", current_node));
-            PyObject *is_terminal = PyDict_GetItemString(node, "terminal");
-            terminal = PyObject_IsTrue(is_terminal);
+            node = PyDict_GetItem(tree, Py_BuildValue("i", current_node));
+            int terminal = PyObject_IsTrue(PyDict_GetItemString(node, "terminal"));
 
-            int is_list = -1;
             list_labels = PyDict_GetItemString(node, "label");
 
-            if(PyObject_TypeCheck(list_labels, &PyList_Type)) {
-                is_list = 1;
-            } else if((PyObject_TypeCheck(list_labels, &PyString_Type))) {
-                label = PyString_AsString(list_labels);
-                is_list = 0;
-            }
-
             if(terminal) {
-                PyList_SetItem(predictions, i, Py_BuildValue("s", label));
+                PyList_SetItem(predictions, i, Py_BuildValue("s", PyString_AsString(list_labels)));
                 break;
             } else {
-                go_left = 0;
+                int go_left = 0;
 
-                val = (float)PyFloat_AsDouble(PyList_GetItem(dataset, (Py_ssize_t)(i * n_attributes + int_attr)));
+                thresholds = PyDict_GetItemString(node, "threshold");
 
-                if(is_list == 0) {
-                    int_attr = (int)PyInt_AsLong(PyDict_GetItemString(attribute_index, label));
-                    threshold = (float)PyFloat_AsDouble(PyDict_GetItemString(node, "threshold"));
+                for(int index = 0; index < multi_tests; index++) {
+                    char *label = PyString_AsString(
+                        PyList_GetItem(list_labels, index)
+                    );
+                    float threshold = (float)PyFloat_AsDouble(
+                        PyList_GetItem(thresholds, index)
+                    );
+                    int int_attr = (int)PyInt_AsLong(PyDict_GetItemString(attribute_index, label));
+                    float val = (float)PyFloat_AsDouble(PyList_GetItem(dataset, (i * n_attributes + int_attr)));
+
                     go_left += (val <= threshold);
-                } else {
-                    int index;
-
-                    PyObject *thresholds = PyDict_GetItemString(node, "threshold");
-
-                    for(index = 0; index < multi_tests; index++) {
-                        label = PyString_AsString(PyList_GetItem(list_labels, (Py_ssize_t)index));
-
-                        int_attr = (int)PyInt_AsLong(PyDict_GetItemString(attribute_index, label));
-                        threshold = (float)PyFloat_AsDouble(PyList_GetItem(thresholds, (Py_ssize_t)index));
-                        go_left += (val <= threshold);
-                    }
                 }
-                current_node = next_node(current_node, (go_left > 0));
+                current_node = next_node(current_node, (go_left > (multi_tests/2)));
             }
         }
     }
 }
 
 static PyObject* make_predictions(PyObject *self, PyObject *args) {
+
     int n_objects, n_attributes, multi_tests;
     PyObject *predictions, *tree, *dataset, *attribute_index, *shape;
 
