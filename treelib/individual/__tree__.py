@@ -243,9 +243,8 @@ class DecisionTree(object):
                 node_id=node_id
             )
 
-            if meta['threshold'] is not None:
+            if not meta['terminal']:
                 children_id = [get_left_child(node_id), get_right_child(node_id)]
-
                 for c, child_id, child_subset in it.izip(range(len(children_id)), children_id, subsets):
                     tree = self.__set_node__(
                         node_id=child_id,
@@ -328,13 +327,7 @@ class DecisionTree(object):
 
         metas, s_subsets = zip(*outs)
 
-        turn_terminal = False
-        for meta in metas:
-            if meta['terminal'] is True:
-                turn_terminal = True
-                break
-
-        if turn_terminal:
+        if any(map(lambda x: x['terminal'], metas)):
             meta, subsets = self.__set_terminal__(
                 node_label=None,
                 node_id=node_id,
@@ -344,15 +337,25 @@ class DecisionTree(object):
                 coordinates=coordinates
             )
         else:
-            sub_left0, sub_right0 = np.sum(s_subsets, axis=0)
+            subset_left, subset_right = \
+                reduce(op.add, map(lambda x: x[0], s_subsets)), \
+                reduce(op.add, map(lambda x: x[1], s_subsets))
 
-            subset_right = np.array(sub_right0 > 1)
-            subset_left = np.invert(subset_right)
-            subsets = [subset_left, subset_right]
+            if subset_left.sum() == 0 or subset_right.sum() == 0:
+                meta, subsets = self.__set_terminal__(
+                    node_label=None,
+                    node_id=node_id,
+                    node_level=node_level,
+                    subset_index=subset_index,
+                    parent_labels=parent_labels,
+                    coordinates=coordinates
+                )
+            else:
+                subsets = [subset_left, subset_right]
 
-            meta = metas[0]
-            meta['threshold'] = [x['threshold'] for x in metas]
-            meta['label'] = [x['label'] for x in metas]
+                meta = metas[0]
+                meta['threshold'] = [x['threshold'] for x in metas]
+                meta['label'] = [x['label'] for x in metas]
 
         return meta, subsets
 
@@ -410,6 +413,7 @@ class DecisionTree(object):
                     subset_index=subset_index,
                     threshold=best_threshold,
                 )
+
         else:
             meta, subsets = self.__set_terminal__(
                 node_label=node_label,

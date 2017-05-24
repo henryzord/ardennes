@@ -232,7 +232,8 @@ class DatabaseHandler(object):
         cursor = self._conn.cursor()
 
         for ind in population:
-            cursor.execute("""
+
+            _string_insert = """
               INSERT INTO POPULATION (
                 id_run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
                 ) VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
@@ -240,9 +241,10 @@ class DatabaseHandler(object):
                 int(ind.train_acc_score * len(ind.y_train_true)),
                 str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
                 str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
-                ind.to_dot()
+                ind.to_dot().replace("""'""", """''""")
                 )
-            )
+
+            cursor.execute(_string_insert)
 
         cursor.close()
 
@@ -276,7 +278,7 @@ class DatabaseHandler(object):
             if value == None:
                 return 'NULL'
             if _type == 'TEXT':
-                return str(value).join("''")
+                return str(value).replace("""'""", """''""").join("''")
             return str(value)
 
         def __insert__(self_cursor, other_cursor, tables, treat=False):

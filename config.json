@@ -1,12 +1,12 @@
 {
   "random_state": null,
   "n_individuals": 10,
-  "n_iterations": 1,
+  "n_iterations": 2,
   "decile": 0.5,
-  "tree_height": 5,
+  "tree_height": 9,
   "verbose": true,
   "save": true,
   "multi_tests": 3,
-  "n_runs": 1,
-  "output_path": null
+  "n_runs": 2,
+  "output_path": "metadata"
 }
