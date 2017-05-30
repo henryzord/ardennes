@@ -168,7 +168,7 @@ class DecisionTree(object):
 
         for node_id, node in tree.node.iteritems():
             tuples = []
-            if multi_tests > 1 and not node['terminal']:
+            if not node['terminal']:
                 tuples = zip(
                     [__get_index__(l) for l in node['label']],
                     node['threshold']

@@ -6,7 +6,7 @@
   "tree_height": 9,
   "verbose": true,
   "save": true,
-  "multi_tests": 3,
+  "multi_tests": 1,
   "n_runs": 2,
   "output_path": "metadata"
 }
