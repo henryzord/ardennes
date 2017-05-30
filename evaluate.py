@@ -482,7 +482,7 @@ def __run__(train_df, test_df=None, **kwargs):
     return test_acc_score
 
 
-def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, multi_tests=1, output_path=None, **kwargs):
+def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8, output_path=None, **kwargs):
     def running(_processes):
         """
         Gets the number of running processes.
@@ -567,7 +567,7 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                         run=run,
                         verbose=kwargs['verbose'],
                         output_path=output_path,
-                        multi_tests=multi_tests,
+                        multi_tests=1,
                         random_state=random_state,
                         dict_manager=dict_manager,
                     )
@@ -607,7 +607,7 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
                 decile=kwargs['decile'],
                 run=run,
                 verbose=kwargs['verbose'],
-                multi_tests=multi_tests,
+                multi_tests=1,
                 output_path=output_path,
                 random_state=random_state,
                 dict_manager=dict_manager
@@ -626,7 +626,7 @@ def __train__(dataset_path, tree_height, random_state=None, n_runs=10, n_jobs=8,
             n_iterations=kwargs['n_iterations'],
             tree_height=tree_height,
             decile=kwargs['decile'],
-            multi_tests=multi_tests,
+            multi_tests=1,
             random_state=random_state
         )
 
