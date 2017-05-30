@@ -51,6 +51,7 @@ class Device(object):
 
         tree = dt.tree.node
 
+        shape = None
         if isinstance(data, pd.DataFrame):
             shape = data.shape
             data = data.values.ravel().tolist()
@@ -68,7 +69,8 @@ class Device(object):
             data,  # dataset as a plain list
             tree,  # tree in dictionary format
             range(shape[0]),  # shape of prediction array
-            self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indexes
+            self.dataset_info.attribute_index,  # dictionary where keys are attributes and values their indices
+            dt.multi_tests  # number of tests per node
         )
 
         return preds

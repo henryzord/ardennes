@@ -111,7 +111,8 @@ class Ardennes(object):
             n_classes=len(full[full.columns[-1]].unique())
         )]
 
-        dbhandler.write_sets(metadatas)
+        if dbhandler is not None:
+            dbhandler.write_sets(metadatas)
 
         arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
 
@@ -128,12 +129,14 @@ class Ardennes(object):
             dataset_info=dataset_info,
             max_height=self.D,
             dataset=full,
-            mdevice=mdevice
+            mdevice=mdevice,
+            multi_tests=kwargs['multi_tests']
         )
 
         gm = GraphicalModel(
             D=self.D,
-            dataset_info=dataset_info
+            dataset_info=dataset_info,
+            multi_tests=kwargs['multi_tests']
         )
 
         return gm

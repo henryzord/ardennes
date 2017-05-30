@@ -23,7 +23,7 @@ class DatabaseHandler(object):
     commit_every = 10  # commits data at every N generations
 
     def __init__(self, path, dataset_name=None, mode=None, n_runs=None, n_individuals=None,
-                 n_iterations=None, tree_height=None, decile=None, random_state=None):
+                 n_iterations=None, tree_height=None, decile=None, multi_tests=None, random_state=None):
 
         self.path = path
 
@@ -68,6 +68,7 @@ class DatabaseHandler(object):
             max_tree_height INTEGER NOT NULL,
             max_n_nodes INTEGER NOT NULL,
             decile REAL NOT NULL,
+            multi_tests INTEGER NOT NULL,
             random_state INTEGER DEFAULT NULL,
             CONSTRAINT unique_columns_evolution UNIQUE (
               dataset_name, mode, n_runs, n_individuals, n_iterations,
@@ -144,9 +145,9 @@ class DatabaseHandler(object):
             evolution_columns = (dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile, random_state)
             cursor.execute("""
               INSERT INTO EVOLUTION (id_evolution, dataset_name, mode, n_runs, n_individuals,
-                n_iterations, max_tree_height, max_n_nodes, decile, random_state) VALUES (
-                %d, '%s', '%s', %d, %d, %d, %d, %d, %f, %s)""" % (
-                    hash(tuple(evolution_columns)), dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile,
+                n_iterations, max_tree_height, max_n_nodes, decile, multi_tests, random_state) VALUES (
+                %d, '%s', '%s', %d, %d, %d, %d, %d, %f, %d, %s)""" % (
+                    hash(tuple(evolution_columns)), dataset_name, mode, n_runs, n_individuals, n_iterations, tree_height, max_n_nodes, decile, multi_tests,
                     random_state if random_state is not None else '\'NULL\''
                 )
             )
@@ -231,7 +232,8 @@ class DatabaseHandler(object):
         cursor = self._conn.cursor()
 
         for ind in population:
-            cursor.execute("""
+
+            _string_insert = """
               INSERT INTO POPULATION (
                 id_run, iteration, individual, fitness, height, n_nodes, train_correct, val_correct, test_correct, dot
                 ) VALUES (%d, %d, %d, %f, %d, %d, %d, %s, %s, '%s')""" % (
@@ -239,9 +241,10 @@ class DatabaseHandler(object):
                 int(ind.train_acc_score * len(ind.y_train_true)),
                 str(int(ind.val_acc_score * len(ind.y_val_true))) if self.val_hash is not None else 'NULL',
                 str(int(ind.test_acc_score * len(ind.y_test_true))) if self.test_hash is not None else 'NULL',
-                ind.to_dot()
+                ind.to_dot().replace("""'""", """''""")
                 )
-            )
+
+            cursor.execute(_string_insert)
 
         cursor.close()
 
@@ -275,7 +278,7 @@ class DatabaseHandler(object):
             if value == None:
                 return 'NULL'
             if _type == 'TEXT':
-                return str(value).join("''")
+                return str(value).replace("""'""", """''""").join("''")
             return str(value)
 
         def __insert__(self_cursor, other_cursor, tables, treat=False):
