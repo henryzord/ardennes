@@ -9,3 +9,7 @@ try:
 except ImportError:
     from __base__ import  Device as AvailableDevice
     print colored('NOTICE: Using single-threaded CPU as device.', 'yellow')
+
+# from termcolor import colored
+# from __base__ import  Device as AvailableDevice
+# print colored('NOTICE: Using single-threaded CPU as device.', 'yellow')
