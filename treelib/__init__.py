@@ -1,8 +1,8 @@
 # coding=utf-8
-import copy
 import random
-import warnings
 from datetime import datetime as dt
+
+from sklearn.metrics import accuracy_score
 
 from device import AvailableDevice
 from graphical_model import *
@@ -18,182 +18,100 @@ class Ardennes(object):
     train_str = 'train_df'
     test_str = 'test_df'
 
-    def __init__(self, n_individuals, n_iterations, max_height=3):
+    def __init__(self, n_individuals, n_generations, max_height=3, decile=0.5, reporter=None):
 
         self.n_individuals = n_individuals
 
         self.D = max_height - 1
-        self.n_iterations = n_iterations
+        self.n_generations = n_generations
+
+        self.decile = decile
 
         self.trained = False
         self.predictor = None
 
-    @staticmethod
-    def __initialize_argsets__(full, train, val, test):
-        _arg_sets = dict()
+        self.reporter = reporter
 
-        train_index = np.zeros(full.shape[0], dtype=np.bool)
-        val_index = np.zeros(full.shape[0], dtype=np.bool)
-        test_index = np.zeros(full.shape[0], dtype=np.bool)
+    def __setup__(self, full_df, train_index, val_index):
+        dataset_info = MetaDataset(full_df)
 
-        train_index[train.index] = 1
-        val_index[val.index] = 1
-        test_index[test.index] = 1
+        mdevice = AvailableDevice(full_df, dataset_info)
 
-        _arg_sets['train'] = train_index
-        _arg_sets['val'] = val_index
-        _arg_sets['test'] = test_index
-
-        return _arg_sets
-
-    def __setup__(self, train_set, **kwargs):
-        """
-
-        :type train_set: pandas.DataFrame
-        :param train_set:
-        :param kwargs:
-        :return:
-        """
-
-        if 'random_state' in kwargs and kwargs['random_state'] is not None:
-            random_state = kwargs['random_state']
-            warnings.warn('WARNING: Using non-randomic sampling with seed=%d' % random_state)
-        else:
-            random_state = None
-
-        if 'dbhandler' in kwargs:
-            dbhandler = kwargs['dbhandler']  # type: utils.DatabaseHandler
-        else:
-            dbhandler = None
-
-        random.seed(random_state)
-        np.random.seed(random_state)
-
-        full = copy.deepcopy(train_set)
-
-        metadatas = [dict(
-            relation_name='train', hashkey=DatabaseHandler.get_hash(train_set),
-            n_instances=train_set.shape[0], n_attributes=train_set.shape[1],
-            n_classes=len(train_set[train_set.columns[-1]].unique())
-        )]
-
-        if Ardennes.val_str in kwargs and kwargs[Ardennes.val_str] is not None:
-            val_set = kwargs[Ardennes.val_str]
-            val_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + val_set.shape[0], 1)
-            full = full.append(val_set, ignore_index=True)
-
-            metadatas += [dict(
-                relation_name='val', hashkey=DatabaseHandler.get_hash(val_set),
-                n_instances=val_set.shape[0], n_attributes=val_set.shape[1],
-                n_classes=len(val_set[val_set.columns[-1]].unique())
-            )]
-
-        else:
-            val_set = train_set  # type: pd.DataFrame
-
-        if Ardennes.test_str in kwargs and kwargs[Ardennes.test_str] is not None:
-            test_set = kwargs[Ardennes.test_str]
-            test_set.index = pd.RangeIndex(full.index[-1] + 1, full.index[-1] + 1 + test_set.shape[0], 1)
-            full = full.append(test_set, ignore_index=True)
-
-            metadatas += [dict(
-                relation_name='test', hashkey=DatabaseHandler.get_hash(test_set),
-                n_instances=test_set.shape[0], n_attributes=test_set.shape[1],
-                n_classes=len(test_set[test_set.columns[-1]].unique())
-            )]
-
-        else:
-            test_set = train_set  # type: pd.DataFrame
-
-        metadatas += [dict(
-            relation_name='full', hashkey=DatabaseHandler.get_hash(full),
-            n_instances=full.shape[0], n_attributes=full.shape[1],
-            n_classes=len(full[full.columns[-1]].unique())
-        )]
-
-        if dbhandler is not None:
-            dbhandler.write_sets(metadatas)
-
-        arg_sets = self.__initialize_argsets__(full, train_set, val_set, test_set)
-
-        dataset_info = MetaDataset(full)
-
-        mdevice = AvailableDevice(full, dataset_info)
+        arg_sets = {
+            'train': train_index,
+            'val': val_index
+        }
 
         DecisionTree.set_values(
             arg_sets=arg_sets,
-            y_train_true=full.loc[arg_sets['train'], dataset_info.target_attr],
-            y_val_true=full.loc[arg_sets['val'], dataset_info.target_attr],
-            y_test_true=full.loc[arg_sets['test'], dataset_info.target_attr],
+            y_train_true=full_df.loc[arg_sets['train'], dataset_info.target_attr],
+            y_val_true=full_df.loc[arg_sets['val'], dataset_info.target_attr],
             processor=mdevice,
             dataset_info=dataset_info,
             max_height=self.D,
-            dataset=full,
-            mdevice=mdevice,
-            multi_tests=kwargs['multi_tests']
+            dataset=full_df,
+            mdevice=mdevice
         )
 
         gm = GraphicalModel(
             D=self.D,
-            dataset_info=dataset_info,
-            multi_tests=kwargs['multi_tests']
+            dataset_info=dataset_info
         )
 
         return gm
 
-    def fit(self, train_df, decile, verbose=True, **kwargs):
+    def fit(self, full_df, train_index, val_index, verbose=True):
         """
         Fits the algorithm to the provided data.
         """
 
-        assert 1 <= int(self.n_individuals * decile) <= self.n_individuals, \
+        # overrides prior seed
+        np.random.seed(None)
+        random.seed(None)
+
+        assert 1 <= int(self.n_individuals * self.decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(train_set=train_df, **kwargs)
+        gm = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
+
+        # raise NotImplementedError('solve X_train and X_val!')
 
         sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
 
-        population = np.empty(shape=self.n_individuals, dtype=Individual)
-        to_replace_index = np.arange(self.n_individuals, dtype=np.int32)
+        P = np.empty(shape=self.n_individuals, dtype=Individual)
+        A_minus = np.arange(self.n_individuals, dtype=np.int32)  # former to_replace_index
 
-        '''
-        Main loop
-        '''
-        iteration = 0
+        # main loop
+        generation = 0
 
-        while iteration < self.n_iterations:
-            t1 = dt.now()  # starts measuring time
+        while generation < self.n_generations:
+            t1 = dt.now()
+            P_fitness, P = self.sample_population(gm, generation, sample_func, A_minus, P)
 
-            fitness, population = self.sample_population(gm, iteration, sample_func, to_replace_index, population)
-
-            to_replace_index, fittest_pop = self.split_population(decile, population)
-
-            # TODO use only when in mtst!
-            # warnings.warn('WARNING: testing new ideas!')
-            # best_individual = self.get_best_individual(population)
-            # DecisionTree.max_height = best_individual.height
-            # warnings.warn('WARNING: testing new ideas!')
+            A_minus, fittest_pop = self.split_population(self.decile, P)
 
             gm.update(fittest_pop)
 
-            t2 = dt.now()
-            self.__report__(
-                iteration=iteration,
-                population=population,
-                fitness=fitness,
-                verbose=verbose,
-                elapsed_time=(t2 - t1).total_seconds(),
-                gm=gm,
-                **kwargs
-            )
+            # TODO reactivate!
+            # self.__save__(
+            #     reporter=self.reporter, generation=g, A=A, P=P, P_fitness=P_fitness, loc=loc, scale=scale
+            # )
 
-            if self.__early_stop__(population):
+            if self.__early_stop__(P):
                 break
 
-            iteration += 1
+            median = float(np.median(P_fitness, axis=0))  # type: float
 
-        self.predictor = self.get_best_individual(population)
+            if verbose:
+                print('generation %02.d: best: %.4f median: %.4f time elapsed: %f' % (
+                    generation, np.max(P_fitness), median, (dt.now() - t1).total_seconds()
+                ))
+
+            generation += 1
+
+        self.predictor = self.get_best_individual(P)
         self.trained = True
+        return self
 
     @staticmethod
     def sample_population(gm, iteration, func, to_replace_index, population):
@@ -243,11 +161,10 @@ class Ardennes(object):
         if self.trained:
             return self.predictor.height
 
-    def __report__(self, **kwargs):
+    def __save__(self, **kwargs):
         # required data, albeit this method has only a kwargs dictionary
         iteration = kwargs['iteration']  # type: int
         population = kwargs['population']
-        verbose = kwargs['verbose']
         elapsed_time = kwargs['elapsed_time']
         fitness = kwargs['fitness']
         gm = kwargs['gm']
@@ -257,13 +174,12 @@ class Ardennes(object):
         # optional data
         dbhandler = None if 'dbhandler' not in kwargs else kwargs['dbhandler']  # type: utils.DatabaseHandler
 
-        if verbose:
-            mean = np.mean(fitness)  # type: float
-            median = np.median(fitness)  # type: float
+        mean = np.mean(fitness)  # type: float
+        median = np.median(fitness)  # type: float
 
-            print 'iter: %03.d mean: %0.6f median: %0.6f max: %0.6f ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
-                iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
-            ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
+        print 'iter: %03.d mean: %0.6f median: %0.6f max: %0.6f ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
+            iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
+        ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
 
         if dbhandler is not None:
             dbhandler.write_prototype(iteration, gm)

@@ -6,6 +6,7 @@ import sqlite3
 from treelib import get_total_nodes
 from matplotlib import pyplot as plt
 import pandas as pd
+import os
 
 __author__ = 'Henry Cagnini'
 

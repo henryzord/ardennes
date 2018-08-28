@@ -10,10 +10,9 @@ __author__ = 'Henry Cagnini'
 
 
 class GraphicalModel(object):
-    def __init__(self, D, dataset_info, multi_tests):
+    def __init__(self, D, dataset_info):
         self.D = D
         self.dataset_info = dataset_info
-        self.multi_tests = multi_tests
 
         self.attributes = self.__init_attributes__(D)
 
@@ -98,12 +97,11 @@ class GraphicalModel(object):
         variable = self.attributes[node_id]
         # variable = self.attributes[node_id]
 
-        for i in xrange(self.multi_tests):
-            label = np.random.choice(a=variable.index, p=variable)
-            node_labels += [label]
-            # variable.loc[label] = 0
-            # variable = variable / variable.sum()
-            # rest = abs(variable.sum() - 1.)
-            # variable.loc[np.random.choice(variable.index)] += rest
+        label = np.random.choice(a=variable.index, p=variable)
+        node_labels += [label]
+        # variable.loc[label] = 0
+        # variable = variable / variable.sum()
+        # rest = abs(variable.sum() - 1.)
+        # variable.loc[np.random.choice(variable.index)] += rest
 
         return np.array(node_labels)
