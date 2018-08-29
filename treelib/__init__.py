@@ -82,11 +82,11 @@ class Ardennes(object):
         A_minus = np.arange(self.n_individuals, dtype=np.int32)  # former to_replace_index
 
         # main loop
-        generation = 0
+        g = 0
 
-        while generation < self.n_generations:
+        while g < self.n_generations:
             t1 = dt.now()
-            P_fitness, P = self.sample_population(gm, generation, sample_func, A_minus, P)
+            P_fitness, P = self.sample_population(gm, g, sample_func, A_minus, P)
 
             A_minus, fittest_pop = self.split_population(self.decile, P)
 
@@ -104,43 +104,43 @@ class Ardennes(object):
 
             if verbose:
                 print('generation %02.d: best: %.4f median: %.4f time elapsed: %f' % (
-                    generation, np.max(P_fitness), median, (dt.now() - t1).total_seconds()
+                    g, np.max(P_fitness), median, (dt.now() - t1).total_seconds()
                 ))
 
-            generation += 1
+            g += 1
 
         self.predictor = self.get_best_individual(P)
         self.trained = True
         return self
 
     @staticmethod
-    def sample_population(gm, iteration, func, to_replace_index, population):
+    def sample_population(gm, iteration, sample_func, to_replace_index, P):
         """
 
         :type gm: treelib.graphical_model.GraphicalModel
         :param gm: Current graphical model.
         :type iteration: int
         :param iteration: Current iteration.
-        :param func: Sample function.
+        :param sample_func: Sample function.
         :type to_replace_index: list
         :param to_replace_index: List of indexes of individuals to be replaced in the following generation.
-        :type population: numpy.ndarray
-        :param population: Current population.
+        :type P: numpy.ndarray
+        :param P: Current population.
         :rtype: tuple
         :return: A tuple where the first item is the population fitness and the second the population.
         """
 
-        population.flat[to_replace_index] = func(
-            ind_id=[population[i].ind_id for i in to_replace_index] if iteration > 0 else to_replace_index,
+        P.flat[to_replace_index] = sample_func(
+            ind_id=[P[i].ind_id for i in to_replace_index] if iteration > 0 else to_replace_index,
             gm=gm,
             iteration=iteration
         )
-        population.sort()  # sorts using quicksort, worst individual to best
-        population = population[::-1]  # reverses list so the best individual is in the beginning
+        P.sort()  # sorts using quicksort, worst individual to best
+        P = P[::-1]  # reverses list so the best individual is in the beginning
 
-        fitness = np.array([x.fitness for x in population])
+        P_fitness = np.array([x.fitness for x in P])
 
-        return fitness, population
+        return P_fitness, P
 
     def split_population(self, decile, population):
         integer_decile = int(self.n_individuals * decile)

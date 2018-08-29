@@ -58,7 +58,7 @@ class GraphicalModel(object):
                 if isinstance(_set, list):
                     all += _set
                 else:
-                    all += [_set] * self.multi_tests  # TODO to increase chances of picking class
+                    all += [_set]
             return all
 
         def local_update(column):

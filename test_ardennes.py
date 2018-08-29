@@ -5,6 +5,7 @@ import json
 import os
 
 from main import ardennes
+from reporter import BaselineReporter
 from utils import get_dataset_name
 
 
@@ -124,3 +125,5 @@ if __name__ == '__main__':
         n_runs=args.runs,
         n_jobs=args.jobs
     )
+    # TODO reactivate
+    # BaselineReporter.generate_summary(args.m, args.r)

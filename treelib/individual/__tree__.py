@@ -45,8 +45,6 @@ class DecisionTree(object):
     val_acc_score = None
     test_acc_score = None
 
-    multi_tests = None
-
     def __init__(self, gm, **kwargs):
         self.sample(gm)
 
@@ -115,7 +113,7 @@ class DecisionTree(object):
         return len(self._shortest_path[node_id]) - 1
 
     def sample(self, gm):
-        arg_threshold = DecisionTree.arg_sets['train']
+        arg_threshold = np.array(list(DecisionTree.arg_sets['train']) + list(DecisionTree.arg_sets['val']))
 
         self.tree = self.tree = self.__set_node__(
             node_id=0,
@@ -133,7 +131,6 @@ class DecisionTree(object):
 
         self.train_acc_score = accuracy_score(DecisionTree.y_train_true, predictions[self.arg_sets['train']])
         self.val_acc_score = accuracy_score(DecisionTree.y_val_true, predictions[self.arg_sets['val']])
-        self.test_acc_score = accuracy_score(DecisionTree.y_test_true, predictions[self.arg_sets['test']])
 
         self.fitness = self.train_acc_score
 
@@ -155,13 +152,9 @@ class DecisionTree(object):
 
         tree = self.tree
 
-        multi_tests = DecisionTree.multi_tests
-
-        extra = reduce(op.add, [('attribute_%d,threshold_%d' % (i, i)).split(',') for i in xrange(multi_tests)])
-
         matrix = pd.DataFrame(
             index=tree.node.keys(),
-            columns=['left', 'right', 'terminal'] + extra
+            columns=['left', 'right', 'terminal', 'attribute', 'threshold']
         )
 
         conv_dict = {k: i for i, k in enumerate(matrix.index)}
@@ -186,7 +179,7 @@ class DecisionTree(object):
                 conv_dict[get_left_child(node['node_id'])] if get_left_child(node_id) in conv_dict else None,
                 conv_dict[get_right_child(node['node_id'])] if get_right_child(node_id) in conv_dict else None,
                 node['terminal']
-            ] + tuples + [None, None] * (multi_tests - (len(tuples) / 2))
+            ] + tuples   # + [None, None] * (multi_tests - (len(tuples) / 2))
 
         matrix.index = [conv_dict[x] for x in matrix.index]
         matrix = matrix.astype(np.float32)

@@ -56,8 +56,7 @@ def __get_fold__(params, dataset_path, n_fold):
     """
     Returns the full dataset, along indices for each set.
 
-    If performing an e.g. 10-fold cross-validation, the training set has 8 folds, the validation set 1 fold, and the
-    testing set 1 fold.
+    If performing an e.g. 10-fold cross-validation, the training set has 9 folds, and the testing set 1 fold.
 
     :type params: dict
     :param params: The parameter file as a dictionary of values.
@@ -67,7 +66,7 @@ def __get_fold__(params, dataset_path, n_fold):
     :param n_fold: fold to get for testing. Must be smaller than params['n_folds'] (e.g., if params['n_folds'] = 3,
         then the fold indices are [0, 1, 2]).
     :rtype: tuple
-    :return: whole_dataset, X_train_indices, X_val_indices, X_test_indices based on the provided n_fold.
+    :return: whole_dataset, X_train_indices, X_test_indices based on the provided n_fold.
     """
 
     assert n_fold < params['n_folds'], ValueError('n_fold must be less than total number of folds in params file!')
@@ -86,21 +85,13 @@ def __get_fold__(params, dataset_path, n_fold):
 
     train_index = None
     test_index = None
-    for fold_num, (rest_index_, test_index_) in enumerate(skf.split(X, y)):
+    for fold_num, (train_index_, test_index_) in enumerate(skf.split(X, y)):
         if fold_num == n_fold:
+            train_index = train_index_
             test_index = test_index_
-
-            rest_index = rest_index_
-            rest_y = full_df.loc[rest_index, full_df.columns[-1]]
-            frac = (float(params['n_folds']) - 2)/(float(params['n_folds']) - 1)
-
-            train_index, val_index = train_test_split(
-                rest_index, train_size=frac,
-                shuffle=True, random_state=params['random_state'], stratify=rest_y
-            )
             break
 
-    return full_df, train_index, val_index, test_index
+    return full_df, train_index, test_index
 
 
 def get_dataset_name(dataset_path):

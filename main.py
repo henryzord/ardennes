@@ -1,5 +1,6 @@
 import json
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 from reporter import BaselineReporter
 from treelib import Ardennes
@@ -11,26 +12,36 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
 
     dataset_name = get_dataset_name(dataset_path)
 
-    full_df, train_index, val_index, test_index = __get_fold__(params=params, dataset_path=dataset_path, n_fold=n_fold)
+    df, rest_index, test_index = __get_fold__(params=params, dataset_path=dataset_path, n_fold=n_fold)
 
-    n_classes = len(np.unique(full_df))
+    X_test = df.loc[test_index, df.columns[:-1]]
+    y_test = df.loc[test_index, df.columns[-1]]
+    del test_index  # deletes it to prevent from being using later
 
-    X = full_df[full_df.columns[:-1]]
-    y = full_df[full_df.columns[-1]]
+    rest_df = df.loc[rest_index]
+    rest_df.reset_index(inplace=True)
 
-    X_train = X.loc[train_index]
-    X_val = X.loc[val_index]
-    X_test = X.loc[test_index]
+    rest_y = rest_df[rest_df.columns[-1]]
+    frac = (float(params['n_folds']) - 2) / (float(params['n_folds']) - 1)
 
-    y_train = y.loc[train_index]
-    y_val = y.loc[val_index]
-    y_test = y.loc[test_index]
+    train_index, val_index = train_test_split(
+        rest_df.index, train_size=frac,
+        shuffle=True, random_state=params['random_state'], stratify=rest_y
+    )
+
+    n_classes = len(np.unique(rest_df))
+
+    X_train = rest_df.loc[train_index, rest_df.columns[:-1]]
+    X_val = rest_df.loc[val_index, rest_df.columns[:-1]]
+
+    y_train = rest_df.loc[train_index, rest_df.columns[-1]]
+    y_val = rest_df.loc[val_index, rest_df.columns[-1]]
 
     reporter = BaselineReporter(
-        Xs=[X_train, X_val, X_test],
-        ys=[y_train, y_val, y_test],
+        Xs=[X_train, X_val],
+        ys=[y_train, y_val],
         n_classes=n_classes,
-        set_names=['train', 'val', 'test'],
+        set_names=['train', 'val'],
         dataset_name=dataset_name,
         n_fold=n_fold,
         n_run=n_run,
@@ -47,7 +58,7 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
     )
 
     model = model.fit(
-        full_df=full_df,
+        full_df=rest_df,
         train_index=train_index,
         val_index=val_index
     )

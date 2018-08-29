@@ -3,6 +3,12 @@
 #define TRUE 1
 #define FALSE 0
 
+#define LEFT 0
+#define RIGHT 1
+#define TERM 2
+#define ATTR 3
+#define THRES 4
+
 #define bool char
 
 //int next_node(int current_node, int go_left, int finished) {
@@ -118,16 +124,11 @@ __kernel void gain_ratio(
     }
 }
 
-#define LEFT 0
-#define RIGHT 1
-#define TERM 2
-#define ATTR 3
 
 __kernel void predict(
     __global float *dataset, int n_objects, int n_attributes,
     __global float *tree, int n_data,
-    int n_predictions, __global int *predictions,
-    int multi_tests) {
+    int n_predictions, __global int *predictions) {
 
     const int idx = get_global_id(0);
 
@@ -141,17 +142,12 @@ __kernel void predict(
                 break;
             }
 
-            int i, go_right = 0;
             float attribute, threshold;
-            for(i = 0; i < multi_tests; i++) {
-                attribute = at(tree, n_data, current_node, ATTR + (i * 2));
-                threshold = at(tree, n_data, current_node, ATTR + (i * 2) + 1);
 
-                if(at(dataset, n_attributes, idx, attribute) > threshold) {
-                    go_right += 1;
-                }
-            }
-            if(go_right > (multi_tests/2)) {
+            attribute = at(tree, n_data, current_node, ATTR);
+            threshold = at(tree, n_data, current_node, THRES);
+
+            if(at(dataset, n_attributes, idx, attribute) > threshold) {
                 current_node = at(tree, n_data, current_node, RIGHT);
             } else {
                 current_node = at(tree, n_data, current_node, LEFT);
