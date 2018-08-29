@@ -113,7 +113,7 @@ class DecisionTree(object):
         return len(self._shortest_path[node_id]) - 1
 
     def sample(self, gm):
-        arg_threshold = np.array(list(DecisionTree.arg_sets['train']) + list(DecisionTree.arg_sets['val']))
+        arg_threshold = DecisionTree.arg_sets['train'] + DecisionTree.arg_sets['val']
 
         self.tree = self.tree = self.__set_node__(
             node_id=0,
@@ -146,9 +146,10 @@ class DecisionTree(object):
         rows and [Left, Right, Terminal, Attribute, Threshold] attributes.
         """
 
-        def __get_index__(label):
-            return self.dataset_info.attribute_index[label] if label not in self.dataset_info.class_labels \
-            else self.dataset_info.class_label_index[label]
+        def __get_index__(label, terminal):
+            if terminal:
+                return
+            return
 
         tree = self.tree
 
@@ -160,43 +161,28 @@ class DecisionTree(object):
         conv_dict = {k: i for i, k in enumerate(matrix.index)}
 
         for node_id, node in tree.node.iteritems():
-            tuples = []
-            if not node['terminal']:
-                tuples = zip(
-                    [__get_index__(l) for l in node['label']],
-                    node['threshold']
-
-                )
-            else:
-                tuples += [(
-                    __get_index__(node['label']),
-                    node['threshold']
-                )]
-
-            tuples = reduce(op.add, map(list, tuples))
+            label_index = self.dataset_info.class_label_index[node['label']] if \
+                              node['terminal'] else self.dataset_info.attribute_index[node['label']]
 
             matrix.loc[node_id] = [
                 conv_dict[get_left_child(node['node_id'])] if get_left_child(node_id) in conv_dict else None,
                 conv_dict[get_right_child(node['node_id'])] if get_right_child(node_id) in conv_dict else None,
-                node['terminal']
-            ] + tuples   # + [None, None] * (multi_tests - (len(tuples) / 2))
+                node['terminal'],
+                label_index,
+                node['threshold']
+            ]
 
         matrix.index = [conv_dict[x] for x in matrix.index]
         matrix = matrix.astype(np.float32)
 
         return matrix
 
-    def __same_branches__(self, tree, children_id):
-        terminals = []
-        for child_id in children_id:
-            if isinstance(tree.node[child_id]['label'], list):
-                return False
-            else:
-                terminals += [tree.node[child_id]['label'] in DecisionTree.dataset_info.class_labels]
+    @staticmethod
+    def __same_branches__(tree, children_left, children_right):
+        res = (tree.node[children_left]['terminal'] and tree.node[children_right]['terminal']) and \
+               (tree.node[children_left]['label'] == tree.node[children_right]['label'])
 
-        if reduce(op.mul, terminals) == True:
-            return all([tree.node[_id]['label'] == tree.node[children_id[0]]['label'] for _id in children_id])
-        return False
+        return res
 
     def __set_node__(self, node_id, gm, tree, subset_index, depth, parent_labels, coordinates):
         try:
@@ -212,10 +198,11 @@ class DecisionTree(object):
         or is at a level deeper than maximum depth,
         or the class was sampled
         '''
+
         if any((
-                    DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
-                    depth >= DecisionTree.max_height,
-                    np.count_nonzero(label == DecisionTree.dataset_info.target_attr) > 0
+            DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
+            depth >= DecisionTree.max_height,
+            label == DecisionTree.dataset_info.target_attr
         )):
             meta, subsets = self.__set_terminal__(
                 node_label=None,
@@ -237,8 +224,8 @@ class DecisionTree(object):
             )
 
             if not meta['terminal']:
-                children_id = [get_left_child(node_id), get_right_child(node_id)]
-                for c, child_id, child_subset in it.izip(range(len(children_id)), children_id, subsets):
+                children_id = (get_left_child(node_id), get_right_child(node_id))
+                for child_id, child_subset in zip(children_id, subsets):
                     tree = self.__set_node__(
                         node_id=child_id,
                         tree=tree,
@@ -246,11 +233,11 @@ class DecisionTree(object):
                         subset_index=child_subset,
                         depth=depth + 1,
                         parent_labels=parent_labels + [label],
-                        coordinates=coordinates + [c]
+                        coordinates=coordinates
                     )
 
                 # if both branches are terminal, and they share the same class label:
-                if self.__same_branches__(tree, children_id):
+                if self.__same_branches__(tree, children_id[0], children_id[1]):
                     for child_id in children_id:
                         tree.remove_node(child_id)
 
@@ -303,24 +290,20 @@ class DecisionTree(object):
         return node['label']
 
     def __set_inner_node__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
-        attr_types = [DecisionTree.dataset_info.column_types[x] for x in node_label]
+        attr_type = DecisionTree.dataset_info.column_types[node_label]
 
-        outs = []
-        for label, _type in it.izip(node_label, attr_types):
-            outs += [self.handler_dict[_type](
-                self,
-                node_label=label,
-                node_id=node_id,
-                node_level=node_level,
-                subset_index=subset_index,
-                parent_labels=parent_labels,
-                coordinates=coordinates,
-                **kwargs
-            )]
+        meta, (subset_left, subset_right) = self.handler_dict[attr_type](
+            self,
+            node_label=node_label,
+            node_id=node_id,
+            node_level=node_level,
+            subset_index=subset_index,
+            parent_labels=parent_labels,
+            coordinates=coordinates,
+            **kwargs
+        )
 
-        metas, s_subsets = zip(*outs)
-
-        if any(map(lambda x: x['terminal'], metas)):
+        if meta['terminal']:
             meta, subsets = self.__set_terminal__(
                 node_label=None,
                 node_id=node_id,
@@ -329,12 +312,7 @@ class DecisionTree(object):
                 parent_labels=parent_labels,
                 coordinates=coordinates
             )
-        else:
-            subset_left, subset_right = \
-                reduce(op.add, map(lambda x: x[0], s_subsets)), \
-                reduce(op.add, map(lambda x: x[1], s_subsets))
-
-            if subset_left.sum() == 0 or subset_right.sum() == 0:
+        elif subset_left.sum() == 0 or subset_right.sum() == 0:  # it is not a terminal, but has no instances to split
                 meta, subsets = self.__set_terminal__(
                     node_label=None,
                     node_id=node_id,
@@ -343,14 +321,8 @@ class DecisionTree(object):
                     parent_labels=parent_labels,
                     coordinates=coordinates
                 )
-            else:
-                subsets = [subset_left, subset_right]
 
-                meta = metas[0]
-                meta['threshold'] = [x['threshold'] for x in metas]
-                meta['label'] = [x['label'] for x in metas]
-
-        return meta, subsets
+        return meta, (subset_left, subset_right)
 
     def __store_threshold__(self, node_label, parent_labels, coordinates, threshold):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'

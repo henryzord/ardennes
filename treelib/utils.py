@@ -405,19 +405,19 @@ class DatabaseHandler(object):
 
 
 class MetaDataset(object):
-    def __init__(self, full):
-        self.n_objects, self.n_attributes = full.shape
+    def __init__(self, dataset):
+        self.n_objects, self.n_attributes = dataset.shape
 
-        self.pred_attr = np.array(full.columns[:-1])  # type: np.ndarray
-        self.target_attr = str(full.columns[-1])  # type: str
-        self.class_labels = np.sort(full[full.columns[-1]].unique())  # type: np.ndarray
+        self.pred_attr = np.array(dataset.columns[:-1])  # type: np.ndarray
+        self.target_attr = str(dataset.columns[-1])  # type: str
+        self.class_labels = np.sort(dataset[dataset.columns[-1]].unique())  # type: np.ndarray
 
         self.numerical_class_labels = np.arange(len(self.class_labels), dtype=np.int32)  # type: np.ndarray
         self.class_label_index = {k: x for x, k in enumerate(self.class_labels)}  # type: dict
         self.inv_class_label_index = {x: k for x, k in enumerate(self.class_labels)}  # type: dict
-        self.attribute_index = {k: x for x, k in enumerate(full.columns)}  # type: dict
+        self.attribute_index = {k: x for x, k in enumerate(dataset.columns)}  # type: dict
 
-        self.column_types = {x: self.raw_type_dict[str(full[x].dtype)] for x in full.columns}  # type: dict
+        self.column_types = {x: self.raw_type_dict[str(dataset[x].dtype)] for x in dataset.columns}  # type: dict
 
     def to_categorical(self, y):
         """
@@ -486,6 +486,7 @@ class MetaDataset(object):
         'bool_': 'bool',
         'bool': 'bool',
         'str': 'str',
+        'category': 'category'
     }
 
     mid_type_dict = {
@@ -493,7 +494,8 @@ class MetaDataset(object):
         'str': 'categorical',
         'int': 'numerical',
         'float': 'numerical',
-        'bool': 'categorical'
+        'bool': 'categorical',
+        'category': 'categorical',
     }
 
     arff_data_types = {

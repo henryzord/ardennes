@@ -74,87 +74,73 @@ class Ardennes(object):
 
         gm = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
 
-        # raise NotImplementedError('solve X_train and X_val!')
-
-        sample_func = np.vectorize(Individual, excluded=['gm', 'iteration'])
-
-        P = np.empty(shape=self.n_individuals, dtype=Individual)
-        A_minus = np.arange(self.n_individuals, dtype=np.int32)  # former to_replace_index
+        population = pd.DataFrame({
+            'P': np.empty(shape=self.n_individuals, dtype=Individual),
+            'P_fitness': np.empty(shape=self.n_individuals, dtype=np.float32),
+            'A': np.zeros(self.n_individuals, dtype=np.bool),
+        })
 
         # main loop
         g = 0
 
         while g < self.n_generations:
             t1 = dt.now()
-            P_fitness, P = self.sample_population(gm, g, sample_func, A_minus, P)
+            population = self.sample_population(gm, population)
+            population = self.split_population(population, self.decile)
 
-            A_minus, fittest_pop = self.split_population(self.decile, P)
-
-            gm.update(fittest_pop)
+            gm.update(population)
 
             # TODO reactivate!
             # self.__save__(
             #     reporter=self.reporter, generation=g, A=A, P=P, P_fitness=P_fitness, loc=loc, scale=scale
             # )
 
-            if self.__early_stop__(P):
+            if self.__early_stop__(population):
                 break
 
-            median = float(np.median(P_fitness, axis=0))  # type: float
+            median = float(np.median(population.P_fitness, axis=0))  # type: float
 
             if verbose:
                 print('generation %02.d: best: %.4f median: %.4f time elapsed: %f' % (
-                    g, np.max(P_fitness), median, (dt.now() - t1).total_seconds()
+                    g, population.P_fitness.max(), median, (dt.now() - t1).total_seconds()
                 ))
 
             g += 1
 
-        self.predictor = self.get_best_individual(P)
+        self.predictor = self.get_best_individual(population)
         self.trained = True
         return self
 
     @staticmethod
-    def sample_population(gm, iteration, sample_func, to_replace_index, P):
+    def sample_population(gm, population):
+        def __sample_func__(row):
+            row['P'] = Individual(gm)
+            row['P_fitness'] = row['P'].fitness
+            return row
+
+        population = population.apply(__sample_func__, axis=1)
+        return population
+
+    def split_population(self, population, decile):
         """
 
-        :type gm: treelib.graphical_model.GraphicalModel
-        :param gm: Current graphical model.
-        :type iteration: int
-        :param iteration: Current iteration.
-        :param sample_func: Sample function.
-        :type to_replace_index: list
-        :param to_replace_index: List of indexes of individuals to be replaced in the following generation.
-        :type P: numpy.ndarray
-        :param P: Current population.
-        :rtype: tuple
-        :return: A tuple where the first item is the population fitness and the second the population.
+        :param population:
+        :type population: pandas.DataFrame
+        :param decile:
+        :return:
         """
 
-        P.flat[to_replace_index] = sample_func(
-            ind_id=[P[i].ind_id for i in to_replace_index] if iteration > 0 else to_replace_index,
-            gm=gm,
-            iteration=iteration
-        )
-        P.sort()  # sorts using quicksort, worst individual to best
-        P = P[::-1]  # reverses list so the best individual is in the beginning
-
-        P_fitness = np.array([x.fitness for x in P])
-
-        return P_fitness, P
-
-    def split_population(self, decile, population):
         integer_decile = int(self.n_individuals * decile)
 
-        # refers to indices in the array, not in the population (i.e. individual.ind_id)
-        to_replace_index = range(self.n_individuals)[integer_decile:]
-        fittest_pop = population[:integer_decile]
+        population.sort_values(by='P_fitness', axis=0, inplace=True, ascending=False)
+        population.loc[population.index[:integer_decile], 'A'] = True
 
-        return to_replace_index, fittest_pop
+        return population
 
     @staticmethod
     def get_best_individual(population):
-        outer_fitness = [0.5 * (ind.train_acc_score + ind.val_acc_score) for ind in population]
-        return population[np.argmax(outer_fitness)]
+        outer_fitness = [0.5 * (ind.P.train_acc_score + ind.P.val_acc_score) for (i, ind) in population.iterrows()]
+        return population.loc[np.argmax(outer_fitness)]
 
     @property
     def tree_height(self):
@@ -187,7 +173,7 @@ class Ardennes(object):
 
     @staticmethod
     def __early_stop__(population):
-        return population.min() == population.max()
+        return population.P.min() == population.P.max()
 
     def predict(self, test_set):
         y_test_pred = list(self.predictor.predict(test_set))

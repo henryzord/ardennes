@@ -42,46 +42,39 @@ class GraphicalModel(object):
 
         return attributes
     
-    def update(self, fittest):
-        def get_label(_fit, _node_id):
-            if _node_id not in _fit.tree.node:
+    def update(self, population):
+        def get_label(_ind, _node_id):
+            A, P, P_fitness = _ind.loc['A'], _ind.at['P'], _ind.at['P_fitness']
+
+            if _node_id in P.tree.node:
+                label = P.tree.node[_node_id]['label'] \
+                    if P.tree.node[_node_id]['label'] not in self.dataset_info.class_labels \
+                    else self.dataset_info.target_attr
+                return label
+            else:
                 return None
 
-            label = _fit.tree.node[_node_id]['label'] \
-                if _fit.tree.node[_node_id]['label'] not in self.dataset_info.class_labels \
-                else self.dataset_info.target_attr
-            return label
-
-        def __concatenate__(labels):
-            all = []
-            for _set in labels:
-                if isinstance(_set, list):
-                    all += _set
-                else:
-                    all += [_set]
-            return all
-
-        def local_update(column):
-            labels = __concatenate__([get_label(fit, column.name) for fit in fittest])
+        def local_update(attribute):
+            labels = [get_label(ind, attribute.name) for (i, ind) in (population.loc[population.A]).iterrows()]
             n_unsampled = labels.count(None)
             labels = [x for x in labels if x is not None]  # removes none from unsampled
 
-            graft = [np.random.choice(column.index) for x in xrange(n_unsampled)]
+            graft = [np.random.choice(attribute.index) for x in xrange(n_unsampled)]
 
             label_count = Counter(labels)
             graft_count = Counter(graft)
 
             label_count.update(graft_count)
 
-            column[:] = 0.
+            attribute[:] = 0.
             for k, v in label_count.iteritems():
-                column[column.index == k] = v
+                attribute[attribute.index == k] = v
 
-            column /= float(column.sum())
-            rest = abs(column.sum() - 1.)
-            column[np.random.choice(column.index)] += rest
+            attribute /= float(attribute.sum())
+            rest = abs(attribute.sum() - 1.)
+            attribute[np.random.choice(attribute.index)] += rest
 
-            return column
+            return attribute
 
         self.attributes = self.attributes.apply(local_update, axis=0)
 
@@ -95,13 +88,6 @@ class GraphicalModel(object):
         """
         node_labels = []
         variable = self.attributes[node_id]
-        # variable = self.attributes[node_id]
 
         label = np.random.choice(a=variable.index, p=variable)
-        node_labels += [label]
-        # variable.loc[label] = 0
-        # variable = variable / variable.sum()
-        # rest = abs(variable.sum() - 1.)
-        # variable.loc[np.random.choice(variable.index)] += rest
-
-        return np.array(node_labels)
+        return label

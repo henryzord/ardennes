@@ -78,7 +78,7 @@ def __get_fold__(params, dataset_path, n_fold):
     y_name = full_df.columns[-1]
 
     full_df[y_name] = pd.Categorical(full_df[y_name])
-    full_df[y_name] = full_df[y_name].cat.codes
+    # full_df[y_name] = full_df[y_name].cat.codes
 
     X = full_df[full_df.columns[:-1]]
     y = full_df[full_df.columns[-1]]

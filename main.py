@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from reporter import BaselineReporter
 from treelib import Ardennes
 from utils import get_dataset_name, __get_fold__
+import pandas as pd
 
 
 def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
@@ -18,8 +19,8 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
     y_test = df.loc[test_index, df.columns[-1]]
     del test_index  # deletes it to prevent from being using later
 
-    rest_df = df.loc[rest_index]
-    rest_df.reset_index(inplace=True)
+    rest_df = df.loc[rest_index]  # type: pd.DataFrame
+    rest_df.reset_index(inplace=True, drop=True)
 
     rest_y = rest_df[rest_df.columns[-1]]
     frac = (float(params['n_folds']) - 2) / (float(params['n_folds']) - 1)
@@ -32,10 +33,15 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
     n_classes = len(np.unique(rest_df))
 
     X_train = rest_df.loc[train_index, rest_df.columns[:-1]]
-    X_val = rest_df.loc[val_index, rest_df.columns[:-1]]
-
     y_train = rest_df.loc[train_index, rest_df.columns[-1]]
+
+    X_val = rest_df.loc[val_index, rest_df.columns[:-1]]
     y_val = rest_df.loc[val_index, rest_df.columns[-1]]
+
+    train_index_bool = np.zeros(len(rest_y), dtype=np.bool)
+    train_index_bool[train_index] = True
+    val_index_bool = np.zeros(len(rest_y), dtype=np.bool)
+    val_index_bool[val_index] = True
 
     reporter = BaselineReporter(
         Xs=[X_train, X_val],
@@ -59,8 +65,8 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
 
     model = model.fit(
         full_df=rest_df,
-        train_index=train_index,
-        val_index=val_index
+        train_index=train_index_bool,
+        val_index=val_index_bool
     )
 
     return model

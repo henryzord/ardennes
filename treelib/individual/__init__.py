@@ -13,11 +13,8 @@ class Individual(DecisionTree):
     # relative tolerance between two accuracies
     rtol = 1e-3
 
-    def __init__(self, gm, **kwargs):
-        self.ind_id = kwargs['ind_id'] if 'ind_id' in kwargs else None
-        self.iteration = kwargs['iteration'] if 'iteration' in kwargs else None
-
-        super(Individual, self).__init__(gm, **kwargs)
+    def __init__(self, gm):
+        super(Individual, self).__init__(gm)
 
     def to_dot(self):
         output = StringIO.StringIO()
@@ -59,13 +56,11 @@ class Individual(DecisionTree):
             0.2,
             0.9,
             '\n'.join([
-                'individual id: %03.d' % self.ind_id,
                 'height: %d' % self.height,
                 'n_nodes: %d' % self.n_nodes,
                 'train accuracy: %0.4f' % self.train_acc_score,
                 'val accuracy: %0.4f' % self.val_acc_score,
-                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else '',
-                'iteration: %d' % self.iteration if self.iteration is not None else ''
+                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
 
             ]),
             fontsize=15,
