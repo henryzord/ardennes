@@ -90,10 +90,8 @@ class Ardennes(object):
 
             gm.update(population)
 
-            # TODO reactivate!
-            # self.__save__(
-            #     reporter=self.reporter, generation=g, A=A, P=P, P_fitness=P_fitness, loc=loc, scale=scale
-            # )
+            # TODO reactivate later!
+            # self.__save__(reporter=self.reporter, generation=g, population=population, gm=gm)
 
             if self.__early_stop__(population):
                 break
@@ -147,29 +145,13 @@ class Ardennes(object):
         if self.trained:
             return self.predictor.height
 
-    def __save__(self, **kwargs):
-        # required data, albeit this method has only a kwargs dictionary
-        iteration = kwargs['iteration']  # type: int
-        population = kwargs['population']
-        elapsed_time = kwargs['elapsed_time']
-        fitness = kwargs['fitness']
-        gm = kwargs['gm']
-
-        best_individual = self.get_best_individual(population)
-
-        # optional data
-        dbhandler = None if 'dbhandler' not in kwargs else kwargs['dbhandler']  # type: utils.DatabaseHandler
-
-        mean = np.mean(fitness)  # type: float
-        median = np.median(fitness)  # type: float
-
-        print 'iter: %03.d mean: %0.6f median: %0.6f max: %0.6f ET: %02.2fsec  height: %2.d  n_nodes: %2.d  ' % (
-            iteration, mean, median, best_individual.fitness, elapsed_time, best_individual.height, best_individual.n_nodes
-        ) + ('test acc: %0.6f' % best_individual.test_acc_score if best_individual.test_acc_score is not None else '')
-
-        if dbhandler is not None:
-            dbhandler.write_prototype(iteration, gm)
-            dbhandler.write_population(iteration, population)
+    @staticmethod
+    def __save__(reporter, generation, population, gm):
+        try:
+            reporter.save_population(generation=generation, population=population)
+            reporter.save_gm(generation=generation, gm=gm)
+        except AttributeError:
+            pass
 
     @staticmethod
     def __early_stop__(population):

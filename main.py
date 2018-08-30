@@ -1,11 +1,12 @@
 import json
+
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from reporter import BaselineReporter
+from reporter import EDAReporter
 from treelib import Ardennes
 from utils import get_dataset_name, __get_fold__
-import pandas as pd
 
 
 def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
@@ -43,7 +44,7 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
     val_index_bool = np.zeros(len(rest_y), dtype=np.bool)
     val_index_bool[val_index] = True
 
-    reporter = BaselineReporter(
+    reporter = EDAReporter(
         Xs=[X_train, X_val],
         ys=[y_train, y_val],
         n_classes=n_classes,
@@ -52,7 +53,6 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
         n_fold=n_fold,
         n_run=n_run,
         output_path=output_path,
-        algorithm=Ardennes
     )
 
     model = Ardennes(

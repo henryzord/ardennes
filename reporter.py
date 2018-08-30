@@ -239,37 +239,32 @@ class EDAReporter(BaseReporter):
             n_fold=self.n_fold, n_run=self.n_run, reason='gm'
         )
 
-        with open(self.population_file, 'w') as f:
-            writer = csv.writer(f, delimiter=',')
-            writer.writerow(
-                ['dataset', 'n_fold', 'n_run', 'generation', 'set_name', 'set_size', 'elite', 'fitness'] +
-                [a for a, b in EDAReporter.metrics] +
-                ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
-            )
+        # with open(self.population_file, 'w') as f:
+        #     writer = csv.writer(f, delimiter=',')
+        #     writer.writerow(
+        #         ['dataset', 'n_fold', 'n_run', 'generation', 'set_name', 'set_size', 'elite', 'fitness'] +
+        #         [a for a, b in EDAReporter.metrics] +
+        #         ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
+        #     )
+        #
+        # with open(self.gm_file, 'w') as f:
+        #     writer = csv.writer(f, delimiter=',')
+        #     writer.writerow(
+        #         ['dataset', 'n_fold', 'n_run', 'generation', 'scale'] +
+        #         ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
+        #     )
 
-        with open(self.gm_file, 'w') as f:
-            writer = csv.writer(f, delimiter=',')
-            writer.writerow(
-                ['dataset', 'n_fold', 'n_run', 'generation', 'scale'] +
-                ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
-            )
-
-    def save_population(self, generation, elite, ensembles, P_fitness):
+    def save_population(self, generation, population):
         """
         Saves population metadata to a file. Calculates metrics regarding each individual (for example, accuracy,
             precision, etc).
-
-        :param generation: Current generation index.
-        :param elite: A list of boolean arrays denoting whether that individual is from the elite or not.
-        :param ensembles: A list of ensembles to be saved.
-        :param P_fitness: A list of arrays denoting the fitness of that individuals.
         """
 
         with open(self.population_file, 'a') as f:
             writer = csv.writer(f, delimiter=',')
 
             counter = 0
-            for elite, ensemble, fitness in list(zip(elite, ensembles, P_fitness)):
+            for i, individual in population.iterrows():
                 ravel_weights = ensemble.voting_weights.ravel().tolist()
 
                 for set_name, set_size, set_x, set_y in list(zip(self.set_names, self.set_sizes, self.Xs, self.ys)):
@@ -284,13 +279,9 @@ class EDAReporter(BaseReporter):
                     )
                     counter += 1
 
-    def save_gm(self, generation, loc, scale):
+    def save_gm(self, generation, gm):
         """
         Saves a probabilistic graphical model to a file.
-
-        :param generation: Current generation index.
-        :param loc: A matrix with the mean of each variable PMF.
-        :param scale: A matrix with the std deviation of each variable PMF.
         """
 
         with open(self.gm_file, 'a') as f:
