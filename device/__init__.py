@@ -1,8 +1,13 @@
+from termcolor import colored
+
 import os
 import numpy as np
 import pandas as pd
 from collections import Counter
-from c_individual import make_predictions
+import networkx as nx
+
+# noinspection PyUnresolvedReferences
+from cpu_device import make_predictions
 
 
 class Device(object):
@@ -35,21 +40,19 @@ class Device(object):
     def get_gain_ratios(self, subset_index, attribute, candidates):
         pass
 
-    def predict(self, data, dt, inner=False):
+    def predict(self, data, dt):
         """
 
         Makes predictions for unseen samples.
 
         :param data:
-        :type dt: treelib.individual.DecisionTree
+        :type dt: individual.DecisionTree
         :param dt:
-        :type inner: bool
-        :param inner:
         :rtype: pandas.DataFrame
         :return:
         """
 
-        tree = dt.tree.node
+        tree = dt.tree._node
 
         shape = None
         if isinstance(data, pd.DataFrame):
@@ -68,10 +71,11 @@ class Device(object):
             shape,  # shape of sample data
             data,  # dataset as a plain list
             tree,  # tree in dictionary format
-            range(shape[0]),  # shape of prediction array
-            self.dataset_info.attribute_index,  # dictionary where keys are attributes and values their indices
-            dt.multi_tests  # number of tests per node
+            list(range(shape[0])),  # shape of prediction array
+            self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indices
         )
+
+        raise NotImplementedError('not returning correct values!')
 
         return preds
 
@@ -110,7 +114,7 @@ class Device(object):
 
         _entropy = 0.
 
-        for i, (c, q) in enumerate(counter.iteritems()):
+        for i, (c, q) in enumerate(counter.items()):
             _entropy += (q / size) * np.log2(q / size)
 
         return -1. * _entropy
@@ -140,47 +144,15 @@ class Device(object):
         return ratios
 
 
-def __test_gain_ratio__():
-    from sklearn import datasets
-    from treelib.utils import MetaDataset
-    from opencl import CLDevice
-    from termcolor import colored
-    import itertools as it
+try:
+    # noinspection PyUnresolvedReferences
+    import pyopencl
+    from opencl import CLDevice as AvailableDevice
+    print(colored('NOTICE: Using OpenCL as device.', 'yellow'))
+except ImportError:
+    AvailableDevice = Device
+    print(colored('NOTICE: Using single-threaded CPU as device.', 'yellow'))
 
-    dt = datasets.load_iris()
-    df = pd.DataFrame(
-        data=np.hstack((dt.data.astype(np.float32), dt.target[:, np.newaxis].astype(np.float32))),
-        columns=np.hstack((dt.feature_names, 'class'))
-    )
-
-    attr = df.columns[0]  # first attribute
-
-    unique_vals = [float(x) for x in sorted(df[attr].unique())]
-
-    candidates = np.array(
-        [(a + b) / 2. for a, b in it.izip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
-    )
-
-    subset_index = np.random.randint(2, size=df.shape[0])  # only a subset
-
-    dataset_info = MetaDataset(df)
-
-    cldevice = CLDevice(df, dataset_info)
-    cpudevice = Device(df, dataset_info)
-
-    ratios = cldevice.get_gain_ratios(subset_index, attr, candidates)
-
-    for i, candidate in enumerate(candidates):
-        _subset = df.loc[subset_index.astype(np.bool)]
-        host_gain = cpudevice.gain_ratio(
-            _subset, _subset.loc[_subset[attr] < candidate],
-            _subset.loc[_subset[attr] >= candidate]
-        )
-        print colored(
-            'seq: %.8f prl: %.8f' % (np.float32(host_gain), np.float32(ratios[i])),
-            'red' if abs(np.float32(host_gain) - np.float32(ratios[i])) >= 1e-6 else 'blue'
-        )
-    print '-------------------'
-
-if __name__ == '__main__':
-    __test_gain_ratio__()
+# from termcolor import colored
+# from __base__ import  Device as AvailableDevice
+# print colored('NOTICE: Using single-threaded CPU as device.', 'yellow')

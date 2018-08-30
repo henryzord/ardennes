@@ -2,14 +2,13 @@
 
 import collections
 import copy
-import itertools as it
 import json
 from collections import Counter
-from sklearn.metrics import *
-from treelib.node import *
+
 import networkx as nx
 import pandas as pd
-import operator as op
+from sklearn.metrics import accuracy_score
+import numpy as np
 
 __author__ = 'Henry Cagnini'
 
@@ -50,7 +49,7 @@ class DecisionTree(object):
 
     @classmethod
     def set_values(cls, **kwargs):
-        for k, v in kwargs.iteritems():
+        for k, v in kwargs.items():
             setattr(cls, k, v)
 
     def nodes_at_depth(self, depth):
@@ -62,9 +61,9 @@ class DecisionTree(object):
         :rtype: list of dict
         :return: A list of the nodes at the given level.
         """
-        depths = {k: self.depth_of(k) for k in self._shortest_path.iterkeys()}
+        depths = {k: self.depth_of(k) for k in self._shortest_path.keys()}
         at_level = []
-        for k, d in depths.iteritems():
+        for k, d in depths.items():
             if d == depth:
                 at_level.append(self.tree.node[k])
         return at_level
@@ -127,14 +126,14 @@ class DecisionTree(object):
 
         self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
 
-        predictions = np.array(self.mdevice.predict(self.mdevice.dataset, self, inner=True))
+        predictions = np.array(self.mdevice.predict(self.mdevice.dataset, self))
 
         self.train_acc_score = accuracy_score(DecisionTree.y_train_true, predictions[self.arg_sets['train']])
         self.val_acc_score = accuracy_score(DecisionTree.y_val_true, predictions[self.arg_sets['val']])
 
         self.fitness = self.train_acc_score
 
-        self.height = max(map(len, self._shortest_path.itervalues()))
+        self.height = max(map(len, self._shortest_path.values()))
         self.n_nodes = len(self.tree.node)
 
     def predict(self, samples):
@@ -145,12 +144,6 @@ class DecisionTree(object):
         Converts the inner decision tree from this class to a matrix with n_nodes
         rows and [Left, Right, Terminal, Attribute, Threshold] attributes.
         """
-
-        def __get_index__(label, terminal):
-            if terminal:
-                return
-            return
-
         tree = self.tree
 
         matrix = pd.DataFrame(
@@ -165,8 +158,8 @@ class DecisionTree(object):
                               node['terminal'] else self.dataset_info.attribute_index[node['label']]
 
             matrix.loc[node_id] = [
-                conv_dict[get_left_child(node['node_id'])] if get_left_child(node_id) in conv_dict else None,
-                conv_dict[get_right_child(node['node_id'])] if get_right_child(node_id) in conv_dict else None,
+                conv_dict[self.get_left_child_id(node['node_id'])] if self.get_left_child_id(node_id) in conv_dict else None,
+                conv_dict[self.get_right_child_id(node['node_id'])] if self.get_right_child_id(node_id) in conv_dict else None,
                 node['terminal'],
                 label_index,
                 node['threshold']
@@ -179,8 +172,8 @@ class DecisionTree(object):
 
     @staticmethod
     def __same_branches__(tree, children_left, children_right):
-        res = (tree.node[children_left]['terminal'] and tree.node[children_right]['terminal']) and \
-               (tree.node[children_left]['label'] == tree.node[children_right]['label'])
+        res = (tree.node[children_left]['attr_dict']['terminal'] and tree.node[children_right]['attr_dict']['terminal']) and \
+               (tree.node[children_left]['attr_dict']['label'] == tree.node[children_right]['attr_dict']['label'])
 
         return res
 
@@ -224,7 +217,7 @@ class DecisionTree(object):
             )
 
             if not meta['terminal']:
-                children_id = (get_left_child(node_id), get_right_child(node_id))
+                children_id = (self.get_left_child_id(node_id), self.get_right_child_id(node_id))
                 for child_id, child_subset in zip(children_id, subsets):
                     tree = self.__set_node__(
                         node_id=child_id,
@@ -270,7 +263,7 @@ class DecisionTree(object):
                     else:
                         raise TypeError('invalid type for threshold!')
 
-                    for child_id, attr_dict in it.izip(children_id, attr_dicts):
+                    for child_id, attr_dict in zip(children_id, attr_dicts):
                         tree.add_edge(node_id, child_id, attr_dict=attr_dict)
 
         tree.add_node(node_id, attr_dict=meta)
@@ -349,9 +342,9 @@ class DecisionTree(object):
         if len(unique_vals) > 1:
 
             candidates = np.array(
-                [(a + b) / 2. for a, b in it.izip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
+                [(a + b) / 2. for a, b in zip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
             )
-            gains = self.mdevice.get_gain_ratios(subset_index, node_label, candidates)
+            gains = list(self.mdevice.get_gain_ratios(subset_index, node_label, candidates))
 
             argmax = np.argmax(gains)
 
@@ -418,7 +411,7 @@ class DecisionTree(object):
         return meta, (None, None)
 
     def __set_categorical__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
-        raise NotImplementedError('not implemented yet!')
+        raise TypeError('Unsupported data type for column %s!' % node_label)
 
     @staticmethod
     def __set_error__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
@@ -474,3 +467,53 @@ class DecisionTree(object):
 
         _str = json.dumps(j, ensure_ascii=False, indent=2)
         return _str
+
+    @staticmethod
+    def get_left_child_id(id_node):
+        return (id_node * 2) + 1
+
+    @staticmethod
+    def get_right_child_id(id_node):
+        return (id_node * 2) + 2
+
+    @staticmethod
+    def get_parent_id(id_node):
+        if id_node > 0:
+            return int((id_node - 1) / 2.)
+        return None
+
+    @staticmethod
+    def get_depth(id_node):
+        """
+        Gets depth of node in a binary heap.
+
+        :param id_node: ID of the node in the binary heap.
+        :return: The depth of the node.
+        """
+        return int(np.log2(id_node + 1))
+
+    @staticmethod
+    def get_full_tree_node_count(depth):
+        """
+        Get number of total nodes from a tree with given depth.
+
+        :param depth: Depth of binary tree.
+        :type depth: int
+        :rtype: int
+        :return: The number of nodes in this tree.
+        """
+        return np.power(2, depth + 1) - 1
+
+    @staticmethod
+    def nodes_at_level(level):
+        """
+        Get number of nodes at given level.
+
+        :type level: int
+        :param level: The querying level. Starts at zero (i.e. root).
+        :rtype: int
+        :return: Number of nodes in this level.
+        """
+
+        return np.power(2, level)
+

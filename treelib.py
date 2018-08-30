@@ -2,22 +2,18 @@
 import random
 from datetime import datetime as dt
 
-from sklearn.metrics import accuracy_score
-
-from device import AvailableDevice
 from graphical_model import *
 from individual import Individual
-from treelib.individual import DecisionTree
-from utils import MetaDataset, DatabaseHandler
+
+from device import AvailableDevice
+from individual import DecisionTree
+from utils import MetaDataset
+import numpy as np
 
 __author__ = 'Henry Cagnini'
 
 
 class Ardennes(object):
-    val_str = 'val_df'
-    train_str = 'train_df'
-    test_str = 'test_df'
-
     def __init__(self, n_individuals, n_generations, max_height=3, decile=0.5, reporter=None):
 
         self.n_individuals = n_individuals

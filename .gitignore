@@ -3,6 +3,7 @@
 *.html
 *.pyc
 metadata/
+env_eda/
 
 # folders
 datasets/subsample
@@ -28,3 +29,5 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+.fuse_hidden0000584a00000008
+__pycache__/

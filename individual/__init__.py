@@ -1,8 +1,8 @@
 # coding=utf-8
 
-from __tree__ import DecisionTree
+from individual.__tree__ import DecisionTree
 import networkx as nx
-import StringIO
+from io import StringIO
 from matplotlib import pyplot as plt
 
 __author__ = 'Henry Cagnini'
@@ -17,7 +17,7 @@ class Individual(DecisionTree):
         super(Individual, self).__init__(gm)
 
     def to_dot(self):
-        output = StringIO.StringIO()
+        output = StringIO()
         tree = self.tree  # type: nx.DiGraph
         nx.drawing.nx_pydot.write_dot(tree, output)
         _str = output.getvalue()

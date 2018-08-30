@@ -31,7 +31,7 @@ def ardennes(dataset_path, output_path, params_path, n_fold, n_run):
         shuffle=True, random_state=params['random_state'], stratify=rest_y
     )
 
-    n_classes = len(np.unique(rest_df))
+    n_classes = len(np.unique(rest_y))
 
     X_train = rest_df.loc[train_index, rest_df.columns[:-1]]
     y_train = rest_df.loc[train_index, rest_df.columns[-1]]

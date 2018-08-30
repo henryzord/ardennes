@@ -1,10 +1,10 @@
 # coding=utf-8
-import copy
 
-from node import *
-import pandas as pd
 from collections import Counter
-import operator as op
+import pandas as pd
+import numpy as np
+
+from individual.__tree__ import DecisionTree
 
 __author__ = 'Henry Cagnini'
 
@@ -20,7 +20,7 @@ class GraphicalModel(object):
         def set_probability(column):
             n_attributes = column.index.shape[0]  # class attribute is the last one
 
-            d = get_depth(column.name)
+            d = DecisionTree.get_depth(column.name)
 
             class_prob = 0.  # zero probability
             # class_prob = (1. / (D + 1)) * float(d)  # linear progression
@@ -34,10 +34,11 @@ class GraphicalModel(object):
 
             return column
 
-        n_variables = get_total_nodes(D - 1)  # since the probability of generating the class at D is 100%
+        n_variables = DecisionTree.get_full_tree_node_count(D - 1)  # since the probability of generating the class at D is 100%
 
         attributes = pd.DataFrame(
-            index=np.hstack((self.dataset_info.pred_attr, [self.dataset_info.target_attr])), columns=range(n_variables)
+            index=np.hstack((self.dataset_info.pred_attr, [self.dataset_info.target_attr])), columns=range(n_variables),
+            dtype=np.float32
         ).apply(set_probability, axis=0)
 
         return attributes
@@ -59,7 +60,7 @@ class GraphicalModel(object):
             n_unsampled = labels.count(None)
             labels = [x for x in labels if x is not None]  # removes none from unsampled
 
-            graft = [np.random.choice(attribute.index) for x in xrange(n_unsampled)]
+            graft = [np.random.choice(attribute.index) for x in range(n_unsampled)]
 
             label_count = Counter(labels)
             graft_count = Counter(graft)
@@ -86,8 +87,10 @@ class GraphicalModel(object):
         :param evidence: optional - evidence used for observing the variable. May be None if the variable is independent.
         :return: Observation of the variable, which is a set of values sampled from the variable's distribution.
         """
-        node_labels = []
         variable = self.attributes[node_id]
 
-        label = np.random.choice(a=variable.index, p=variable)
+        a = variable.index
+        p = variable
+
+        label = np.random.choice(a=a, p=p)
         return label
