@@ -4,38 +4,84 @@
 #include "numpy/arrayobject.h"
 
 #include <random>
-#include <vector>
-#include <algorithm>
+//#include <vector>
+//#include <algorithm>
+
+//const int outputSize = 10;
+//
+//vector<double> vec(outputSize);
+//
+//const vector<double> samples{ 1, 2, 3, 4, 5, 6, 7 };
+//const vector<double> probabilities{ 0.1, 0.2, 0.1, 0.5, 0,1 };
+//
+//std::default_random_engine generator;
+//std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
+//
+//vector<int> indices(vec.size());
+//std::generate(indices.begin(), indices.end(), [&generator, &distribution]() { return distribution(generator); });
+//
+//std::transform(indices.begin(), indices.end(), vec.begin(), [&samples](int index) { return samples[index]; });
 
 #define true 1
 #define false 0
 
-const char sample_values_doc[] = "sample random values from numpy.random.choice";
-static PyObject* sample_values() {
+const char choice_doc[] = "sample random values from numpy.random.choice";
+static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
 
-    const int outputSize = 10;
+    static char *kwds[] = {"a", "size", "replace", "p", NULL};
+    PyObject *a = NULL, *p = NULL, *size = NULL;
+    int replace = 1;
 
-    vector<double> vec(outputSize);
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OpO", kwds, &a, &size, &replace, &p)) {
+        return NULL;
+    }
 
-    const vector<double> samples{ 1, 2, 3, 4, 5, 6, 7 };
-    const vector<double> probabilities{ 0.1, 0.2, 0.1, 0.5, 0,1 };
+//    printf("a:\t\t is None: %d is NULL %d\n", a == Py_None, a == NULL);
+//    printf("p:\t\t is None: %d is NULL %d\n", p == Py_None, p == NULL);
 
-    std::default_random_engine generator;
-    std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
+    if(!PyArray_Check(a) && !PyList_Check(a) && !PyTuple_Check(a)) {
+        PyErr_SetString(PyExc_TypeError, "a is from an invalid type.");
+        return NULL;
+    }
+    if((p != NULL) && (!PyArray_Check(p) && !PyList_Check(p) && !PyTuple_Check(p))) {
+        PyErr_SetString(PyExc_TypeError, "p is from an invalid type.");
+        return NULL;
+    }
 
-    vector<int> indices(vec.size());
-    std::generate(indices.begin(), indices.end(), [&generator, &distribution]() { return distribution(generator); });
+    int nd = -1;
+    npy_intp *dims;
+    if(size != NULL) {
+        if(PyTuple_Check(size)) {
+            nd = (int)PyTuple_Size(size);
+            dims = new npy_intp [nd];
 
-    std::transform(indices.begin(), indices.end(), vec.begin(), [&samples](int index) { return samples[index]; });
+            for(int i = 0; i < nd; i++) {
+                dims[i] = (int)PyLong_AsLong(PyTuple_GetItem(size, i));
+            }
+        } else if (PyLong_Check(size)) {
+            nd = 1;
+            dims = new npy_intp [1];
+            dims[0] = (int)PyLong_AsLong(size);
+        } else {
+            PyErr_SetString(PyExc_TypeError, "size must be either a tuple or an integer.");
+            return NULL;
+        }
+    } else {
+        PyErr_SetString(PyExc_NotImplementedError, "not implemented yet!");
+        return NULL;
+    }
 
+//    exit(0);  // TODO remove!
 
-    // TODO code below works, don't change yet
-    int nd = 2;
-    npy_intp dims[] = {3,2};
+    // TODO check whether other parameters are in kwargs!
+
     PyObject *values = PyArray_SimpleNew(nd, dims, NPY_DOUBLE);
     if(values == NULL) {
         return NULL;
     }
+    // TODO code for random sampling
+
+    // TODO code for random sampling
     return Py_BuildValue("O", values);
 }
 
@@ -125,7 +171,7 @@ static PyObject* make_predictions(PyObject *self, PyObject *args) {
 // ml_doc:  docstring to this function.
 static PyMethodDef cpu_methods[] = {
     {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS, make_predictions_doc},
-    {"sample_values", (PyCFunction)sample_values, METH_NOARGS, sample_values_doc},
+    {"choice", (PyCFunction)choice, METH_VARARGS | METH_KEYWORDS, choice_doc},
     {NULL, NULL, 0, NULL}  // sentinel
 };
 
@@ -134,10 +180,10 @@ static PyMethodDef cpu_methods[] = {
 // Arguments in this struct denote extension name, docstring, flags and pointer to extenion's functions.
 static struct PyModuleDef cpu_definition = {
     PyModuleDef_HEAD_INIT,  // you should always init the struct with this flag
-    "individual",
-    "Module with predictions for CPU device.",
-    -1,
-    cpu_methods
+    "individual", // name of the module
+    "Module with predictions for CPU device.", // module documentation
+    -1,  // size of per-interpreter state of the module, or -1 if the module keeps state in global variables.
+    cpu_methods  // methods of this module
 };
 
 // ---------------------------------------------------------------------------------- //

@@ -8,7 +8,7 @@ setup(
         Extension(
             'cpu_device',  # nome do modulo
             language='c++',
-            extra_compile_args=['-std=c++11'],
+            extra_compile_args=['-std=c++11', '-Wno-write-strings'],
             sources=['cpu_code.cpp'],
         )
     ]
