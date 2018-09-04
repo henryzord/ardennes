@@ -4,66 +4,67 @@
 #include "numpy/arrayobject.h"
 
 #include <random>
-//#include <vector>
-//#include <algorithm>
-
-//const int outputSize = 10;
-//
-//vector<double> vec(outputSize);
-//
-//const vector<double> samples{ 1, 2, 3, 4, 5, 6, 7 };
-//const vector<double> probabilities{ 0.1, 0.2, 0.1, 0.5, 0,1 };
-//
-//std::default_random_engine generator;
-//std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
-//
-//vector<int> indices(vec.size());
-//std::generate(indices.begin(), indices.end(), [&generator, &distribution]() { return distribution(generator); });
-//
-//std::transform(indices.begin(), indices.end(), vec.begin(), [&samples](int index) { return samples[index]; });
 
 #define true 1
 #define false 0
+
+int *update_counters(int n_dims, int *dims, int *counters) {
+    char add = 1;
+    for(int i = n_dims - 1; i >= 0; i--) {
+        if(add) {
+            counters[i] += 1;
+            add = 0;
+        } else {
+            break;
+        }
+        if(counters[i] >= dims[i]) {
+            if(i > 0) {
+                counters[i] = 0;
+                add = 1;
+            } else {
+                return NULL;
+            }
+        }
+    }
+    return counters;
+}
 
 const char choice_doc[] = "sample random values from numpy.random.choice";
 static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     static char *kwds[] = {"a", "size", "replace", "p", NULL};
-    PyObject *a = NULL, *p = NULL, *size = NULL;
+    PyObject *size = NULL, *a = NULL, *p = NULL;
     int replace = 1;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OpO", kwds, &a, &size, &replace, &p)) {
         return NULL;
     }
 
-//    printf("a:\t\t is None: %d is NULL %d\n", a == Py_None, a == NULL);
-//    printf("p:\t\t is None: %d is NULL %d\n", p == Py_None, p == NULL);
-
-    if(!PyArray_Check(a) && !PyList_Check(a) && !PyTuple_Check(a)) {
-        PyErr_SetString(PyExc_TypeError, "a is from an invalid type.");
+    if(!PyArray_Check(a)) {
+        PyErr_SetString(PyExc_TypeError, "a must be a numpy.ndarray");
         return NULL;
     }
-    if((p != NULL) && (!PyArray_Check(p) && !PyList_Check(p) && !PyTuple_Check(p))) {
-        PyErr_SetString(PyExc_TypeError, "p is from an invalid type.");
+    if((p != NULL) && !PyArray_Check(p)) {
+        PyErr_SetString(PyExc_TypeError, "p must be a numpy.ndarray");
         return NULL;
     }
 
     int nd = -1;
-    npy_intp *dims;
+    npy_intp *_dims;
     if(size != NULL) {
         if(PyTuple_Check(size)) {
             nd = (int)PyTuple_Size(size);
-            dims = new npy_intp [nd];
+            _dims = new npy_intp [nd];
 
             for(int i = 0; i < nd; i++) {
-                dims[i] = (int)PyLong_AsLong(PyTuple_GetItem(size, i));
+                _dims[i] = (int)PyLong_AsLong(PyTuple_GetItem(size, i));
             }
         } else if (PyLong_Check(size)) {
             nd = 1;
-            dims = new npy_intp [1];
-            dims[0] = (int)PyLong_AsLong(size);
+            _dims = new npy_intp [1];
+            _dims[0] = (int)PyLong_AsLong(size);
         } else {
-            PyErr_SetString(PyExc_TypeError, "size must be either a tuple or an integer.");
+            PyErr_SetString(PyExc_TypeError, "size must be either a tuple or an integer");
             return NULL;
         }
     } else {
@@ -71,18 +72,83 @@ static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-//    exit(0);  // TODO remove!
+    int a_ndims = PyArray_NDIM((const PyArrayObject*)a),
+        p_ndims = PyArray_NDIM((const PyArrayObject*)p);
 
-    // TODO check whether other parameters are in kwargs!
-
-    PyObject *values = PyArray_SimpleNew(nd, dims, NPY_DOUBLE);
-    if(values == NULL) {
+    if(a_ndims > 1) {
+        PyErr_SetString(PyExc_ValueError, "a must be 1-dimensional");
         return NULL;
     }
-    // TODO code for random sampling
+    if(p_ndims > 1) {
+        PyErr_SetString(PyExc_ValueError, "p must be 1-dimensional");
+        return NULL;
+    }
 
-    // TODO code for random sampling
-    return Py_BuildValue("O", values);
+    npy_intp *a_dims = PyArray_SHAPE((PyArrayObject*)a),
+             *p_dims = PyArray_SHAPE((PyArrayObject*)p);
+
+    for(int j = 0; j < a_ndims; j++) {
+        if(a_dims[j] != p_dims[j]) {
+            PyErr_SetString(PyExc_ValueError, "a and p must have the same size");
+            return NULL;
+        }
+    }
+
+    PyObject *sampled_obj = PyArray_SimpleNew(nd, _dims, NPY_FLOAT32);
+    PyArrayObject *sampled = (PyArrayObject*)sampled_obj;
+
+    if(sampled == NULL) {
+        PyErr_SetString(PyExc_ValueError, "Exception ocurred while trying to allocate space for numpy array");
+        return NULL;
+    }
+
+    npy_intp *sampled_strides = PyArray_STRIDES(sampled),
+             *a_strides = PyArray_STRIDES((PyArrayObject*)a),
+             *p_strides = PyArray_STRIDES((PyArrayObject*)p);
+
+    int sampled_ndims = PyArray_NDIM(sampled);
+    npy_intp *sampled_dims = PyArray_DIMS(sampled);
+
+    char *sampled_ptr, *p_ptr, *a_ptr;  // pointers to data
+
+    int num, div, success = -1;
+    float sum, spread = 1000, p_data;
+    PyObject *a_data;
+
+//    for(int i = 0; i < sampled_ndims; i++) {
+    for(int j = 0; j < sampled_dims[0]; j++) {
+        for(int l = 0; l < sampled_dims[1]; l++) {
+            sampled_ptr = PyArray_BYTES(sampled);
+            sampled_ptr += (sampled_strides[0] * j) + (sampled_strides[1] * l);
+
+            num = rand() % (int)spread;  // random sampled number
+            sum = 0;  // sum of probabilities so far
+
+            p_ptr = PyArray_BYTES((PyArrayObject*)p);
+            a_ptr = PyArray_BYTES((PyArrayObject*)a);
+
+            success = PyArray_SETITEM(sampled, sampled_ptr, Py_BuildValue("f", -15.0));  // TODO remove!
+
+            for(int k = 0; k < a_dims[0]; k++) {
+                break; // TODO remove
+                p_data = (float)PyFloat_AsDouble(PyArray_GETITEM((PyArrayObject*)p, p_ptr));
+                a_data = PyArray_GETITEM((PyArrayObject*)a, a_ptr);
+                p_ptr += p_strides[0];
+                a_ptr += a_strides[0];
+
+                div = (int)(num/((sum + p_data) * spread));
+
+                if(div <= 0) {
+                    success = PyArray_SETITEM(sampled, sampled_ptr, Py_BuildValue("f", -15.0));
+                    printf("success? %d\n", success);
+                    break;
+                }
+                sum += p_data;
+            }
+        }
+    }
+
+    return Py_BuildValue("O", sampled);
 }
 
 static int next_node(int current_node, int go_left) {
