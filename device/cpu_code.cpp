@@ -2,15 +2,44 @@
 
 #include <Python.h>
 #include "numpy/arrayobject.h"
+#include "numpy/ndarraytypes.h"
 
 #include <random>
 
 #define true 1
 #define false 0
 
-int *update_counters(int n_dims, int *dims, int *counters) {
+char *get_dtype_name(PyArrayObject *array) {
+    // all 24 dtypes of numpy
+    int dtypes[] = {
+        NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
+        NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
+        NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
+    };
+
+    char *dtype_names[] = {
+        "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
+        "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
+        "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
+    };
+
+    int a_dtype = PyArray_DESCR(array)->type_num;
+
+    char *dtype = NULL;
+    for(int i = 0; i < 24; i++) {
+        if(a_dtype == dtypes[i]) {
+            dtype = dtype_names[i];
+            break;
+        }
+    }
+    return dtype;
+}
+
+
+
+int *update_counters(int n_dims, npy_intp *dims, int *counters) {
     char add = 1;
-    for(int i = n_dims - 1; i >= 0; i--) {
+    for(int i = 0; i < n_dims; i++) {
         if(add) {
             counters[i] += 1;
             add = 0;
@@ -18,10 +47,11 @@ int *update_counters(int n_dims, int *dims, int *counters) {
             break;
         }
         if(counters[i] >= dims[i]) {
-            if(i > 0) {
+            if(i < n_dims - 1) {
                 counters[i] = 0;
                 add = 1;
             } else {
+                free(counters);
                 return NULL;
             }
         }
@@ -49,20 +79,20 @@ static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-    int nd = -1;
-    npy_intp *_dims;
+    int sampled_ndims = -1;
+    npy_intp *sampled_dims;
     if(size != NULL) {
         if(PyTuple_Check(size)) {
-            nd = (int)PyTuple_Size(size);
-            _dims = new npy_intp [nd];
+            sampled_ndims = (int)PyTuple_Size(size);
+            sampled_dims = new npy_intp [sampled_ndims];
 
-            for(int i = 0; i < nd; i++) {
-                _dims[i] = (int)PyLong_AsLong(PyTuple_GetItem(size, i));
+            for(int i = 0; i < sampled_ndims; i++) {
+                sampled_dims[i] = (int)PyLong_AsLong(PyTuple_GetItem(size, i));
             }
         } else if (PyLong_Check(size)) {
-            nd = 1;
-            _dims = new npy_intp [1];
-            _dims[0] = (int)PyLong_AsLong(size);
+            sampled_ndims = 1;
+            sampled_dims = new npy_intp [1];
+            sampled_dims[0] = (int)PyLong_AsLong(size);
         } else {
             PyErr_SetString(PyExc_TypeError, "size must be either a tuple or an integer");
             return NULL;
@@ -94,7 +124,12 @@ static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
         }
     }
 
-    PyObject *sampled_obj = PyArray_SimpleNew(nd, _dims, NPY_FLOAT32);
+    PyArray_Descr *a_descr = PyArray_DESCR((PyArrayObject*)a);
+    PyObject *sampled_obj = PyArray_NewFromDescr(
+        &PyArray_Type, a_descr,
+        sampled_ndims, sampled_dims, NULL, NULL, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_WRITEABLE, NULL
+    );
+
     PyArrayObject *sampled = (PyArrayObject*)sampled_obj;
 
     if(sampled == NULL) {
@@ -102,50 +137,46 @@ static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-    npy_intp *sampled_strides = PyArray_STRIDES(sampled),
-             *a_strides = PyArray_STRIDES((PyArrayObject*)a),
-             *p_strides = PyArray_STRIDES((PyArrayObject*)p);
+    // type checking ends here; real code begins here
 
-    int sampled_ndims = PyArray_NDIM(sampled);
-    npy_intp *sampled_dims = PyArray_DIMS(sampled);
+    npy_intp sampled_size = PyArray_SIZE(sampled),
+             a_itemsize = PyArray_ITEMSIZE((PyArrayObject*)a),
+             p_itemsize = PyArray_ITEMSIZE((PyArrayObject*)p);
 
-    char *sampled_ptr, *p_ptr, *a_ptr;  // pointers to data
+    int *sampled_counters = (int*)malloc(sizeof(int) * sampled_ndims);
+    for(int j = 0; j < sampled_ndims; j++) {
+        sampled_counters[j] = 0;
+    }
 
-    int num, div, success = -1;
+    char *sampled_ptr = PyArray_BYTES(sampled), *p_ptr, *a_ptr;  // data pointers
+    npy_intp sampled_itemsize = PyArray_ITEMSIZE(sampled);
+
+    int num, div;
     float sum, spread = 1000, p_data;
     PyObject *a_data;
 
-//    for(int i = 0; i < sampled_ndims; i++) {
-    for(int j = 0; j < sampled_dims[0]; j++) {
-        for(int l = 0; l < sampled_dims[1]; l++) {
-            sampled_ptr = PyArray_BYTES(sampled);
-            sampled_ptr += (sampled_strides[0] * j) + (sampled_strides[1] * l);
+    for(int i = 0; i < sampled_size; i++) {
+        num = rand() % (int)spread;  // random sampled number
+        sum = 0;  // sum of probabilities so far
 
-            num = rand() % (int)spread;  // random sampled number
-            sum = 0;  // sum of probabilities so far
+        p_ptr = PyArray_BYTES((PyArrayObject*)p);
+        a_ptr = PyArray_BYTES((PyArrayObject*)a);
 
-            p_ptr = PyArray_BYTES((PyArrayObject*)p);
-            a_ptr = PyArray_BYTES((PyArrayObject*)a);
+        for(int k = 0; k < a_dims[0]; k++) {
+            p_data = (float)PyFloat_AsDouble(PyArray_GETITEM((PyArrayObject*)p, p_ptr));
+            a_data = PyArray_GETITEM((PyArrayObject*)a, a_ptr);
+            p_ptr += p_itemsize;
+            a_ptr += a_itemsize;
 
-            success = PyArray_SETITEM(sampled, sampled_ptr, Py_BuildValue("f", -15.0));  // TODO remove!
+            div = (int)(num/((sum + p_data) * spread));
 
-            for(int k = 0; k < a_dims[0]; k++) {
-                break; // TODO remove
-                p_data = (float)PyFloat_AsDouble(PyArray_GETITEM((PyArrayObject*)p, p_ptr));
-                a_data = PyArray_GETITEM((PyArrayObject*)a, a_ptr);
-                p_ptr += p_strides[0];
-                a_ptr += a_strides[0];
-
-                div = (int)(num/((sum + p_data) * spread));
-
-                if(div <= 0) {
-                    success = PyArray_SETITEM(sampled, sampled_ptr, Py_BuildValue("f", -15.0));
-                    printf("success? %d\n", success);
-                    break;
-                }
-                sum += p_data;
+            if(div <= 0) {
+                success = PyArray_SETITEM(sampled, sampled_ptr, a_data);
+                break;
             }
+            sum += p_data;
         }
+        sampled_ptr += sampled_itemsize;
     }
 
     return Py_BuildValue("O", sampled);
