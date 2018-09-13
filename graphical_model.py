@@ -4,7 +4,7 @@ from collections import Counter
 import pandas as pd
 import numpy as np
 
-from individual.__tree__ import DecisionTree
+from solution.trees import DecisionTree
 
 __author__ = 'Henry Cagnini'
 
@@ -34,7 +34,7 @@ class GraphicalModel(object):
 
             return column
 
-        n_variables = DecisionTree.get_full_tree_node_count(D - 1)  # since the probability of generating the class at D is 100%
+        n_variables = DecisionTree.get_node_count(D - 1)  # since the probability of generating the class at D is 100%
 
         attributes = pd.DataFrame(
             index=np.hstack((self.dataset_info.pred_attr, [self.dataset_info.target_attr])), columns=range(n_variables),
@@ -68,7 +68,7 @@ class GraphicalModel(object):
             label_count.update(graft_count)
 
             attribute[:] = 0.
-            for k, v in label_count.iteritems():
+            for k, v in label_count.items():
                 attribute[attribute.index == k] = v
 
             attribute /= float(attribute.sum())
@@ -78,6 +78,20 @@ class GraphicalModel(object):
             return attribute
 
         self.attributes = self.attributes.apply(local_update, axis=0)
+
+    def sample(self, population):
+        """
+        Samples non-elite individuals.
+
+        :param population: whole population of individuals from a generation.
+        :dtype population: pandas.DataFrame
+        :return: non-elite individuals are resampled, while elite individuals are kept.
+        :rtype: pandas.DataFrame
+        """
+        for i, row in population.iterrows():
+            if not row['A']:
+                for j in range(self.attributes):
+                    z = 0
 
     def observe(self, node_id, evidence=None):
         """

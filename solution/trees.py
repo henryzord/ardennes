@@ -13,7 +13,65 @@ import numpy as np
 __author__ = 'Henry Cagnini'
 
 
-class DecisionTree(object):
+class HeapTree(object):
+
+    def __init__(self, max_depth=1):
+        self.n_nodes = self.get_node_count(max_depth)
+        self.terminal = np.empty(self.n_nodes, dtype=np.bool)
+        self.threshold = np.empty(self.n_nodes, dtype=np.float32)
+        self.data = np.array(self.n_nodes, dtype=np.object)
+
+    @staticmethod
+    def get_node_count(depth):
+        """
+        Get number of total nodes from a tree with given depth.
+
+        :param depth: Depth of binary tree.
+        :type depth: int
+        :rtype: int
+        :return: The number of nodes in this tree.
+        """
+        return np.power(2, depth + 1) - 1
+
+    @staticmethod
+    def node_count_at(depth):
+        """
+        Get number of nodes at given level.
+
+        :type depth: int
+        :param depth: The querying depth. Starts at zero (i.e. root).
+        :rtype: int
+        :return: Number of nodes at queried depth.
+        """
+
+        return np.power(2, depth)
+
+    @staticmethod
+    def get_depth(id_node):
+        """
+        Gets depth of node in a binary heap.
+
+        :param id_node: ID of the node in the binary heap.
+        :return: The depth of the node.
+        """
+        return int(np.log2(id_node + 1))
+
+    @staticmethod
+    def get_left_child_id(id_node):
+        return (id_node * 2) + 1
+
+    @staticmethod
+    def get_right_child_id(id_node):
+        return (id_node * 2) + 2
+
+    @staticmethod
+    def get_parent_id(id_node):
+        if id_node > 0:
+            return int((id_node - 1) / 2.)
+        return None
+
+
+class DecisionTree(HeapTree):
     _terminal_node_color = '#98FB98'
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
@@ -44,74 +102,84 @@ class DecisionTree(object):
     val_acc_score = None
     test_acc_score = None
 
-    def __init__(self, gm, **kwargs):
-        self.sample(gm)
+    def __init__(self, max_depth):
+        super(DecisionTree, self).__init__(max_depth=max_depth)
 
     @classmethod
     def set_values(cls, **kwargs):
         for k, v in kwargs.items():
             setattr(cls, k, v)
 
-    def nodes_at_depth(self, depth):
-        """
-        Selects all nodes which are in the given level.
-
-        :type depth: int
-        :param depth: The level to pick
-        :rtype: list of dict
-        :return: A list of the nodes at the given level.
-        """
-        depths = {k: self.depth_of(k) for k in self._shortest_path.keys()}
-        at_level = []
-        for k, d in depths.items():
-            if d == depth:
-                at_level.append(self.tree.node[k])
-        return at_level
-
-    def parents_of(self, node_id):
-        """
-        The parents of the given node.
-
-        :type node_id: int
-        :param node_id: The id of the node, starting from zero (root).
-        :rtype: list of int
-        :return: A list of parents of this node, excluding the node itself.
-        """
-        parents = copy.deepcopy(self._shortest_path[node_id])
-        parents.remove(node_id)
-        return parents
-
-    def height_and_label_to(self, node_id):
-        """
-        Returns a dictionary where the keys are the depth of each one
-        of the parents, and the values the label of the parents.
-
-        :param node_id: ID of the node in the decision tree.
-        :return:
-        """
-        parents = self.parents_of(node_id)
-        parent_labels = {
-            self.tree.node[p]['level']: (
-                self.tree.node[p]['label'] if
-                self.tree.node[p]['label'] not in DecisionTree.dataset_info.class_labels else
-                DecisionTree.dataset_info.target_attr
-            ) for p in parents
-            }
-        return parent_labels
-
-    def depth_of(self, node_id):
-        """
-        The depth which a node lies in the tree.
-
-        :type node_id: int
-        :param node_id: The id of the node, starting from zero (root).
-        :rtype: int
-        :return: Depth of the node, starting with zero (root).
-        """
-
-        return len(self._shortest_path[node_id]) - 1
+    # TODO test without it
+    # def nodes_at_depth(self, depth):
+    #     """
+    #     Selects all nodes which are in the given level.
+    #
+    #     :type depth: int
+    #     :param depth: The level to pick
+    #     :rtype: list of dict
+    #     :return: A list of the nodes at the given level.
+    #     """
+    #     depths = {k: self.depth_of(k) for k in self._shortest_path.keys()}
+    #     at_level = []
+    #     for k, d in depths.items():
+    #         if d == depth:
+    #             at_level.append(self.tree.node[k])
+    #     return at_level
+    #
+    # def parents_of(self, node_id):
+    #     """
+    #     The parents of the given node.
+    #
+    #     :type node_id: int
+    #     :param node_id: The id of the node, starting from zero (root).
+    #     :rtype: list of int
+    #     :return: A list of parents of this node, excluding the node itself.
+    #     """
+    #     parents = copy.deepcopy(self._shortest_path[node_id])
+    #     parents.remove(node_id)
+    #     return parents
+    #
+    # def height_and_label_to(self, node_id):
+    #     """
+    #     Returns a dictionary where the keys are the depth of each one
+    #     of the parents, and the values the label of the parents.
+    #
+    #     :param node_id: ID of the node in the decision tree.
+    #     :return:
+    #     """
+    #     parents = self.parents_of(node_id)
+    #     parent_labels = {
+    #         self.tree.node[p]['level']: (
+    #             self.tree.node[p]['label'] if
+    #             self.tree.node[p]['label'] not in DecisionTree.dataset_info.class_labels else
+    #             DecisionTree.dataset_info.target_attr
+    #         ) for p in parents
+    #         }
+    #     return parent_labels
+    #
+    # def depth_of(self, node_id):
+    #     """
+    #     The depth which a node lies in the tree.
+    #
+    #     :type node_id: int
+    #     :param node_id: The id of the node, starting from zero (root).
+    #     :rtype: int
+    #     :return: Depth of the node, starting with zero (root).
+    #     """
+    #
+    #     return len(self._shortest_path[node_id]) - 1
 
     def sample(self, gm):
+        # TODO info needed to make predictions:
+        # preds = make_predictions(
+        #     shape,  # shape of sample data
+        #     data,  # dataset as a plain list
+        #     tree,  # tree in dictionary format
+        #     list(range(shape[0])),  # shape of prediction array
+        #     self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indices
+        # )
+
         arg_threshold = DecisionTree.arg_sets['train'] + DecisionTree.arg_sets['val']
 
         self.tree = self.tree = self.__set_node__(
@@ -268,19 +336,6 @@ class DecisionTree(object):
 
         tree.add_node(node_id, attr_dict=meta)
         return tree
-
-    def __predict_object__(self, obj):
-        arg_node = 0  # always start with root
-
-        tree = self.tree  # type: nx.DiGraph
-        node = tree.node[arg_node]
-
-        while not node['terminal']:
-            go_left = obj[node['label']] <= node['threshold']
-            arg_node = (arg_node * 2) + (not go_left) + 1
-            node = tree.node[arg_node]
-
-        return node['label']
 
     def __set_inner_node__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
         attr_type = DecisionTree.dataset_info.column_types[node_label]
@@ -462,58 +517,8 @@ class DecisionTree(object):
     def to_json(self):
         j = self.to_dict()
 
-        for k in j['nodes'].iterkeys():
+        for k in j['nodes'].keys():
             j['nodes'][k]['threshold'] = str(j['nodes'][k]['threshold'])
 
         _str = json.dumps(j, ensure_ascii=False, indent=2)
         return _str
-
-    @staticmethod
-    def get_left_child_id(id_node):
-        return (id_node * 2) + 1
-
-    @staticmethod
-    def get_right_child_id(id_node):
-        return (id_node * 2) + 2
-
-    @staticmethod
-    def get_parent_id(id_node):
-        if id_node > 0:
-            return int((id_node - 1) / 2.)
-        return None
-
-    @staticmethod
-    def get_depth(id_node):
-        """
-        Gets depth of node in a binary heap.
-
-        :param id_node: ID of the node in the binary heap.
-        :return: The depth of the node.
-        """
-        return int(np.log2(id_node + 1))
-
-    @staticmethod
-    def get_full_tree_node_count(depth):
-        """
-        Get number of total nodes from a tree with given depth.
-
-        :param depth: Depth of binary tree.
-        :type depth: int
-        :rtype: int
-        :return: The number of nodes in this tree.
-        """
-        return np.power(2, depth + 1) - 1
-
-    @staticmethod
-    def nodes_at_level(level):
-        """
-        Get number of nodes at given level.
-
-        :type level: int
-        :param level: The querying level. Starts at zero (i.e. root).
-        :rtype: int
-        :return: Number of nodes in this level.
-        """
-
-        return np.power(2, level)
-

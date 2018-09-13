@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 
-from main import ardennes
+from main import train_ardennes
 from reporter import BaselineReporter
 from utils import get_dataset_name
 
@@ -13,7 +13,7 @@ def preliminaries(dataset_path, output_path, params_path, n_fold, n_run):
     dataset_name = get_dataset_name(dataset_path)
 
     # try:
-    ardennes(
+    train_ardennes(
         dataset_path=dataset_path,
         output_path=output_path,
         params_path=params_path,

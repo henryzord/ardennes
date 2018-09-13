@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from individual.__tree__ import DecisionTree
+from solution.trees import DecisionTree
 import networkx as nx
 from io import StringIO
 from matplotlib import pyplot as plt
@@ -10,11 +10,11 @@ __author__ = 'Henry Cagnini'
 
 class Individual(DecisionTree):
 
-    # relative tolerance between two accuracies
+    # relative tolerance between two values
     rtol = 1e-3
 
-    def __init__(self, gm):
-        super(Individual, self).__init__(gm)
+    def __init__(self, max_depth):
+        super(Individual, self).__init__(max_depth=max_depth)
 
     def to_dot(self):
         output = StringIO()

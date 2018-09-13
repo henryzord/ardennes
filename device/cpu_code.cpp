@@ -35,8 +35,6 @@ char *get_dtype_name(PyArrayObject *array) {
     return dtype;
 }
 
-
-
 int *update_counters(int n_dims, npy_intp *dims, int *counters) {
     char add = 1;
     for(int i = 0; i < n_dims; i++) {
