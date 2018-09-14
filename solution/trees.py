@@ -1,7 +1,5 @@
 # coding=utf-8
 
-import collections
-import copy
 import json
 from collections import Counter
 
@@ -9,6 +7,9 @@ import networkx as nx
 import pandas as pd
 from sklearn.metrics import accuracy_score
 import numpy as np
+from cpu_device import gain_ratio
+
+from utils import raw_type_dict
 
 __author__ = 'Henry Cagnini'
 
@@ -76,39 +77,56 @@ class DecisionTree(HeapTree):
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
 
-    dataset = None
-    dataset_info = None
+    def __init__(self, max_depth, full_df, train_index, val_index):
+        """
 
-    max_height = -1
-
-    thresholds = dict()  # thresholds for nodes
-
-    arg_sets = None
-
-    y_test_true = None
-    y_val_true = None
-    y_train_true = None
-
-    _shortest_path = dict()  # type: dict
-    tree = None  # type: nx.DiGraph
-
-    fitness = None  # type: float
-    height = None
-    n_nodes = None
-
-    mdevice = None
-
-    train_acc_score = None
-    val_acc_score = None
-    test_acc_score = None
-
-    def __init__(self, max_depth):
+        :param max_depth:
+        :param full_df:
+        :param train_index:
+        :param val_index:
+        """
         super(DecisionTree, self).__init__(max_depth=max_depth)
 
-    @classmethod
-    def set_values(cls, **kwargs):
-        for k, v in kwargs.items():
-            setattr(cls, k, v)
+        self.max_depth = max_depth
+        self.full_df = full_df
+        self.train_index = train_index
+        self.val_index = val_index
+
+        self.pred_attr_names = np.array(full_df.columns[:-1])  # type: np.ndarray
+        self.class_attr_name = full_df.columns[-1]  # type: str
+        self.class_labels = np.sort(full_df[full_df.columns[-1]].unique())  # type: np.ndarray
+
+        _attr_forward = {
+            k: v for k, v in zip(full_df.columns, range(len(self.pred_attr_names) + 1))
+        }
+        _attr_backward = {
+            k: v for k, v in zip(range(len(self.pred_attr_names) + 1), self.pred_attr_names + [self.class_attr_name])
+        }
+
+        _attr_forward.update(_attr_backward)
+        self.attr_index = _attr_forward
+
+        _class_forward = {
+            k: v for k, v in zip(self.class_labels, range(len(self.class_labels)))
+        }
+        _class_backward = {
+            k: v for k, v in zip(range(len(self.class_labels)), self.class_labels)
+        }
+
+        _class_forward.update(_class_backward)
+        self.class_labels_index = _class_forward
+
+        self.column_types = {x: raw_type_dict[str(full_df[x].dtype)] for x in full_df.columns}  # type: dict
+
+        # since the probability of generating the class at D is 100%
+        self.n_nodes = self.get_node_count(self.max_depth - 1)
+
+        longest_word = max(map(len, list(self.class_labels) + list(self.pred_attr_names) + [self.class_attr_name]))
+        dtype = '<U%d' % longest_word
+
+        self.nodes = np.empty(self.n_nodes, dtype=np.dtype(dtype))
+        self.threshold = np.empty(self.n_nodes, dtype=np.float32)
+        self.terminal = np.empty(self.n_nodes, dtype=np.bool)
 
     # TODO test without it
     # def nodes_at_depth(self, depth):
@@ -170,7 +188,7 @@ class DecisionTree(HeapTree):
     #
     #     return len(self._shortest_path[node_id]) - 1
 
-    def sample(self, gm):
+    def update(self):
         # TODO info needed to make predictions:
         # preds = make_predictions(
         #     shape,  # shape of sample data
@@ -180,19 +198,16 @@ class DecisionTree(HeapTree):
         #     self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indices
         # )
 
-        arg_threshold = DecisionTree.arg_sets['train'] + DecisionTree.arg_sets['val']
+        arg_threshold = self.train_index + self.val_index
 
-        self.tree = self.tree = self.__set_node__(
+        self.__set_node__(
             node_id=0,
-            gm=gm,
-            tree=nx.DiGraph(),
             subset_index=arg_threshold,
-            depth=0,
             parent_labels=[],
             coordinates=[],
-        )  # type: nx.DiGraph
+        )
 
-        self._shortest_path = nx.shortest_path(self.tree, source=0)  # source equals to root
+        raise NotImplementedError('not implemented yet!')
 
         predictions = np.array(self.mdevice.predict(self.mdevice.dataset, self))
 
@@ -245,46 +260,35 @@ class DecisionTree(HeapTree):
 
         return res
 
-    def __set_node__(self, node_id, gm, tree, subset_index, depth, parent_labels, coordinates):
-        try:
-            label = gm.observe(node_id=node_id)
-        except KeyError as ke:
-            if depth >= gm.D:
-                label = DecisionTree.dataset_info.target_attr
-            else:
-                raise KeyError('Node %s not in graphical model!' % ke.message)
+    def __set_node__(self, node_id, subset_index, parent_labels, coordinates):
+        label = self.nodes[node_id]
 
         '''
         if the current node has only one class,
         or is at a level deeper than maximum depth,
         or the class was sampled
         '''
-
         if any((
-            DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr].unique().shape[0] == 1,
-            depth >= DecisionTree.max_height,
-            label == DecisionTree.dataset_info.target_attr
+            label == self.class_attr_name,
+            len(self.full_df.loc[subset_index, self.class_attr_name].unique()) == 1
         )):
-            meta, subsets = self.__set_terminal__(
+            subset_left, subset_right = self.__set_terminal__(
                 node_label=None,
                 node_id=node_id,
-                node_level=depth,
                 subset_index=subset_index,
                 parent_labels=parent_labels,
                 coordinates=coordinates
             )
         else:
-            meta, subsets = self.__set_inner_node__(
+            subset_left, subset_right = self.__set_inner_node__(
                 node_label=label,
+                node_id=node_id,
+                subset_index=subset_index,
                 parent_labels=parent_labels,
                 coordinates=coordinates,
-                node_level=depth,
-                gm=gm,
-                subset_index=subset_index,
-                node_id=node_id
             )
 
-            if not meta['terminal']:
+            if not self.terminal[node_id]:  # continues the process
                 children_id = (self.get_left_child_id(node_id), self.get_right_child_id(node_id))
                 for child_id, child_subset in zip(children_id, subsets):
                     tree = self.__set_node__(
@@ -311,44 +315,16 @@ class DecisionTree(HeapTree):
                         coordinates=coordinates
                     )
 
-                else:
-                    if type(meta['threshold']) in [np.float32, np.float64, float]:  # TODO use raw_type_dict
-                        attr_dicts = [
-                            {'threshold': '<= %0.2f' % meta['threshold']},
-                            {'threshold': '> %0.2f' % meta['threshold']}
-                        ]
-                    elif isinstance(meta['threshold'], collections.Iterable):
-                        dict_left, dict_right = dict(threshold=''), dict(threshold='')
-                        for thres in meta['threshold']:
-                            if type(thres) in [np.float32, np.float64, float]:
-                                dict_left['threshold'] += ' ' + '<= %0.2f\n' % thres
-                                dict_right['threshold'] += ' ' + '> %02.f\n' % thres
-                            else:
-                                dict_left['threshold'] += ' ' + '!= %s\n' % thres
-                                dict_right['threshold'] += ' ' + '== %s\n' % thres
+    def __set_inner_node__(self, node_label, node_id, subset_index, parent_labels, coordinates):
+        attr_type = self.column_types[node_label]
 
-                        attr_dicts = [dict_left, dict_right]
-                    else:
-                        raise TypeError('invalid type for threshold!')
-
-                    for child_id, attr_dict in zip(children_id, attr_dicts):
-                        tree.add_edge(node_id, child_id, attr_dict=attr_dict)
-
-        tree.add_node(node_id, attr_dict=meta)
-        return tree
-
-    def __set_inner_node__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
-        attr_type = DecisionTree.dataset_info.column_types[node_label]
-
-        meta, (subset_left, subset_right) = self.handler_dict[attr_type](
+        subset_left, subset_right = self.handler_dict[attr_type](
             self,
             node_label=node_label,
             node_id=node_id,
-            node_level=node_level,
             subset_index=subset_index,
             parent_labels=parent_labels,
-            coordinates=coordinates,
-            **kwargs
+            coordinates=coordinates
         )
 
         if meta['terminal']:
@@ -380,7 +356,7 @@ class DecisionTree(HeapTree):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
         return self.__class__.thresholds[key]
 
-    def __set_numerical__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+    def __set_numerical__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         # TODO not using memory for retrieving already-set thresholds!
         # try:
         #     best_threshold = self.__retrieve_threshold__(node_label, parent_labels, coordinates)
@@ -392,14 +368,24 @@ class DecisionTree(HeapTree):
         #         threshold=best_threshold,
         #     )
         # except KeyError as ke:
-        unique_vals = sorted(DecisionTree.dataset.loc[subset_index, node_label].unique())
+        unique_vals = sorted(self.full_df.loc[subset_index, node_label].unique())
 
         if len(unique_vals) > 1:
-
             candidates = np.array(
                 [(a + b) / 2. for a, b in zip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
             )
-            gains = list(self.mdevice.get_gain_ratios(subset_index, node_label, candidates))
+            # "dataset", "n_objects", "n_attributes", "subset_index",
+            # "attribute_index", "n_candidates", "candidates", "n_classes"
+
+            partial_df = self.full_df
+            partial_df[partial_df.columns[-1]] = partial_df[partial_df.columns[-1]].cat.codes
+
+            gains = gain_ratio(
+                partial_df.values, self.full_df.shape[0], self.full_df.shape[1], subset_index,
+                self.attr_index, len(candidates), candidates, len(self.class_labels)
+            )
+
+            raise NotImplementedError('it worked!')
 
             argmax = np.argmax(gains)
 
@@ -445,31 +431,24 @@ class DecisionTree(HeapTree):
         else:
             return meta, subsets
 
-    def __set_terminal__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+    def __set_terminal__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         # node_label in this case is probably the DecisionTree.target_attr; so it
         # is not significant for the **real** label of the terminal node.
 
-        counter = Counter(DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr])
+        counter = Counter(self.full_df.loc[subset_index, self.full_df.class_attr_name])
         label, count_frequent = counter.most_common()[0]
 
-        meta = {
-            'label': label,
-            'threshold': None,
-            'terminal': True,
-            'inst_correct': count_frequent,
-            'inst_total': subset_index.sum(),
-            'level': node_level,
-            'node_id': node_id,
-            'color': DecisionTree._terminal_node_color
-        }
+        self.nodes[node_id] = label
+        self.threshold[node_id] = np.nan
+        self.terminal[node_id] = True
 
-        return meta, (None, None)
+        return None, None
 
-    def __set_categorical__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+    def __set_categorical__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         raise TypeError('Unsupported data type for column %s!' % node_label)
 
     @staticmethod
-    def __set_error__(self, node_label, node_id, node_level, subset_index, parent_labels, coordinates, **kwargs):
+    def __set_error__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         raise TypeError('Unsupported data type for column %s!' % node_label)
 
     @staticmethod

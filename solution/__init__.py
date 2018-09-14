@@ -13,10 +13,13 @@ class Individual(DecisionTree):
     # relative tolerance between two values
     rtol = 1e-3
 
-    def __init__(self, max_depth):
-        super(Individual, self).__init__(max_depth=max_depth)
+    def __init__(self, max_depth, full_df, train_index, val_index):
+        super(Individual, self).__init__(
+            max_depth=max_depth, full_df=full_df, train_index=train_index, val_index=val_index,
+        )
 
     def to_dot(self):
+        raise NotImplementedError('not implemented yet!')
         output = StringIO()
         tree = self.tree  # type: nx.DiGraph
         nx.drawing.nx_pydot.write_dot(tree, output)

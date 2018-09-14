@@ -2,14 +2,15 @@
 import json
 import random
 from datetime import datetime as dt
+import numpy as np
+import pandas as pd
 
 from sklearn.model_selection import train_test_split
 
-from device import AvailableDevice
-from graphical_model import *
+from graphical_model import GraphicalModel
 from reporter import EDAReporter
-from solution import DecisionTree, Individual
-from utils import MetaDataset, get_dataset_name, __get_fold__
+from solution import Individual
+from utils import get_dataset_name, __get_fold__
 
 __author__ = 'Henry Cagnini'
 
@@ -19,7 +20,8 @@ class Ardennes(object):
 
         self.n_individuals = n_individuals
 
-        self.D = max_height - 1
+        self.max_height = max_height
+        self.max_depth = self.max_height - 1
         self.n_generations = n_generations
 
         self.decile = decile
@@ -30,32 +32,31 @@ class Ardennes(object):
         self.reporter = reporter
 
     def __setup__(self, full_df, train_index, val_index):
-        dataset_info = MetaDataset(full_df)
+        # mdevice = AvailableDevice(full_df, dataset_info)
 
-        mdevice = AvailableDevice(full_df, dataset_info)
-
-        arg_sets = {
-            'train': train_index,
-            'val': val_index
-        }
-
-        DecisionTree.set_values(
-            arg_sets=arg_sets,
-            y_train_true=full_df.loc[arg_sets['train'], dataset_info.target_attr],
-            y_val_true=full_df.loc[arg_sets['val'], dataset_info.target_attr],
-            processor=mdevice,
-            dataset_info=dataset_info,
-            max_height=self.D,
-            dataset=full_df,
-            mdevice=mdevice
+        raw_individuals = np.array([
+                Individual(
+                    full_df=full_df,
+                    max_depth=self.max_depth,
+                    train_index=train_index,
+                    val_index=val_index,
+                ) for x in range(self.n_individuals)
+            ],
+            dtype=Individual
         )
+
+        population = pd.DataFrame({
+            'P': raw_individuals,
+            'P_fitness': np.empty(shape=self.n_individuals, dtype=np.float32),
+            'A': np.zeros(self.n_individuals, dtype=np.bool),
+        })
 
         gm = GraphicalModel(
-            D=self.D,
-            dataset_info=dataset_info
+            max_depth=self.max_depth,
+            full_df=full_df
         )
 
-        return gm
+        return gm, population
 
     def fit(self, full_df, train_index, val_index, verbose=True):
         """
@@ -69,13 +70,7 @@ class Ardennes(object):
         assert 1 <= int(self.n_individuals * self.decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
-        gm = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
-
-        population = pd.DataFrame({
-            'P': np.array([Individual(max_depth=self.D) for x in range(self.n_individuals)], dtype=Individual),
-            'P_fitness': np.empty(shape=self.n_individuals, dtype=np.float32),
-            'A': np.zeros(self.n_individuals, dtype=np.bool),
-        })
+        gm, population = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
 
         # main loop
         g = 0
@@ -83,6 +78,7 @@ class Ardennes(object):
         while g < self.n_generations:
             t1 = dt.now()
             population = gm.sample(population)
+            raise NotImplementedError('not implemented yet!')
             population = self.split_population(population, self.decile)
 
             gm.update(population)

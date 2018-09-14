@@ -1,8 +1,8 @@
 # coding=utf-8
 
 from collections import Counter
-import pandas as pd
 import numpy as np
+from solution import Individual
 
 from solution.trees import DecisionTree
 
@@ -10,40 +10,27 @@ __author__ = 'Henry Cagnini'
 
 
 class GraphicalModel(object):
-    def __init__(self, D, dataset_info):
-        self.D = D
-        self.dataset_info = dataset_info
+    def __init__(self, max_depth, full_df):
+        self.max_depth = max_depth
 
-        self.attributes = self.__init_attributes__(D)
+        pred_attr_names = np.array(full_df.columns[:-1])  # type: np.ndarray
+        class_attr_name = full_df.columns[-1]  # type: str
+        class_labels = np.sort(full_df[full_df.columns[-1]].unique())  # type: np.ndarray
 
-    def __init_attributes__(self, D):
-        def set_probability(column):
-            n_attributes = column.index.shape[0]  # class attribute is the last one
+        self.a = np.hstack((pred_attr_names, class_attr_name))
+        self.class_labels = class_labels
 
-            d = DecisionTree.get_depth(column.name)
+        self.n_variables = DecisionTree.get_node_count(max_depth - 1)  # since the probability of generating the class at D is 100%
+        self.p = np.empty(
+            (self.n_variables, len(self.a)), dtype=np.float32
+        )
+        self.p[:, :-1] = 1. / (len(self.a) - 1)  # excludes class
+        self.p[:, -1] = 0.
 
-            class_prob = 0.  # zero probability
-            # class_prob = (1. / (D + 1)) * float(d)  # linear progression
-            pred_prob = (1. - class_prob) / (n_attributes - 1.)
-
-            column[-1] = class_prob
-            column[:-1] = pred_prob
-
-            rest = abs(column.values.sum() - 1.)
-            column[np.random.randint(0, n_attributes)] += rest
-
-            return column
-
-        n_variables = DecisionTree.get_node_count(D - 1)  # since the probability of generating the class at D is 100%
-
-        attributes = pd.DataFrame(
-            index=np.hstack((self.dataset_info.pred_attr, [self.dataset_info.target_attr])), columns=range(n_variables),
-            dtype=np.float32
-        ).apply(set_probability, axis=0)
-
-        return attributes
-    
     def update(self, population):
+        raise NotImplementedError('not implemented yet!')
+
+
         def get_label(_ind, _node_id):
             A, P, P_fitness = _ind.loc['A'], _ind.at['P'], _ind.at['P_fitness']
 
@@ -88,23 +75,11 @@ class GraphicalModel(object):
         :return: non-elite individuals are resampled, while elite individuals are kept.
         :rtype: pandas.DataFrame
         """
+
         for i, row in population.iterrows():
             if not row['A']:
-                for j in range(self.attributes):
-                    z = 0
-
-    def observe(self, node_id, evidence=None):
-        """
-        Makes observations about a given variable.
-
-        :param node_id: ID of the node (i.e. variable) being observed.
-        :param evidence: optional - evidence used for observing the variable. May be None if the variable is independent.
-        :return: Observation of the variable, which is a set of values sampled from the variable's distribution.
-        """
-        variable = self.attributes[node_id]
-
-        a = variable.index
-        p = variable
-
-        label = np.random.choice(a=a, p=p)
-        return label
+                individual = row['P']  # type: Individual
+                for j in range(self.n_variables):
+                    individual.nodes[j] = np.random.choice(a=self.a, p=self.p[j])
+                individual.update()
+        z = 0
