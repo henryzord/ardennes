@@ -6,3 +6,4 @@ networkx
 termcolor
 pathlib2
 pyopencl
+liac-arff

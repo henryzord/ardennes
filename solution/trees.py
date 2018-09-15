@@ -378,12 +378,9 @@ class DecisionTree(HeapTree):
             # "attribute_index", "n_candidates", "candidates", "n_classes"
 
             partial_df = self.full_df
-            partial_df[partial_df.columns[-1]] = partial_df[partial_df.columns[-1]].cat.codes
+            partial_df[partial_df.columns[-1]] = partial_df[partial_df.columns[-1]].cat.codes  # TODO change later!
 
-            gains = gain_ratio(
-                partial_df.values, self.full_df.shape[0], self.full_df.shape[1], subset_index,
-                self.attr_index, len(candidates), candidates, len(self.class_labels)
-            )
+            gains = gain_ratio(partial_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
 
             raise NotImplementedError('it worked!')
 
