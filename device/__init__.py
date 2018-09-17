@@ -1,44 +1,27 @@
-from termcolor import colored
-
 import os
-import numpy as np
-import pandas as pd
 from collections import Counter
-import networkx as nx
-
 # noinspection PyUnresolvedReferences
 from cpu_device import make_predictions
 
+import numpy as np
+import pandas as pd
+from termcolor import colored
+
 
 class Device(object):
-    def __init__(self, dataset, dataset_info):
+    def __init__(self, dataset):
         """
 
         :type dataset: pandas.DataFrame
         :param dataset:
-        :type dataset_info: treelib.utils.MetaDataset
-        :param dataset_info:
         """
 
-        self.dataset_info = dataset_info
-
-        sep = '\\' if os.name == 'nt' else '/'
-
         cur_path = os.path.abspath(__file__)
-        self._split = sep.join(cur_path.split(sep)[:-1])
+        self._split = os.sep.join(cur_path.split(os.sep)[:-1])
 
-        self.dataset_info = dataset_info
-        self.dataset = dataset.apply(self.__class_to_num__, axis=1).astype(np.float32)
-
-    def __class_to_num__(self, x):
-        class_label = x.axes[0][-1]
-
-        new_label = np.float32(self.dataset_info.class_label_index[x[class_label]])
-        x[class_label] = new_label
-        return x
-
-    def get_gain_ratios(self, subset_index, attribute, candidates):
-        pass
+        self.dataset = dataset
+        self.dataset[self.dataset.columns[-1]] = pd.Categorical(self.dataset[self.dataset.columns[-1]])
+        self.dataset[self.dataset.columns[-1]] = self.dataset[self.dataset.columns[-1]].cat.codes
 
     def predict(self, data, dt):
         """
@@ -80,6 +63,28 @@ class Device(object):
         return preds
 
     @staticmethod
+    def entropy(subset):
+        """
+        The smaller, the purer.
+        Class attribute must be the last attribute.
+
+        :type subset: pandas.DataFrame
+        :param subset:
+        :rtype: float
+        :return: The entropy for the provided subset.
+        """
+        size = len(subset)
+
+        counter = Counter(subset[subset.columns[-1]])
+
+        _entropy = 0.
+
+        for i, (c, q) in enumerate(counter.items()):
+            _entropy += (q / float(size)) * np.log2(q / float(size))
+
+        return -1. * _entropy
+
+    @staticmethod
     def __split_info__(subset, subset_left, subset_right):
         split_info = 0.
         for child_subset in [subset_left, subset_right]:
@@ -91,58 +96,58 @@ class Device(object):
 
         return -split_info
 
-    def information_gain(self, subset, subset_left, subset_right):
+    @staticmethod
+    def information_gain(subset, subset_left, subset_right):
         sum_term = 0.
-        for child_subset in [subset_left, subset_right]:
-            sum_term += (child_subset.shape[0] / float(subset.shape[0])) * self.entropy(child_subset)
+        n_objects = len(subset)
 
-        ig = self.entropy(subset) - sum_term
+        subset_entropy = Device.entropy(subset)
+
+        for child_subset in [subset_left, subset_right]:
+            n_objects_subset = len(child_subset)
+            child_entropy = Device.entropy(child_subset)
+            sum_term += (float(n_objects_subset) / n_objects) * child_entropy
+
+        ig = subset_entropy - sum_term
+
+        # print("((%.3d/%.3d) * -%.3f) + ((%.3d/%.3d) * -%.3f)" % (len(subset_left), len(subset), Device.entropy(subset_left), len(subset_right), len(subset), Device.entropy(subset_right)))
+
         return ig
 
     @staticmethod
-    def entropy(subset):
-        """
-        The smaller, the purer.
-        Class attribute must be the last attribute.
+    def gain_ratio(subset, subset_left, subset_right):
+        ig = Device.information_gain(subset, subset_left, subset_right)
+        si = Device.__split_info__(subset, subset_left, subset_right)
 
-        :type subset: pandas.DataFrame
-        :param subset:
-        :rtype: float
-        :return:
-        """
-        size = float(subset.shape[0])
-
-        counter = Counter(subset[subset.columns[-1]])
-
-        _entropy = 0.
-
-        for i, (c, q) in enumerate(counter.items()):
-            _entropy += (q / size) * np.log2(q / size)
-
-        return -1. * _entropy
-
-    def gain_ratio(self, subset, subset_left, subset_right):
-        ig = self.information_gain(subset, subset_left, subset_right)
-        si = self.__split_info__(subset, subset_left, subset_right)
-
-        if ig > 0 and si > 0:
+        if ig > 0. and si > 0.:
             gr = ig / si
         else:
-            gr = 0
+            gr = 0.
 
         return gr
 
-    def get_gain_ratios(self, subset_index, attribute, candidates):
-        proper_subset = self.dataset.loc[subset_index.astype(np.bool)]
+    @staticmethod
+    def get_gain_ratios(dataset, subset_index, attribute, candidates):
+        """
+        Method for getting several gain ratios, based on several threshold values.
 
-        ratios = map(
-            lambda c: self.gain_ratio(
-                proper_subset,
-                proper_subset.loc[proper_subset[attribute] <= c],
-                proper_subset.loc[proper_subset[attribute] > c],
-            ),
-            candidates
-        )
+        :param dataset:
+        :type dataset: pandas.DataFrame
+        :param subset_index:
+        :param attribute: Name of the attribute.
+        :type attribute: str
+        :param candidates: Candidate values.
+        :return:
+        """
+
+        proper_subset = dataset.loc[subset_index.astype(np.bool)]
+
+        ratios = np.empty(len(candidates), dtype=np.float32)
+        for i, candidate in enumerate(candidates):
+            subset_left = proper_subset.loc[proper_subset[attribute] <= candidate]
+            subset_right = proper_subset.loc[proper_subset[attribute] > candidate]
+
+            ratios[i] = Device.gain_ratio(proper_subset, subset_left, subset_right)
         return ratios
 
 

@@ -15,8 +15,6 @@
 #define ATTR 3
 #define THRES 4
 
-//#define bool char
-
 float select(float false_return, float true_return, char condition) {
     if(condition) {
         return true_return;
@@ -49,18 +47,18 @@ float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int 
         for(int i = 0; i < n_objects; i++) {
             count_class += at(subset_index, 1, i, 0) * (k == at(dataset, n_attributes, i, class_index));
         }
-        entropy += select((count_class / subset_size) * std::log2(count_class / subset_size), (float)0, count_class <= 0);
+        entropy += select((count_class / subset_size) * std::log2(count_class / subset_size), (float) 0,
+                          count_class <= 0);
     }
 
     return -entropy;
 }
 
-float device_gain_ratio(
-    PyArrayObject *dataset, PyArrayObject *subset_index,
+float device_gain_ratio(PyArrayObject *dataset, PyArrayObject *subset_index,
     int attribute_index, float candidate, int n_classes, float subset_entropy) {
 
-    npy_intp *dataset_dims = PyArray_DIMS((PyArrayObject*)dataset);
-    int n_objects = dataset_dims[0], n_attributes = dataset_dims[1];
+    npy_intp *dataset_dims = PyArray_DIMS(dataset);
+    int n_objects = (int)dataset_dims[0], n_attributes = (int)dataset_dims[1];
 
     const int class_index = n_attributes - 1;
 
@@ -68,28 +66,39 @@ float device_gain_ratio(
     float   left_entropy = 0, right_entropy = 0,
             left_branch_size = 0, right_branch_size = 0,
             left_count_class, right_count_class,
-            subset_size = 0, sum_term,
-            is_left, is_from_class;
+            subset_size = 0, sum_term, is_from_class;
+
+    bool is_left;
 
     for(int k = 0; k < n_classes; k++) {
         left_count_class = 0; right_count_class = 0;
         left_branch_size = 0; right_branch_size = 0;
-        subset_size = 0, is_from_class = 0, is_left = 0;
+        subset_size = 0;
 
-        for(int j = 0; j < n_objects; j++) {
-            is_left = (float)at(dataset, n_attributes, j, attribute_index) <= candidate;
-            is_from_class = (float)(std::fabs(at(dataset, n_attributes, j, class_index) - k) < 0.01);
+        for(int i = 0; i < n_objects; i++) {
+            float val = at(subset_index, 1, i, 0);
 
-            left_branch_size += is_left * at(subset_index, 1, j, 0);
-            right_branch_size += !is_left * at(subset_index, 1, j, 0);
+            is_left = (bool)(at(dataset, n_attributes, i, attribute_index) <= candidate);
+            is_from_class = (float)(std::fabs(at(dataset, n_attributes, i, class_index) - k) < 0.01);
 
-            left_count_class += is_left * at(subset_index, 1, j, 0) * is_from_class;
-            right_count_class += !is_left * at(subset_index, 1, j, 0) * is_from_class;
+            left_branch_size += (float)is_left * val;
+            right_branch_size += (float)(!is_left) * val;
 
-            subset_size += (float)(at(subset_index, 1, j, 0));
+            left_count_class += (float)is_left * val * is_from_class;
+            right_count_class += (float)(!is_left) * val * is_from_class;
+
+            subset_size += val;
         }
-        left_entropy += select((left_count_class / left_branch_size) * std::log2(left_count_class / left_branch_size), (float)0, left_count_class <= 0);
-        right_entropy += select((right_count_class / right_branch_size) * std::log2(right_count_class / right_branch_size), (float)0, right_count_class <= 0);
+        left_entropy += select(
+                (left_count_class / left_branch_size) * std::log2(left_count_class / left_branch_size),
+                (float) 0,
+                left_count_class <= 0
+        );
+        right_entropy += select(
+                (right_count_class / right_branch_size) * std::log2(right_count_class / right_branch_size),
+                (float) 0,
+                right_count_class <= 0
+        );
     }
 
     sum_term =
@@ -99,11 +108,13 @@ float device_gain_ratio(
     float
         info_gain = subset_entropy - sum_term,
         split_info = -(
-            select((left_branch_size / subset_size)*std::log2(left_branch_size / subset_size), (float)0, left_branch_size <= 0) +
-            select((right_branch_size / subset_size)*std::log2(right_branch_size / subset_size), (float)0, right_branch_size <= 0)
+            select((left_branch_size / subset_size) * std::log2(left_branch_size / subset_size), (float) 0,
+                   left_branch_size <= 0) +
+                    select((right_branch_size / subset_size) * std::log2(right_branch_size / subset_size), (float) 0,
+                           right_branch_size <= 0)
         );
 
-    return select(info_gain / split_info, (float)0, split_info <= 9e-7);
+    return select(info_gain / split_info, (float) 0, split_info <= 9e-7);
 }
 
 const char gain_ratio_doc[] = "Calculates gain ratio of a series of thresholds.";
@@ -121,12 +132,18 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
+    // TODO cast array to C-contiguous!
+//    candidates = PyArray_FROM_OF(candidates, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_WRITEABLE);
+
     int n_candidates = (int)PyArray_SIZE((PyArrayObject*)candidates);
 
-    npy_intp candidates_itemsize = PyArray_ITEMSIZE((PyArrayObject*)candidates);
-    char *candidates_data = PyArray_BYTES((PyArrayObject*)candidates);
-
+    // entropy for whole subset provided, not only for left and right branches
     float subset_entropy = entropy_by_index((PyArrayObject*)dataset, (PyArrayObject*)subset_index, n_classes);
+
+    npy_intp gain_ratios_dims[] = {(npy_intp)n_candidates};
+    PyArrayObject *gain_ratios = (PyArrayObject*)PyArray_SimpleNew(1, gain_ratios_dims, NPY_FLOAT32);
+    npy_intp gain_ratios_itemsize = PyArray_ITEMSIZE(gain_ratios);
+    char *gain_ratios_data = PyArray_BYTES(gain_ratios);
 
     for(int idx = 0; idx < n_candidates; idx++) {
         float local_gain_ratio = device_gain_ratio(
@@ -134,11 +151,11 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
             at((PyArrayObject*)candidates, 1, idx, 0), n_classes, subset_entropy
         );
 
-        PyArray_SETITEM((PyArrayObject*)candidates, candidates_data, Py_BuildValue("f", local_gain_ratio));
-        candidates_data += candidates_itemsize;
+        PyArray_SETITEM(gain_ratios, gain_ratios_data, Py_BuildValue("f", local_gain_ratio));
+        gain_ratios_data += gain_ratios_itemsize;
     }
 
-    return candidates;
+    return Py_BuildValue("O", gain_ratios); // TODO allocate new array! or make explicit that changes candidates array!
 }
 
 
@@ -166,28 +183,6 @@ char *get_dtype_name(PyArrayObject *array) {
         }
     }
     return dtype;
-}
-
-int *update_counters(int n_dims, npy_intp *dims, int *counters) {
-    char add = 1;
-    for(int i = 0; i < n_dims; i++) {
-        if(add) {
-            counters[i] += 1;
-            add = 0;
-        } else {
-            break;
-        }
-        if(counters[i] >= dims[i]) {
-            if(i < n_dims - 1) {
-                counters[i] = 0;
-                add = 1;
-            } else {
-                free(counters);
-                return NULL;
-            }
-        }
-    }
-    return counters;
 }
 
 const char choice_doc[] = "sample random values from numpy.random.choice";
