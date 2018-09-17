@@ -380,7 +380,13 @@ class DecisionTree(HeapTree):
             partial_df = self.full_df
             partial_df[partial_df.columns[-1]] = partial_df[partial_df.columns[-1]].cat.codes  # TODO change later!
 
+            print('\tcandidates:', candidates)
+
             gains = gain_ratio(partial_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
+
+            print('\t\tgains:', gains)
+
+            exit(-1)
 
             raise NotImplementedError('it worked!')
 

@@ -15,7 +15,7 @@
 #define ATTR 3
 #define THRES 4
 
-#define bool char
+//#define bool char
 
 float select(float false_return, float true_return, char condition) {
     if(condition) {
@@ -28,7 +28,7 @@ float select(float false_return, float true_return, char condition) {
 float at(PyArrayObject *table, int n_attributes, int x, int y) {
     npy_intp itemsize = PyArray_ITEMSIZE(table);
     char *data = PyArray_BYTES(table);
-    data += itemsize * ((n_attributes * x) + y);  // TODO check if it works!
+    data += itemsize * ((n_attributes * x) + y);
 
     return (float)PyFloat_AsDouble(PyArray_GETITEM(table, data));
 }
@@ -41,7 +41,7 @@ float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int 
     float count_class, entropy = 0, subset_size = 0;
 
     for(int i = 0; i < n_objects; i++) {
-        subset_size += (float)at(subset_index, 1, i, 0);
+        subset_size += (int)at(subset_index, 1, i, 0);
     }
 
     for(int k = 0; k < n_classes; k++) {
@@ -121,18 +121,14 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-//    npy_intp *dataset_dims = PyArray_DIMS((PyArrayObject*)dataset);
-//    int n_objects = dataset_dims[0], n_attributes = dataset_dims[1];
     int n_candidates = (int)PyArray_SIZE((PyArrayObject*)candidates);
 
     npy_intp candidates_itemsize = PyArray_ITEMSIZE((PyArrayObject*)candidates);
     char *candidates_data = PyArray_BYTES((PyArrayObject*)candidates);
 
-    for(int idx = 0; idx < n_candidates; idx++) {
-        // only one thread must compute the subset entropy, since
-        // its value is shared across every other calculation
-        float subset_entropy = entropy_by_index((PyArrayObject*)dataset, (PyArrayObject*)subset_index, n_classes);
+    float subset_entropy = entropy_by_index((PyArrayObject*)dataset, (PyArrayObject*)subset_index, n_classes);
 
+    for(int idx = 0; idx < n_candidates; idx++) {
         float local_gain_ratio = device_gain_ratio(
             (PyArrayObject*)dataset, (PyArrayObject*)subset_index, attribute_index,
             at((PyArrayObject*)candidates, 1, idx, 0), n_classes, subset_entropy
@@ -142,14 +138,7 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
         candidates_data += candidates_itemsize;
     }
 
-    printf("allocating object\n");
-
-    npy_intp __dims[1] = {n_candidates};
-    PyObject *obj_candidates = PyArray_SimpleNewFromData(1, __dims, NPY_FLOAT32, (void*)candidates);
-
-    printf("allocated\n");
-
-    return obj_candidates;
+    return candidates;
 }
 
 

@@ -99,9 +99,11 @@ class Device(object):
         ig = self.entropy(subset) - sum_term
         return ig
 
-    def entropy(self, subset):
+    @staticmethod
+    def entropy(subset):
         """
         The smaller, the purer.
+        Class attribute must be the last attribute.
 
         :type subset: pandas.DataFrame
         :param subset:
@@ -110,7 +112,7 @@ class Device(object):
         """
         size = float(subset.shape[0])
 
-        counter = Counter(subset[self.dataset_info.target_attr])
+        counter = Counter(subset[subset.columns[-1]])
 
         _entropy = 0.
 
