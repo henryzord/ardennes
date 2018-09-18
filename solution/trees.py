@@ -287,22 +287,24 @@ class DecisionTree(HeapTree):
 
         return matrix
 
-    @staticmethod
-    def __same_branches__(tree, children_left, children_right):
-        res = (tree.node[children_left]['attr_dict']['terminal'] and tree.node[children_right]['attr_dict']['terminal']) and \
-               (tree.node[children_left]['attr_dict']['label'] == tree.node[children_right]['attr_dict']['label'])
+    def __same_branches__(self, children_left, children_right):
+        res = (self.terminal[children_left] and self.terminal[children_right]) and \
+               (self.nodes[children_left] == self.nodes[children_right])
 
         return res
 
     def __set_node__(self, node_id, subset_index, parent_labels, coordinates):
-        label = self.nodes[node_id]
 
         '''
         if the current node has only one class,
         or is at a level deeper than maximum depth,
         or the class was sampled
         '''
+
+        label = self.nodes[node_id]
+
         if any((
+            self.get_depth(node_id) >= self.max_depth - 1,
             label == self.class_attr_name,
             len(self.full_df.loc[subset_index, self.class_attr_name].unique()) == 1
         )):
@@ -324,26 +326,19 @@ class DecisionTree(HeapTree):
 
             if not self.terminal[node_id]:  # continues the process
                 children_id = (self.get_left_child_id(node_id), self.get_right_child_id(node_id))
-                for child_id, child_subset in zip(children_id, subsets):
-                    tree = self.__set_node__(
+                for child_id, child_subset in zip(children_id, [subset_left, subset_right]):
+                    self.__set_node__(
                         node_id=child_id,
-                        tree=tree,
-                        gm=gm,
                         subset_index=child_subset,
-                        depth=depth + 1,
                         parent_labels=parent_labels + [label],
                         coordinates=coordinates
                     )
 
                 # if both branches are terminal, and they share the same class label:
-                if self.__same_branches__(tree, children_id[0], children_id[1]):
-                    for child_id in children_id:
-                        tree.remove_node(child_id)
-
-                    meta, subsets = self.__set_terminal__(
-                        node_label=None,
+                if self.__same_branches__(children_id[0], children_id[1]):
+                    _ = self.__set_terminal__(
+                        node_label=label,
                         node_id=node_id,
-                        node_level=depth,
                         subset_index=subset_index,
                         parent_labels=parent_labels,
                         coordinates=coordinates
@@ -361,26 +356,24 @@ class DecisionTree(HeapTree):
             coordinates=coordinates
         )
 
-        if meta['terminal']:
-            meta, subsets = self.__set_terminal__(
+        if self.terminal[node_id]:
+            subset_left, subset_right = self.__set_terminal__(
                 node_label=None,
                 node_id=node_id,
-                node_level=node_level,
                 subset_index=subset_index,
                 parent_labels=parent_labels,
                 coordinates=coordinates
             )
         elif subset_left.sum() == 0 or subset_right.sum() == 0:  # it is not a terminal, but has no instances to split
-                meta, subsets = self.__set_terminal__(
-                    node_label=None,
-                    node_id=node_id,
-                    node_level=node_level,
-                    subset_index=subset_index,
-                    parent_labels=parent_labels,
-                    coordinates=coordinates
-                )
+            subset_left, subset_right = self.__set_terminal__(
+                node_label=None,
+                node_id=node_id,
+                subset_index=subset_index,
+                parent_labels=parent_labels,
+                coordinates=coordinates
+            )
 
-        return meta, (subset_left, subset_right)
+        return subset_left, subset_right
 
     def __store_threshold__(self, node_label, parent_labels, coordinates, threshold):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
@@ -408,9 +401,6 @@ class DecisionTree(HeapTree):
             candidates = np.array(
                 [(a + b) / 2. for a, b in zip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
             )
-            # "dataset", "n_objects", "n_attributes", "subset_index",
-            # "attribute_index", "n_candidates", "candidates", "n_classes"
-
             gains = gain_ratio(self.full_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
 
             argmax = np.argmax(gains)
@@ -418,50 +408,45 @@ class DecisionTree(HeapTree):
             best_gain = gains[argmax]
 
             if best_gain <= 0:
-                meta, subsets = self.__set_terminal__(
+                subset_left, subset_right = self.__set_terminal__(
                     node_label=node_label,
                     node_id=node_id,
-                    node_level=node_level,
                     subset_index=subset_index,
                     parent_labels=parent_labels,
-                    coordinates=coordinates,
-                    **kwargs
+                    coordinates=coordinates
                 )
             else:
                 best_threshold = candidates[argmax]
                 # self.__store_threshold__(node_label, parent_labels, coordinates, best_threshold)  # TODO deactivated
 
-                meta, subsets = self.__subsets_and_meta__(
-                    node_label=node_label,
-                    node_id=node_id,
-                    node_level=node_level,
-                    subset_index=subset_index,
-                    threshold=best_threshold,
-                )
+                self.terminal[node_id] = False
+                self.nodes[node_id] = node_label
+                self.threshold[node_id] = best_threshold
+
+                less_or_equal = (self.full_df[node_label] <= best_threshold).values.ravel()
+                subset_left = less_or_equal & subset_index
+                subset_right = np.invert(less_or_equal) & subset_index
 
         else:
-            meta, subsets = self.__set_terminal__(
+            subset_left, subset_right = self.__set_terminal__(
                 node_label=node_label,
                 node_id=node_id,
-                node_level=node_level,
                 subset_index=subset_index,
                 parent_labels=parent_labels,
                 coordinates=coordinates,
-                **kwargs
             )
         # except Exception as e:
         #     raise e
 
-        if 'get_meta' in kwargs and kwargs['get_meta'] == False:
-            return subsets
-        else:
-            return meta, subsets
+        return subset_left, subset_right
 
     def __set_terminal__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         # node_label in this case is probably the DecisionTree.target_attr; so it
         # is not significant for the **real** label of the terminal node.
 
-        counter = Counter(self.full_df.loc[subset_index, self.full_df.class_attr_name])
+        counter = Counter(
+            map(lambda x: self.class_labels_index[x], self.full_df.loc[subset_index, self.class_attr_name])
+        )
         label, count_frequent = counter.most_common()[0]
 
         self.nodes[node_id] = label
@@ -476,29 +461,6 @@ class DecisionTree(HeapTree):
     @staticmethod
     def __set_error__(self, node_label, node_id, subset_index, parent_labels, coordinates):
         raise TypeError('Unsupported data type for column %s!' % node_label)
-
-    @staticmethod
-    def __subsets_and_meta__(node_label, node_id, node_level, subset_index, threshold):
-
-        counter = Counter(DecisionTree.dataset.loc[subset_index, DecisionTree.dataset_info.target_attr])
-
-        meta = {
-            'label': node_label,
-            'threshold': threshold,
-            'inst_correct': counter.most_common()[0][1],
-            'inst_total': subset_index.sum(),
-            'terminal': False,
-            'level': node_level,
-            'node_id': node_id,
-            'color': DecisionTree._root_node_color if
-            node_level == 0 else DecisionTree._inner_node_color
-        }
-
-        less_or_equal = (DecisionTree.dataset[node_label] <= threshold).values.ravel()
-        subset_left = less_or_equal & subset_index
-        subset_right = np.invert(less_or_equal) & subset_index
-
-        return meta, (subset_left, subset_right)
 
     handler_dict = {
         'numerical': __set_numerical__,
