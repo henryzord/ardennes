@@ -8,8 +8,9 @@ import pandas as pd
 from sklearn.metrics import accuracy_score
 import numpy as np
 from cpu_device import gain_ratio
+import copy
 
-from utils import raw_type_dict
+from utils import raw_type_dict, mid_type_dict
 
 __author__ = 'Henry Cagnini'
 
@@ -17,10 +18,7 @@ __author__ = 'Henry Cagnini'
 class HeapTree(object):
 
     def __init__(self, max_depth=1):
-        self.n_nodes = self.get_node_count(max_depth)
-        self.terminal = np.empty(self.n_nodes, dtype=np.bool)
-        self.threshold = np.empty(self.n_nodes, dtype=np.float32)
-        self.data = np.array(self.n_nodes, dtype=np.object)
+        pass
 
     @staticmethod
     def get_node_count(depth):
@@ -77,6 +75,54 @@ class DecisionTree(HeapTree):
     _inner_node_color = '#0099ff'
     _root_node_color = '#FFFFFF'
 
+    initialized = False
+
+    @classmethod
+    def __set_class_values__(cls, max_depth, full_df, train_index, val_index):
+        if not cls.initialized:
+            cls.column_types = {x: mid_type_dict[raw_type_dict[str(full_df[x].dtype)]] for x in full_df.columns}
+
+            cls.max_depth = max_depth
+            cls.train_index = train_index
+            cls.val_index = val_index
+
+            cls.pred_attr_names = np.array(full_df.columns[:-1])  # type: np.ndarray
+
+            cls.pred_attr_values = dict()
+            for column in full_df.columns:
+                if str(full_df[column].dtype) == 'category':
+                    cls.pred_attr_values[column] = dict(zip(full_df[column].cat.codes, full_df[column].cat.categories))
+
+            cls.class_attr_name = full_df.columns[-1]  # type: str
+            cls.class_labels = np.sort(full_df[full_df.columns[-1]].unique())  # type: np.ndarray
+
+            _attr_forward = {
+                k: v for k, v in zip(full_df.columns, range(len(cls.pred_attr_names) + 1))
+            }
+            _attr_backward = {
+                k: v for k, v in zip(range(len(cls.pred_attr_names) + 1), cls.pred_attr_names + [cls.class_attr_name])
+            }
+
+            _attr_forward.update(_attr_backward)
+            cls.attr_index = _attr_forward
+
+            _class_forward = {
+                k: v for k, v in zip(cls.class_labels, range(len(cls.class_labels)))
+            }
+            _class_backward = {
+                k: v for k, v in zip(range(len(cls.class_labels)), cls.class_labels)
+            }
+
+            _class_forward.update(_class_backward)
+            cls.class_labels_index = _class_forward
+
+            cls.full_df = cls.normalize_dataset(full_df)
+
+            # since the probability of generating the class at D is 100%
+            cls.n_nodes = cls.get_node_count(cls.max_depth - 1)
+
+            cls.initialized = True
+
     def __init__(self, max_depth, full_df, train_index, val_index):
         """
 
@@ -87,39 +133,12 @@ class DecisionTree(HeapTree):
         """
         super(DecisionTree, self).__init__(max_depth=max_depth)
 
-        self.max_depth = max_depth
-        self.full_df = full_df
-        self.train_index = train_index
-        self.val_index = val_index
-
-        self.pred_attr_names = np.array(full_df.columns[:-1])  # type: np.ndarray
-        self.class_attr_name = full_df.columns[-1]  # type: str
-        self.class_labels = np.sort(full_df[full_df.columns[-1]].unique())  # type: np.ndarray
-
-        _attr_forward = {
-            k: v for k, v in zip(full_df.columns, range(len(self.pred_attr_names) + 1))
-        }
-        _attr_backward = {
-            k: v for k, v in zip(range(len(self.pred_attr_names) + 1), self.pred_attr_names + [self.class_attr_name])
-        }
-
-        _attr_forward.update(_attr_backward)
-        self.attr_index = _attr_forward
-
-        _class_forward = {
-            k: v for k, v in zip(self.class_labels, range(len(self.class_labels)))
-        }
-        _class_backward = {
-            k: v for k, v in zip(range(len(self.class_labels)), self.class_labels)
-        }
-
-        _class_forward.update(_class_backward)
-        self.class_labels_index = _class_forward
-
-        self.column_types = {x: raw_type_dict[str(full_df[x].dtype)] for x in full_df.columns}  # type: dict
-
-        # since the probability of generating the class at D is 100%
-        self.n_nodes = self.get_node_count(self.max_depth - 1)
+        self.__class__.__set_class_values__(
+            max_depth=max_depth,
+            full_df=full_df,
+            train_index=train_index,
+            val_index=val_index
+        )
 
         longest_word = max(map(len, list(self.class_labels) + list(self.pred_attr_names) + [self.class_attr_name]))
         dtype = '<U%d' % longest_word
@@ -127,6 +146,21 @@ class DecisionTree(HeapTree):
         self.nodes = np.empty(self.n_nodes, dtype=np.dtype(dtype))
         self.threshold = np.empty(self.n_nodes, dtype=np.float32)
         self.terminal = np.empty(self.n_nodes, dtype=np.bool)
+
+    @staticmethod
+    def normalize_dataset(dataset):
+        """
+
+        :param dataset:
+        :type dataset: pandas.DataFrame
+        :return:
+        """
+
+        for column in dataset.columns:
+            if str(dataset[column].dtype) == 'category':
+                dataset[column] = dataset[column].cat.codes
+
+        return dataset
 
     # TODO test without it
     # def nodes_at_depth(self, depth):
@@ -377,18 +411,7 @@ class DecisionTree(HeapTree):
             # "dataset", "n_objects", "n_attributes", "subset_index",
             # "attribute_index", "n_candidates", "candidates", "n_classes"
 
-            partial_df = self.full_df
-            partial_df[partial_df.columns[-1]] = partial_df[partial_df.columns[-1]].cat.codes  # TODO change later!
-
-            print('\tcandidates:', candidates)
-
-            gains = gain_ratio(partial_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
-
-            print('\t\tgains:', gains)
-
-            exit(-1)
-
-            raise NotImplementedError('it worked!')
+            gains = gain_ratio(self.full_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
 
             argmax = np.argmax(gains)
 
@@ -478,12 +501,8 @@ class DecisionTree(HeapTree):
         return meta, (subset_left, subset_right)
 
     handler_dict = {
-        'object': __set_categorical__,
-        'str': __set_categorical__,
-        'int': __set_numerical__,
-        'float': __set_numerical__,
-        'bool': __set_categorical__,
-        'complex': __set_error__,
+        'numerical': __set_numerical__,
+        'categorical': __set_categorical__
     }
 
     def to_dict(self):

@@ -42,12 +42,18 @@ def path_to_dataframe(dataset_path):
         data=file_arff['data'],
         columns=[x[0] for x in file_arff['attributes']],
     )
-
     file_df.replace('?', np.nan, inplace=True)
 
-    # for column in file_df.columns[:-1]:  # until last attribute
-    #     file_df[column] = pd.to_numeric(file_df[column])
-    #     file_df[column].fillna(file_df[column].mean(), inplace=True)
+    for column in file_df.columns:
+        raw = raw_type_dict[str(file_df[column].dtype)]
+        mid = mid_type_dict[raw]
+
+        if 'numerical' == mid:
+            file_df[column] = file_df[column].astype(np.float32)
+        elif 'categorical' == mid:
+            file_df[column] = pd.Categorical(file_df[column])
+        else:
+            raise TypeError('unknown type for dataframe column %s' % column)
 
     return file_df
 
