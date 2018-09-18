@@ -15,6 +15,32 @@
 #define ATTR 3
 #define THRES 4
 
+char *get_dtype_name(PyArrayObject *array) {
+    // all 24 dtypes of numpy
+    int dtypes[] = {
+            NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
+            NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
+            NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
+    };
+
+    char *dtype_names[] = {
+            "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
+            "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
+            "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
+    };
+
+    int a_dtype = PyArray_DESCR(array)->type_num;
+
+    char *dtype = NULL;
+    for(int i = 0; i < 24; i++) {
+        if(a_dtype == dtypes[i]) {
+            dtype = dtype_names[i];
+            break;
+        }
+    }
+    return dtype;
+}
+
 float select(float false_return, float true_return, char condition) {
     if(condition) {
         return true_return;
@@ -23,10 +49,16 @@ float select(float false_return, float true_return, char condition) {
 }
 
 
-float at(PyArrayObject *table, int n_attributes, int x, int y) {
+float at(PyArrayObject *table, int x, int y) {
     npy_intp itemsize = PyArray_ITEMSIZE(table);
+    npy_intp *dims = PyArray_DIMS(table);
+    int ndims = PyArray_NDIM(table);
+
     char *data = PyArray_BYTES(table);
-    data += itemsize * ((n_attributes * x) + y);
+
+    int c_contiguous = PyArray_IS_C_CONTIGUOUS(table);
+    data += c_contiguous * ((ndims > 1) * (itemsize * ((dims[1] * x) + y)) + (ndims == 1) * (itemsize * x)) +
+            (!c_contiguous) * ((ndims > 1) * (itemsize * ((dims[0] * y) + x)) + (ndims == 1) * (itemsize * x));
 
     return (float)PyFloat_AsDouble(PyArray_GETITEM(table, data));
 }
@@ -39,13 +71,13 @@ float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int 
     float count_class, entropy = 0, subset_size = 0;
 
     for(int i = 0; i < n_objects; i++) {
-        subset_size += (int)at(subset_index, 1, i, 0);
+        subset_size += (int)at(subset_index, i, 0);
     }
 
     for(int k = 0; k < n_classes; k++) {
         count_class = 0;
         for(int i = 0; i < n_objects; i++) {
-            count_class += at(subset_index, 1, i, 0) * (k == at(dataset, n_attributes, i, class_index));
+            count_class += at(subset_index, i, 0) * (k == at(dataset, i, class_index));
         }
         entropy += select((count_class / subset_size) * std::log2(count_class / subset_size), (float) 0,
                           count_class <= 0);
@@ -76,10 +108,10 @@ float device_gain_ratio(PyArrayObject *dataset, PyArrayObject *subset_index,
         subset_size = 0;
 
         for(int i = 0; i < n_objects; i++) {
-            float val = at(subset_index, 1, i, 0);
+            float val = at(subset_index, i, 0);
 
-            is_left = (bool)(at(dataset, n_attributes, i, attribute_index) <= candidate);
-            is_from_class = (float)(std::fabs(at(dataset, n_attributes, i, class_index) - k) < 0.01);
+            is_left = (bool)(at(dataset, i, attribute_index) <= candidate);
+            is_from_class = (float)(std::fabs(at(dataset, i, class_index) - k) < 0.01);
 
             left_branch_size += (float)is_left * val;
             right_branch_size += (float)(!is_left) * val;
@@ -132,8 +164,36 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-    // TODO cast array to C-contiguous!
-//    candidates = PyArray_FROM_OF(candidates, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_WRITEABLE);
+    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)dataset) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)dataset)) {
+        PyErr_SetString(PyExc_TypeError, "dataset must be either a Fortran or C contiguous numpy.ndarray.");
+        return NULL;
+    }
+
+    if(NPY_FLOAT32 != PyArray_TYPE((PyArrayObject*)dataset)) {
+        PyErr_SetString(PyExc_TypeError, "dataset values must be numpy.float32");
+        return NULL;
+    }
+
+    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)candidates) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)candidates)) {
+        PyErr_SetString(PyExc_TypeError, "candidates must be either a Fortran or C contiguous numpy.ndarray.");
+        return NULL;
+    }
+
+    if(NPY_FLOAT32 != PyArray_TYPE((PyArrayObject*)candidates)) {
+        PyErr_SetString(PyExc_TypeError, "candidates values must be numpy.float32");
+        return NULL;
+    }
+
+    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)subset_index) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)subset_index)) {
+        PyErr_SetString(PyExc_TypeError, "subset_index must be either a Fortran or C contiguous numpy.ndarray.");
+        return NULL;
+    }
+
+    if(NPY_BOOL != PyArray_TYPE((PyArrayObject*)subset_index)) {
+        PyErr_SetString(PyExc_TypeError, "subset_index values must be numpy.bool");
+        return NULL;
+    }
+
 
     int n_candidates = (int)PyArray_SIZE((PyArrayObject*)candidates);
 
@@ -148,42 +208,16 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
     for(int idx = 0; idx < n_candidates; idx++) {
         float local_gain_ratio = device_gain_ratio(
             (PyArrayObject*)dataset, (PyArrayObject*)subset_index, attribute_index,
-            at((PyArrayObject*)candidates, 1, idx, 0), n_classes, subset_entropy
+            at((PyArrayObject*)candidates, idx, 0), n_classes, subset_entropy
         );
 
         PyArray_SETITEM(gain_ratios, gain_ratios_data, Py_BuildValue("f", local_gain_ratio));
         gain_ratios_data += gain_ratios_itemsize;
     }
 
-    return Py_BuildValue("O", gain_ratios); // TODO allocate new array! or make explicit that changes candidates array!
+    return Py_BuildValue("O", gain_ratios);
 }
 
-
-char *get_dtype_name(PyArrayObject *array) {
-    // all 24 dtypes of numpy
-    int dtypes[] = {
-        NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
-        NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
-        NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
-    };
-
-    char *dtype_names[] = {
-        "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
-        "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
-        "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
-    };
-
-    int a_dtype = PyArray_DESCR(array)->type_num;
-
-    char *dtype = NULL;
-    for(int i = 0; i < 24; i++) {
-        if(a_dtype == dtypes[i]) {
-            dtype = dtype_names[i];
-            break;
-        }
-    }
-    return dtype;
-}
 
 const char choice_doc[] = "sample random values from numpy.random.choice";
 static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {

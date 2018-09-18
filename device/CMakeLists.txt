@@ -9,4 +9,3 @@ set(SOURCE_FILES cpu_code.cpp)
 set(PYTHON_FILES __test_implementation__.py)
 
 add_executable(Device ${SOURCE_FILES} ${PYTHON_FILES})
-#target_link_libraries(Device ${SOURCE_FILES} ${PYTHON_LIBRARIES})

@@ -6,7 +6,7 @@ import pandas as pd
 
 from datetime import datetime as dt
 
-full_df = path_to_dataframe('../datasets/ionosphere.arff')
+full_df = path_to_dataframe('../datasets/iris.arff')
 
 column_number = 0
 column_name = full_df.columns[column_number]
@@ -19,10 +19,10 @@ full_df[full_df.columns[-1]] = full_df[full_df.columns[-1]].cat.codes  # TODO ch
 
 subset_index = np.ones(len(full_df), dtype=np.bool)
 
-dataset = np.ascontiguousarray(full_df.values, dtype=np.float32)  # TODO make c contiguous arrays from numpy arrays inside c++ code!
-
 for column in full_df.columns:
     full_df[column] = full_df[column].astype(np.float32)
+
+dataset = full_df.values
 
 t1 = dt.now()
 subset_ratios = gain_ratio(dataset, subset_index, 0, candidates, n_classes)
