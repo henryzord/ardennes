@@ -1,11 +1,18 @@
 import os
 from collections import Counter
-# noinspection PyUnresolvedReferences
 from cpu_device import make_predictions
 
 import numpy as np
 import pandas as pd
-from termcolor import colored
+
+# try:
+#     # noinspection PyUnresolvedReferences
+#     import pyopencl
+#     from opencl import CLDevice as AvailableDevice
+#     print(colored('NOTICE: Using OpenCL as device.', 'yellow'))
+# except ImportError:
+#     AvailableDevice = Device
+#     print(colored('NOTICE: Using single-threaded CPU as device.', 'yellow'))
 
 
 class Device(object):
@@ -22,45 +29,6 @@ class Device(object):
         self.dataset = dataset
         self.dataset[self.dataset.columns[-1]] = pd.Categorical(self.dataset[self.dataset.columns[-1]])
         self.dataset[self.dataset.columns[-1]] = self.dataset[self.dataset.columns[-1]].cat.codes
-
-    def predict(self, data, dt):
-        """
-
-        Makes predictions for unseen samples.
-
-        :param data:
-        :type dt: individual.DecisionTree
-        :param dt:
-        :rtype: pandas.DataFrame
-        :return:
-        """
-
-        tree = dt.tree._node
-
-        shape = None
-        if isinstance(data, pd.DataFrame):
-            shape = data.shape
-            data = data.values.ravel().tolist()
-        elif isinstance(data, np.ndarray):
-            shape = data.shape
-            data = data.ravel().tolist()
-        elif isinstance(data, list):
-            n_instances = len(data)
-            n_attributes = len(data[0])
-            shape = (n_instances, n_attributes)
-            data = np.array(data).ravel().tolist()  # removes extra dimensions
-
-        preds = make_predictions(
-            shape,  # shape of sample data
-            data,  # dataset as a plain list
-            tree,  # tree in dictionary format
-            list(range(shape[0])),  # shape of prediction array
-            self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indices
-        )
-
-        raise NotImplementedError('not returning correct values!')
-
-        return preds
 
     @staticmethod
     def entropy(subset):
@@ -110,8 +78,6 @@ class Device(object):
 
         ig = subset_entropy - sum_term
 
-        # print("((%.3d/%.3d) * -%.3f) + ((%.3d/%.3d) * -%.3f)" % (len(subset_left), len(subset), Device.entropy(subset_left), len(subset_right), len(subset), Device.entropy(subset_right)))
-
         return ig
 
     @staticmethod
@@ -149,17 +115,3 @@ class Device(object):
 
             ratios[i] = Device.gain_ratio(proper_subset, subset_left, subset_right)
         return ratios
-
-
-try:
-    # noinspection PyUnresolvedReferences
-    import pyopencl
-    from opencl import CLDevice as AvailableDevice
-    print(colored('NOTICE: Using OpenCL as device.', 'yellow'))
-except ImportError:
-    AvailableDevice = Device
-    print(colored('NOTICE: Using single-threaded CPU as device.', 'yellow'))
-
-# from termcolor import colored
-# from __base__ import  Device as AvailableDevice
-# print colored('NOTICE: Using single-threaded CPU as device.', 'yellow')

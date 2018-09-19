@@ -15,6 +15,28 @@
 #define ATTR 3
 #define THRES 4
 
+
+char *get_dtype_name(int dtype) {
+    int dtypes[] = {
+            NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
+            NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
+            NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
+    };
+
+    char *dtype_names[] = {
+            "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
+            "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
+            "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
+    };
+
+    for(int i = 0; i < 24; i++) {
+        if(dtype == dtypes[i]) {
+            return dtype_names[i];
+        }
+    }
+    return NULL;
+}
+
 char *get_dtype_name(PyArrayObject *array) {
     // all 24 dtypes of numpy
     int dtypes[] = {
@@ -31,14 +53,44 @@ char *get_dtype_name(PyArrayObject *array) {
 
     int a_dtype = PyArray_DESCR(array)->type_num;
 
-    char *dtype = NULL;
     for(int i = 0; i < 24; i++) {
         if(a_dtype == dtypes[i]) {
-            dtype = dtype_names[i];
-            break;
+            return dtype_names[i];
         }
     }
-    return dtype;
+    return NULL;
+}
+
+/**
+ * Performs checks for numpy.ndarray objects.
+ * @param obj_names
+ * @param obj_dtypes
+ * @param objs
+ * @return
+ */
+bool perform_checks(char *obj_names[], int obj_dtypes[], PyObject *objs[]) {
+    char buffer[200];
+
+    for (int i = 0; obj_names[i] != NULL; i++) {
+        if (!PyArray_Check((PyObject *) objs[i])) {
+            sprintf(buffer, "%s must be a numpy.ndarray", obj_names[i]);
+            PyErr_SetString(PyExc_TypeError, buffer);
+            return false;
+        }
+        if (!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)objs[i]) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)objs[i])) {
+            sprintf(buffer, "%s must be either a Fortran or C contiguous numpy.ndarray.", obj_names[i]);
+            PyErr_SetString(PyExc_TypeError, buffer);
+            return false;
+        }
+        if (obj_dtypes[i] != PyArray_TYPE((PyArrayObject*)objs[i])) {
+            sprintf(buffer, "%s values must be %s, currently is %s",
+                    obj_names[i], get_dtype_name(obj_dtypes[i]), get_dtype_name((PyArrayObject*)objs[i])
+                    );
+            PyErr_SetString(PyExc_TypeError, buffer);
+            return false;
+        }
+    }
+    return true;
 }
 
 float select(float false_return, float true_return, char condition) {
@@ -48,8 +100,7 @@ float select(float false_return, float true_return, char condition) {
     return false_return;
 }
 
-
-float at(PyArrayObject *table, int x, int y) {
+PyObject *at(PyArrayObject *table, int x, int y) {
     npy_intp itemsize = PyArray_ITEMSIZE(table);
     npy_intp *dims = PyArray_DIMS(table);
     int ndims = PyArray_NDIM(table);
@@ -60,7 +111,11 @@ float at(PyArrayObject *table, int x, int y) {
     data += c_contiguous * ((ndims > 1) * (itemsize * ((dims[1] * x) + y)) + (ndims == 1) * (itemsize * x)) +
             (!c_contiguous) * ((ndims > 1) * (itemsize * ((dims[0] * y) + x)) + (ndims == 1) * (itemsize * x));
 
-    return (float)PyFloat_AsDouble(PyArray_GETITEM(table, data));
+    return PyArray_GETITEM(table, data);
+}
+
+PyObject *at(PyArrayObject *table, int x) {
+    return at(table, x, 0);
 }
 
 float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int n_classes) {
@@ -71,13 +126,13 @@ float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int 
     float count_class, entropy = 0, subset_size = 0;
 
     for(int i = 0; i < n_objects; i++) {
-        subset_size += (int)at(subset_index, i, 0);
+        subset_size += (int)PyLong_AsLong(at(subset_index, i));
     }
 
     for(int k = 0; k < n_classes; k++) {
         count_class = 0;
         for(int i = 0; i < n_objects; i++) {
-            count_class += at(subset_index, i, 0) * (k == at(dataset, i, class_index));
+            count_class += (float)PyFloat_AsDouble(at(subset_index, i)) * (k == (float)PyFloat_AsDouble(at(dataset, i, class_index)));
         }
         entropy += select((count_class / subset_size) * std::log2(count_class / subset_size), (float) 0,
                           count_class <= 0);
@@ -108,10 +163,10 @@ float device_gain_ratio(PyArrayObject *dataset, PyArrayObject *subset_index,
         subset_size = 0;
 
         for(int i = 0; i < n_objects; i++) {
-            float val = at(subset_index, i, 0);
+            float val = (float)PyFloat_AsDouble(at(subset_index, i));
 
-            is_left = (bool)(at(dataset, i, attribute_index) <= candidate);
-            is_from_class = (float)(std::fabs(at(dataset, i, class_index) - k) < 0.01);
+            is_left = (bool)(PyFloat_AsDouble(at(dataset, i, attribute_index)) <= candidate);
+            is_from_class = (float)(std::fabs((float)PyFloat_AsDouble(at(dataset, i, class_index)) - k) < 0.01);
 
             left_branch_size += (float)is_left * val;
             right_branch_size += (float)(!is_left) * val;
@@ -150,6 +205,7 @@ float device_gain_ratio(PyArrayObject *dataset, PyArrayObject *subset_index,
 }
 
 const char gain_ratio_doc[] = "Calculates gain ratio of a series of thresholds.";
+
 static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     PyObject *dataset, *candidates, *subset_index;
@@ -164,36 +220,13 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
     }
 
-    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)dataset) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)dataset)) {
-        PyErr_SetString(PyExc_TypeError, "dataset must be either a Fortran or C contiguous numpy.ndarray.");
+    static char *obj_names[] = {"dataset", "subset_index", "candidates", NULL};
+    static int obj_dtypes[] = {NPY_FLOAT32, NPY_BOOL, NPY_FLOAT32, -1};
+    PyObject *objs[] = {dataset, subset_index, candidates, NULL};
+
+    if(!perform_checks(obj_names, obj_dtypes, objs)) {
         return NULL;
     }
-
-    if(NPY_FLOAT32 != PyArray_TYPE((PyArrayObject*)dataset)) {
-        PyErr_SetString(PyExc_TypeError, "dataset values must be numpy.float32");
-        return NULL;
-    }
-
-    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)candidates) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)candidates)) {
-        PyErr_SetString(PyExc_TypeError, "candidates must be either a Fortran or C contiguous numpy.ndarray.");
-        return NULL;
-    }
-
-    if(NPY_FLOAT32 != PyArray_TYPE((PyArrayObject*)candidates)) {
-        PyErr_SetString(PyExc_TypeError, "candidates values must be numpy.float32");
-        return NULL;
-    }
-
-    if(!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)subset_index) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)subset_index)) {
-        PyErr_SetString(PyExc_TypeError, "subset_index must be either a Fortran or C contiguous numpy.ndarray.");
-        return NULL;
-    }
-
-    if(NPY_BOOL != PyArray_TYPE((PyArrayObject*)subset_index)) {
-        PyErr_SetString(PyExc_TypeError, "subset_index values must be numpy.bool");
-        return NULL;
-    }
-
 
     int n_candidates = (int)PyArray_SIZE((PyArrayObject*)candidates);
 
@@ -208,7 +241,7 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
     for(int idx = 0; idx < n_candidates; idx++) {
         float local_gain_ratio = device_gain_ratio(
             (PyArrayObject*)dataset, (PyArrayObject*)subset_index, attribute_index,
-            at((PyArrayObject*)candidates, idx, 0), n_classes, subset_entropy
+            (float)PyFloat_AsDouble(at((PyArrayObject*)candidates, idx)), n_classes, subset_entropy
         );
 
         PyArray_SETITEM(gain_ratios, gain_ratios_data, Py_BuildValue("f", local_gain_ratio));
@@ -217,7 +250,6 @@ static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     return Py_BuildValue("O", gain_ratios);
 }
-
 
 const char choice_doc[] = "sample random values from numpy.random.choice";
 static PyObject* choice(PyObject *self, PyObject *args, PyObject *kwargs) {
@@ -346,76 +378,58 @@ static int next_node(int current_node, int go_left) {
     return (current_node * 2) + 1 + (!go_left);
 }
 
-static void predict_dataset(
-    int n_objects, int n_attributes, PyObject *dataset, PyObject *tree, PyObject *predictions,
-    PyObject *attribute_index) {
+const char make_predictions_doc[] = "Makes predictions for a series of unknown data.\n";
+static PyObject* make_predictions(PyObject *self, PyObject *args, PyObject *kwargs) {
 
-    PyObject *node;
-    char *label;
+    static char *kwds[] = {"full_df", "attr_index", "nodes", "threshold", "terminal", "predictions", NULL};
+    PyObject *full_df, *attr_index, *nodes, *threshold, *terminal, *predictions;
 
-    int int_attr;
-    float threshold, value;
-
-    for(int i = 0; i < n_objects; i++) {
-        int current_node = 0;
-
-        while(true) {
-            node = PyDict_GetItemString(
-                PyDict_GetItem(
-                    tree, Py_BuildValue("i", current_node)
-                ),
-                "attr_dict"
-            );
-            int terminal = PyObject_IsTrue(PyDict_GetItemString(node, "terminal"));
-
-            PyObject *label_object = PyUnicode_AsEncodedString(PyDict_GetItemString(node, "label"), "ascii", "Error ~");
-            label =  PyBytes_AsString(label_object);
-
-            printf("terminal? %d label: %s\n", terminal, label);
-
-            if(terminal) {
-                PyList_SetItem(predictions, i, label_object);
-                break;
-            } else {
-                threshold = (float)PyFloat_AsDouble(PyDict_GetItemString(node, "threshold"));
-                int_attr = (int)PyLong_AsLong(PyDict_GetItemString(attribute_index, label));
-                value = (float)PyFloat_AsDouble(PyList_GetItem(dataset, n_attributes + int_attr));
-
-                current_node = next_node(current_node, (value <= threshold));
-            }
-        }
-    }
-}
-
-const char make_predictions_doc[] = "Makes predictions for a series of unknown data.\n\n"
-    ":param shape: shape of dataset.\n"
-    ":param dataset: set of unknown data.\n"
-    ":param tree: decision tree which will be used to make the predictions.\n"
-    ":param predictions: Empty array in which the predictions will be written.\n"
-    ":param attribute_index: A dictionary where the attribute names are the keys and the values are their indexes.\n"
-    ":returns: list of predictions, one entry per object passed.";
-static PyObject* make_predictions(PyObject *self, PyObject *args) {
-
-    int n_objects, n_attributes;
-    PyObject *predictions, *tree, *dataset, *attribute_index, *shape;
-
-    if (!PyArg_ParseTuple(
-            args, "O!O!O!O!O!",
-            &PyTuple_Type, &shape,
-             &PyList_Type, &dataset,
-             &PyDict_Type, &tree,
-             &PyList_Type, &predictions,
-             &PyDict_Type, &attribute_index
-    )) {
+    if (!PyArg_ParseTupleAndKeywords(
+            args, kwargs, "OO!OOOO", kwds, &full_df, &PyDict_Type, &attr_index, &nodes, &threshold, &terminal, &predictions)) {
         return NULL;
     }
 
-    n_objects = (int)PyLong_AsLong(PyTuple_GetItem(shape, 0));
-    n_attributes = (int)PyLong_AsLong(PyTuple_GetItem(shape, 1));
-//
-    predict_dataset(n_objects, n_attributes, &dataset[0], tree, &predictions[0], attribute_index);
+    static char *obj_names[] = {"full_df", "nodes", "threshold", "terminal", "predictions", NULL};
+    static int obj_dtypes[] = {NPY_FLOAT32, NPY_UNICODE, NPY_FLOAT32, NPY_BOOL, NPY_UNICODE, -1};
+    PyObject *objs[] = {full_df, nodes, threshold, terminal, predictions, NULL};
 
-    return Py_BuildValue("O", predictions);
+    if(!perform_checks(obj_names, obj_dtypes, objs)) {
+        return NULL;
+    }
+
+    npy_intp *full_df_dims = PyArray_DIMS((PyArrayObject*)full_df);
+    int n_objects = (int)full_df_dims[0];
+
+    char *predictions_data = PyArray_BYTES((PyArrayObject*)predictions);
+    npy_intp predictions_itemsize = PyArray_ITEMSIZE((PyArrayObject*)predictions);
+
+    int int_attr, current_node;
+    bool is_terminal;
+    float current_threshold, value;
+
+    for(int i = 0; i < n_objects; i++) {
+        current_node = 0;
+
+        while(true) {
+            is_terminal = (bool)PyLong_AsLong(at((PyArrayObject*)terminal, current_node));
+            PyObject *label_obj = PyUnicode_AsEncodedString(at((PyArrayObject*)nodes, current_node), "utf-8", "Error ~");
+            char *label_char =  PyBytes_AsString(label_obj);
+
+            if(is_terminal) {
+                PyArray_SETITEM((PyArrayObject*)predictions, predictions_data, label_obj);
+                predictions_data += predictions_itemsize;
+                break;
+            }  else {
+                current_threshold = (float)PyFloat_AsDouble(at((PyArrayObject*)threshold, current_node));
+                PyObject *partial = PyDict_GetItemString(attr_index, label_char);
+
+                int_attr = (int)PyLong_AsLong(partial);
+                value = (float)PyFloat_AsDouble(at((PyArrayObject*)full_df, i, int_attr));
+                current_node = next_node(current_node, (value <= current_threshold));
+            }
+        }
+    }
+    return predictions;
 }
 
 // Extension method definition
@@ -427,7 +441,7 @@ static PyObject* make_predictions(PyObject *self, PyObject *args) {
 //      If this is a classmethod, a staticmethod, etc;
 // ml_doc:  docstring to this function.
 static PyMethodDef cpu_methods[] = {
-    {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS, make_predictions_doc},
+    {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS | METH_KEYWORDS, make_predictions_doc},
     {"choice", (PyCFunction)choice, METH_VARARGS | METH_KEYWORDS, choice_doc},
     {"gain_ratio", (PyCFunction)gain_ratio, METH_VARARGS | METH_KEYWORDS, gain_ratio_doc},
     {NULL, NULL, 0, NULL}  // sentinel
