@@ -3,120 +3,9 @@
 #include <Python.h>
 #include <random>
 #include <cmath>
-#include "numpy/arrayobject.h"
-#include "numpy/ndarraytypes.h"
 
-#define true 1
-#define false 0
+#include "cpu_utils.h"
 
-#define LEFT 0
-#define RIGHT 1
-#define TERM 2
-#define ATTR 3
-#define THRES 4
-
-
-char *get_dtype_name(int dtype) {
-    int dtypes[] = {
-            NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
-            NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
-            NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
-    };
-
-    char *dtype_names[] = {
-            "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
-            "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
-            "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
-    };
-
-    for(int i = 0; i < 24; i++) {
-        if(dtype == dtypes[i]) {
-            return dtype_names[i];
-        }
-    }
-    return NULL;
-}
-
-char *get_dtype_name(PyArrayObject *array) {
-    // all 24 dtypes of numpy
-    int dtypes[] = {
-            NPY_BOOL, NPY_INT8, NPY_INT16, NPY_INT32, NPY_LONG, NPY_INT64, NPY_UINT8, NPY_UINT16, NPY_UINT32,
-            NPY_ULONG, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32, NPY_FLOAT64, NPY_LONGDOUBLE, NPY_COMPLEX64, NPY_COMPLEX128,
-            NPY_CLONGDOUBLE, NPY_DATETIME, NPY_TIMEDELTA, NPY_STRING, NPY_UNICODE, NPY_OBJECT, NPY_VOID
-    };
-
-    char *dtype_names[] = {
-            "NPY_BOOL", "NPY_INT8", "NPY_INT16", "NPY_INT32", "NPY_LONG", "NPY_INT64", "NPY_UINT8", "NPY_UINT16", "NPY_UINT32",
-            "NPY_ULONG", "NPY_UINT64", "NPY_FLOAT16", "NPY_FLOAT32", "NPY_FLOAT64", "NPY_LONGDOUBLE", "NPY_COMPLEX64", "NPY_COMPLEX128",
-            "NPY_CLONGDOUBLE", "NPY_DATETIME", "NPY_TIMEDELTA", "NPY_STRING", "NPY_UNICODE", "NPY_OBJECT", "NPY_VOID"
-    };
-
-    int a_dtype = PyArray_DESCR(array)->type_num;
-
-    for(int i = 0; i < 24; i++) {
-        if(a_dtype == dtypes[i]) {
-            return dtype_names[i];
-        }
-    }
-    return NULL;
-}
-
-/**
- * Performs checks for numpy.ndarray objects.
- * @param obj_names
- * @param obj_dtypes
- * @param objs
- * @return
- */
-bool perform_checks(char *obj_names[], int obj_dtypes[], PyObject *objs[]) {
-    char buffer[200];
-
-    for (int i = 0; obj_names[i] != NULL; i++) {
-        if (!PyArray_Check((PyObject *) objs[i])) {
-            sprintf(buffer, "%s must be a numpy.ndarray", obj_names[i]);
-            PyErr_SetString(PyExc_TypeError, buffer);
-            return false;
-        }
-        if (!PyArray_IS_C_CONTIGUOUS((PyArrayObject*)objs[i]) && !PyArray_IS_F_CONTIGUOUS((PyArrayObject*)objs[i])) {
-            sprintf(buffer, "%s must be either a Fortran or C contiguous numpy.ndarray.", obj_names[i]);
-            PyErr_SetString(PyExc_TypeError, buffer);
-            return false;
-        }
-        if (obj_dtypes[i] != PyArray_TYPE((PyArrayObject*)objs[i])) {
-            sprintf(buffer, "%s values must be %s, currently is %s",
-                    obj_names[i], get_dtype_name(obj_dtypes[i]), get_dtype_name((PyArrayObject*)objs[i])
-                    );
-            PyErr_SetString(PyExc_TypeError, buffer);
-            return false;
-        }
-    }
-    return true;
-}
-
-float select(float false_return, float true_return, char condition) {
-    if(condition) {
-        return true_return;
-    }
-    return false_return;
-}
-
-PyObject *at(PyArrayObject *table, int x, int y) {
-    npy_intp itemsize = PyArray_ITEMSIZE(table);
-    npy_intp *dims = PyArray_DIMS(table);
-    int ndims = PyArray_NDIM(table);
-
-    char *data = PyArray_BYTES(table);
-
-    int c_contiguous = PyArray_IS_C_CONTIGUOUS(table);
-    data += c_contiguous * ((ndims > 1) * (itemsize * ((dims[1] * x) + y)) + (ndims == 1) * (itemsize * x)) +
-            (!c_contiguous) * ((ndims > 1) * (itemsize * ((dims[0] * y) + x)) + (ndims == 1) * (itemsize * x));
-
-    return PyArray_GETITEM(table, data);
-}
-
-PyObject *at(PyArrayObject *table, int x) {
-    return at(table, x, 0);
-}
 
 float entropy_by_index(PyArrayObject *dataset, PyArrayObject *subset_index, int n_classes) {
     npy_intp *dims = PyArray_DIMS((PyArrayObject*)dataset);
@@ -432,14 +321,16 @@ static PyObject* make_predictions(PyObject *self, PyObject *args, PyObject *kwar
     return predictions;
 }
 
-// Extension method definition
-// Each entry in this list is composed by another list, the later being composed of 4 items:
-// ml_name: Method name, as it will be visible to end user; may be different than the intern name defined here;
-// ml_meth: Pointer to method implementation;
-// ml_flags: Flags with special attributes, such as:
-//      Whether it accepts or not parameters, whether it accepts kwarg parameters, etc;
-//      If this is a classmethod, a staticmethod, etc;
-// ml_doc:  docstring to this function.
+/**
+ * Extension method definition
+ * Each entry in this list is composed by another list, the later being composed of 4 items:
+ * ml_name: Method name, as it will be visible to end user; may be different than the intern name defined here;
+ * ml_meth: Pointer to method implementation;
+ * ml_flags: Flags with special attributes, such as:
+ *     Whether it accepts or not parameters, whether it accepts kwarg parameters, etc;
+ *     If this is a classmethod, a staticmethod, etc;
+ * ml_doc:  docstring to this function.
+ */
 static PyMethodDef cpu_methods[] = {
     {"make_predictions", (PyCFunction)make_predictions, METH_VARARGS | METH_KEYWORDS, make_predictions_doc},
     {"choice", (PyCFunction)choice, METH_VARARGS | METH_KEYWORDS, choice_doc},
@@ -471,32 +362,3 @@ PyMODINIT_FUNC PyInit_cpu_device(void) {
     import_array();  // import numpy arrays
     return PyModule_Create(&cpu_definition);
 }
-
-
-// TODO not implemented correctly!
-//void predict(
-//    float *dataset, int n_objects, int n_attributes,
-//    float *tree, int n_data, int n_predictions, int *predictions) {
-//
-//
-//    float current_node = 0;
-//    while(TRUE) {
-//        float terminal = at(tree, n_data, current_node, TERM);
-//
-//        if(terminal) {
-//            predictions[idx] = (int)at(tree, n_data, current_node, ATTR);
-//            break;
-//        }
-//
-//        float attribute, threshold;
-//
-//        attribute = at(tree, n_data, current_node, ATTR);
-//        threshold = at(tree, n_data, current_node, THRES);
-//
-//        if(at(dataset, n_attributes, idx, attribute) > threshold) {
-//            current_node = at(tree, n_data, current_node, RIGHT);
-//        } else {
-//            current_node = at(tree, n_data, current_node, LEFT);
-//        }
-//    }
-//}
