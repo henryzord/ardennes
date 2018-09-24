@@ -9,10 +9,10 @@ import pandas as pd
 #     # noinspection PyUnresolvedReferences
 #     import pyopencl
 #     from opencl import CLDevice as AvailableDevice
-#     print(colored('NOTICE: Using OpenCL as device.', 'yellow'))
+#     print(colored('NOTICE: Using OpenCL as devices.', 'yellow'))
 # except ImportError:
 #     AvailableDevice = Device
-#     print(colored('NOTICE: Using single-threaded CPU as device.', 'yellow'))
+#     print(colored('NOTICE: Using single-threaded CPU as devices.', 'yellow'))
 
 
 class Device(object):

@@ -36,47 +36,43 @@ class Individual(DecisionTree):
 
         fig = plt.figure(figsize=(40, 30))
 
-        tree = self.tree  # type: nx.DiGraph
+        tree = self.to_networkx()
         pos = graphviz_layout(tree, root=0, prog='dot')
 
         node_list = tree.nodes(data=True)
         edge_list = tree.edges(data=True)
 
-        node_labels = {
-            x[0]: '%s: %s\n%s' % (str(x[1]['node_id']), str(x[1]['label']), '%s/%s' % (
-                str(x[1]['inst_correct']), str(x[1]['inst_total'])) if x[1]['terminal'] else '')
-            for x in node_list
-        }
-        node_colors = [x[1]['color'] for x in node_list]
+        node_labels = {node_id: '%s: %s' % (node_id, node_dict['label']) for (node_id, node_dict) in node_list}
+        node_colors = [node_dict['color'] for node_id, node_dict in node_list]
         edge_labels = {(x1, x2): d['threshold'] for x1, x2, d in edge_list}
 
         nx.draw_networkx_nodes(tree, pos, node_size=1000, node_color=node_colors)  # nodes
         nx.draw_networkx_edges(tree, pos, edgelist=edge_list, style='dashed')  # edges
-        nx.draw_networkx_labels(tree, pos, node_labels, font_size=16)  # node labels
-        nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=16)
+        nx.draw_networkx_labels(tree, pos, node_labels, font_size=8)  # node labels
+        nx.draw_networkx_edge_labels(tree, pos, edge_labels=edge_labels, font_size=8)
 
-        plt.text(
-            0.2,
-            0.9,
-            '\n'.join([
-                'height: %d' % self.height,
-                'n_nodes: %d' % self.n_nodes,
-                'train accuracy: %0.4f' % self.train_acc_score,
-                'val accuracy: %0.4f' % self.val_acc_score,
-                'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
-
-            ]),
-            fontsize=15,
-            horizontalalignment='right',
-            verticalalignment='top',
-            transform=fig.transFigure
-        )
+        # plt.text(
+        #     0.2,
+        #     0.9,
+        #     '\n'.join([
+        #         'height: %d' % self.height,
+        #         'n_nodes: %d' % self.n_nodes,
+        #         'train accuracy: %0.4f' % self.train_acc_score,
+        #         'val accuracy: %0.4f' % self.val_acc_score,
+        #         'test accuracy: %0.4f' % self.test_acc_score if self.test_acc_score is not None else ''
+        #
+        #     ]),
+        #     fontsize=15,
+        #     horizontalalignment='right',
+        #     verticalalignment='top',
+        #     transform=fig.transFigure
+        # )
 
         plt.axis('off')
 
-        if savepath is not None:
-            plt.savefig(savepath, bbox_inches='tight', format='pdf')
-            plt.close()
+        # if savepath is not None:
+        #     plt.savefig(savepath, bbox_inches='tight', format='pdf')
+        #     plt.close()
 
     def __is_close__(self, other, attribute_name):
         quality_diff = abs(getattr(self, attribute_name) - getattr(other, attribute_name))

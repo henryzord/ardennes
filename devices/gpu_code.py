@@ -22,7 +22,7 @@ class CLDevice(Device):
         self.flags = cl.mem_flags
         self.mem_dataset = cl.Buffer(
             self.ctx, self.flags.READ_ONLY | self.flags.COPY_HOST_PTR, hostbuf=self.dataset.values.ravel()
-        )  # transfers dataset to device memory
+        )  # transfers dataset to devices memory
 
         self.prg = cl.Program(self.ctx, kernel).build()  # builds program; registers functions
 

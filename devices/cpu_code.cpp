@@ -4,6 +4,8 @@
 #include <random>
 #include <cmath>
 
+#include <unistd.h>
+
 #include "cpu_utils.h"
 
 
@@ -94,7 +96,6 @@ float device_gain_ratio(PyArrayObject *dataset, PyArrayObject *subset_index,
 }
 
 const char gain_ratio_doc[] = "Calculates gain ratio of a series of thresholds.";
-
 static PyObject* gain_ratio(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     PyObject *dataset, *candidates, *subset_index;
@@ -267,6 +268,7 @@ static int next_node(int current_node, int go_left) {
     return (current_node * 2) + 1 + (!go_left);
 }
 
+
 const char make_predictions_doc[] = "Makes predictions for a series of unknown data.\n";
 static PyObject* make_predictions(PyObject *self, PyObject *args, PyObject *kwargs) {
 
@@ -292,14 +294,16 @@ static PyObject* make_predictions(PyObject *self, PyObject *args, PyObject *kwar
     char *predictions_data = PyArray_BYTES((PyArrayObject*)predictions);
     npy_intp predictions_itemsize = PyArray_ITEMSIZE((PyArrayObject*)predictions);
 
-    int int_attr, current_node;
+    int terminal_size = (int)PyArray_SIZE((PyArrayObject*)terminal);
+
+    int int_attr, current_node, j;
     bool is_terminal;
     float current_threshold, value;
 
     for(int i = 0; i < n_objects; i++) {
         current_node = 0;
 
-        while(true) {
+        for(j = 0; j < terminal_size; j++) {
             is_terminal = (bool)PyLong_AsLong(at((PyArrayObject*)terminal, current_node));
             PyObject *label_obj = PyUnicode_AsEncodedString(at((PyArrayObject*)nodes, current_node), "utf-8", "Error ~");
             char *label_char =  PyBytes_AsString(label_obj);
@@ -316,6 +320,10 @@ static PyObject* make_predictions(PyObject *self, PyObject *args, PyObject *kwar
                 value = (float)PyFloat_AsDouble(at((PyArrayObject*)full_df, i, int_attr));
                 current_node = next_node(current_node, (value <= current_threshold));
             }
+        }
+        if(j == terminal_size) {
+            PyErr_SetString(PyExc_RecursionError, "Recursion exceeded the maximum depth of decision tree.");
+            return NULL;
         }
     }
     return predictions;

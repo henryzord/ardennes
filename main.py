@@ -64,8 +64,9 @@ class Ardennes(object):
         """
 
         # overrides prior seed
-        np.random.seed(None)
-        random.seed(None)
+        # TODO remove this seed!
+        np.random.seed(0)
+        random.seed(0)
 
         assert 1 <= int(self.n_individuals * self.decile) <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
@@ -78,10 +79,10 @@ class Ardennes(object):
         while g < self.n_generations:
             t1 = dt.now()
             population = gm.sample(population)
-            raise NotImplementedError('not implemented yet!')
+
             population = self.split_population(population, self.decile)
 
-            gm.update(population)
+            gm.__update_after_sampling__(population)
 
             # TODO reactivate later!
             # self.__save__(reporter=self.reporter, generation=g, population=population, gm=gm)

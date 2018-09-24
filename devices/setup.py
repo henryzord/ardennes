@@ -8,7 +8,7 @@ setup(
         Extension(
             'cpu_device',  # module name, as it will appear for import inside python code
             language='c++',
-            extra_compile_args=['-std=c++11', '-Wno-write-strings'],
+            extra_compile_args=['-std=c++11', '-Wno-write-strings', '-g'],
             sources=['cpu_code.cpp'],
         )
     ]

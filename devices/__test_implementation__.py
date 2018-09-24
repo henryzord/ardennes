@@ -1,4 +1,4 @@
-from device import Device
+from devices import Device
 from utils import path_to_dataframe
 from cpu_device import gain_ratio
 import numpy as np

@@ -7,10 +7,9 @@ import networkx as nx
 import pandas as pd
 from sklearn.metrics import accuracy_score
 import numpy as np
-from cpu_device import gain_ratio
-import copy
+from cpu_device import gain_ratio, make_predictions
 
-from utils import raw_type_dict, mid_type_dict
+from utils import raw_type_dict, mid_type_dict, clean_dataset
 
 __author__ = 'Henry Cagnini'
 
@@ -80,21 +79,17 @@ class DecisionTree(HeapTree):
     @classmethod
     def __set_class_values__(cls, max_depth, full_df, train_index, val_index):
         if not cls.initialized:
-            cls.column_types = {x: mid_type_dict[raw_type_dict[str(full_df[x].dtype)]] for x in full_df.columns}
-
             cls.max_depth = max_depth
             cls.train_index = train_index
             cls.val_index = val_index
 
+            cls.column_types = {x: mid_type_dict[raw_type_dict[str(full_df[x].dtype)]] for x in full_df.columns}
+
             cls.pred_attr_names = np.array(full_df.columns[:-1])  # type: np.ndarray
-
-            cls.pred_attr_values = dict()
-            for column in full_df.columns:
-                if str(full_df[column].dtype) == 'category':
-                    cls.pred_attr_values[column] = dict(zip(full_df[column].cat.codes, full_df[column].cat.categories))
-
             cls.class_attr_name = full_df.columns[-1]  # type: str
-            cls.class_labels = np.sort(full_df[full_df.columns[-1]].unique())  # type: np.ndarray
+
+            cls.y_train_true = full_df.loc[train_index, cls.class_attr_name]
+            cls.y_val_true = full_df.loc[val_index, cls.class_attr_name]
 
             _attr_forward = {
                 k: v for k, v in zip(full_df.columns, range(len(cls.pred_attr_names) + 1))
@@ -102,21 +97,10 @@ class DecisionTree(HeapTree):
             _attr_backward = {
                 k: v for k, v in zip(range(len(cls.pred_attr_names) + 1), cls.pred_attr_names + [cls.class_attr_name])
             }
-
             _attr_forward.update(_attr_backward)
             cls.attr_index = _attr_forward
 
-            _class_forward = {
-                k: v for k, v in zip(cls.class_labels, range(len(cls.class_labels)))
-            }
-            _class_backward = {
-                k: v for k, v in zip(range(len(cls.class_labels)), cls.class_labels)
-            }
-
-            _class_forward.update(_class_backward)
-            cls.class_labels_index = _class_forward
-
-            cls.full_df = cls.normalize_dataset(full_df)
+            cls.full_df, cls.attr_values = cls.__normalize_dataset__(full_df)
 
             # since the probability of generating the class at D is 100%
             cls.n_nodes = cls.get_node_count(cls.max_depth - 1)
@@ -140,27 +124,55 @@ class DecisionTree(HeapTree):
             val_index=val_index
         )
 
-        longest_word = max(map(len, list(self.class_labels) + list(self.pred_attr_names) + [self.class_attr_name]))
-        dtype = '<U%d' % longest_word
+        longest_word = ''
+        for attr_name, attr_values in self.attr_values.items():
+            for k, v in attr_values.items():
+                longest_word = max(longest_word, str(v))
 
-        self.nodes = np.empty(self.n_nodes, dtype=np.dtype(dtype))
+        longest_word_length = max(map(len, [longest_word] + list(self.full_df.columns)))
+        nodes_dtype = '<U%d' % (longest_word_length + 1)  # +1 for NULL character
+
+        self.nodes = np.empty(self.n_nodes, dtype=np.dtype(nodes_dtype))
         self.threshold = np.empty(self.n_nodes, dtype=np.float32)
         self.terminal = np.empty(self.n_nodes, dtype=np.bool)
+        self.predictions = np.empty(len(self.full_df), dtype=nodes_dtype)
+
+        self.train_acc_score = None
+        self.val_acc_score = None
+
+        self.fitness = None
+        self.quality = None
+        self.height = None
+        self.n_nodes = None
 
     @staticmethod
-    def normalize_dataset(dataset):
+    def __normalize_dataset__(dataset):
         """
+        Converts the dataset to a format comprehensible to this class.
+        Numeric attributes will be converted to float32, and categorical
+        ones will have the labels replaced by their numeric codes.
 
-        :param dataset:
+        :param dataset: The dataset to be normalized.
         :type dataset: pandas.DataFrame
-        :return:
+        :rtype: tuple
+        :return: a tuple where the first element is the normalized dataset (pandas.DataFrame),
+        and the second a dictionary of attribute values (dict).
         """
+        dataset = clean_dataset(dataset)
+        attr_values = dict()
 
-        for column in dataset.columns:
-            if str(dataset[column].dtype) == 'category':
-                dataset[column] = dataset[column].cat.codes
+        for column_index, column_name in enumerate(dataset.columns):
+            if str(dataset[column_name].dtype) == 'category':
+                zipped = list(zip(
+                    dataset[column_name].cat.categories, range(len(dataset[column_name].cat.categories))
+                ))
+                attr_values[column_name] = dict(zipped)
+                attr_values[column_name].update(dict(map(lambda x: reversed(x), zipped)))
 
-        return dataset
+                attr_values[column_index] = {v: k for k, v in attr_values[column_name].items()}
+                dataset[column_name] = dataset[column_name].cat.codes.astype(np.float32)
+
+        return dataset, attr_values
 
     # TODO test without it
     # def nodes_at_depth(self, depth):
@@ -222,16 +234,7 @@ class DecisionTree(HeapTree):
     #
     #     return len(self._shortest_path[node_id]) - 1
 
-    def update(self):
-        # TODO info needed to make predictions:
-        # preds = make_predictions(
-        #     shape,  # shape of sample data
-        #     data,  # dataset as a plain list
-        #     tree,  # tree in dictionary format
-        #     list(range(shape[0])),  # shape of prediction array
-        #     self.dataset_info.attribute_index  # dictionary where keys are attributes and values their indices
-        # )
-
+    def __update_after_sampling__(self):
         arg_threshold = self.train_index + self.val_index
 
         self.__set_node__(
@@ -240,21 +243,56 @@ class DecisionTree(HeapTree):
             parent_labels=[],
             coordinates=[],
         )
+        predictions = self.predict(full_df=self.full_df, predictions=self.predictions)
 
-        raise NotImplementedError('not implemented yet!')
-
-        predictions = np.array(self.mdevice.predict(self.mdevice.dataset, self))
-
-        self.train_acc_score = accuracy_score(DecisionTree.y_train_true, predictions[self.arg_sets['train']])
-        self.val_acc_score = accuracy_score(DecisionTree.y_val_true, predictions[self.arg_sets['val']])
+        self.train_acc_score = accuracy_score(self.y_train_true, predictions[self.train_index])
+        self.val_acc_score = accuracy_score(self.y_val_true, predictions[self.val_index])
 
         self.fitness = self.train_acc_score
+        self.quality = 0.5 * (self.train_acc_score + self.val_acc_score)
 
-        self.height = max(map(len, self._shortest_path.values()))
-        self.n_nodes = len(self.tree.node)
+        self.height, self.n_nodes = self.get_tree_info()
 
-    def predict(self, samples):
-        return self.mdevice.predict(samples, self, inner=False)
+    def __predict__(self, full_df, predictions):
+
+        n_predictions = len(full_df)
+        for i in range(n_predictions):
+            current_node = 0
+            while True:
+                if self.terminal[current_node]:
+                    predictions[i] = self.nodes[current_node]
+                    break
+                else:
+                    pass
+                    label = self.nodes[current_node]
+                    threshold = self.threshold[current_node]
+                    value = full_df.loc[i, label]
+
+                    go_left = value <= threshold
+                    if go_left:
+                        current_node = self.get_left_child_id(current_node)
+                    else:
+                        current_node = self.get_right_child_id(current_node)
+
+        # preds = make_predictions(
+        #     full_df.values, self.attr_index,
+        #     self.nodes, self.threshold, self.terminal,
+        #     predictions
+        # )
+        return predictions
+
+    def predict(self, full_df, predictions=None):
+        """
+
+        :param full_df:
+        :type full_df: pandas.DataFrame
+        :param predictions: (optional) - Former predictions array, if any. Used internally to save memory allocation.
+        :return:
+        """
+        if predictions is None:
+            predictions = np.empty(len(full_df), dtype=np.int32)
+
+        return self.__predict__(full_df, predictions)
 
     def to_matrix(self):
         """
@@ -295,14 +333,13 @@ class DecisionTree(HeapTree):
 
     def __set_node__(self, node_id, subset_index, parent_labels, coordinates):
 
+        label = self.nodes[node_id]
+
         '''
         if the current node has only one class,
         or is at a level deeper than maximum depth,
         or the class was sampled
         '''
-
-        label = self.nodes[node_id]
-
         if any((
             self.get_depth(node_id) >= self.max_depth - 1,
             label == self.class_attr_name,
@@ -401,7 +438,7 @@ class DecisionTree(HeapTree):
             candidates = np.array(
                 [(a + b) / 2. for a, b in zip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
             )
-            gains = gain_ratio(self.full_df.values, subset_index, self.attr_index[node_label], candidates, len(self.class_labels))
+            gains = gain_ratio(self.full_df.values, subset_index, self.attr_index[node_label], candidates, len(self.attr_values[self.class_attr_name]))
 
             argmax = np.argmax(gains)
 
@@ -445,7 +482,7 @@ class DecisionTree(HeapTree):
         # is not significant for the **real** label of the terminal node.
 
         counter = Counter(
-            map(lambda x: self.class_labels_index[x], self.full_df.loc[subset_index, self.class_attr_name])
+            map(lambda x: self.attr_values[self.class_attr_name][x], self.full_df.loc[subset_index, self.class_attr_name])
         )
         label, count_frequent = counter.most_common()[0]
 
@@ -467,21 +504,46 @@ class DecisionTree(HeapTree):
         'categorical': __set_categorical__
     }
 
+    def to_networkx(self):
+        def __add_local__(tree, current_node, graph):
+            if tree.terminal[current_node]:
+                graph.add_node(current_node, label=tree.nodes[current_node], color=self._terminal_node_color)
+            else:
+                graph.add_node(
+                    current_node,
+                    label=tree.nodes[current_node],
+                    # threshold=tree.threshold[current_node],
+                    color=self._inner_node_color
+                )
+
+                left_child = tree.get_left_child_id(current_node)
+                right_child = tree.get_right_child_id(current_node)
+                graph = __add_local__(tree=tree, current_node=left_child, graph=graph)
+                graph = __add_local__(tree=tree, current_node=right_child, graph=graph)
+                graph.add_edge(current_node, left_child, threshold='<= %.2f' % tree.threshold[current_node])
+                graph.add_edge(current_node, right_child, threshold='> %.2f' % tree.threshold[current_node])
+
+            return graph
+
+        _tree = __add_local__(tree=self, current_node=0, graph=nx.Graph())
+        return _tree
+
     def to_dict(self):
-        edges = nx.to_dict_of_dicts(self.tree)
-        nodes = self.tree.node
-        j = dict(edges=edges, nodes=nodes)
-        return j
+        raise NotImplementedError('not implemented yet!')
 
     def from_json(self, json_string):
-        j = json.loads(json_string)
         raise NotImplementedError('not implemented yet!')
 
     def to_json(self):
-        j = self.to_dict()
+        raise NotImplementedError('not implemented yet!')
 
-        for k in j['nodes'].keys():
-            j['nodes'][k]['threshold'] = str(j['nodes'][k]['threshold'])
+    def get_tree_info(self):
+        n_nodes = len(self.threshold) - np.sum(np.isnan(self.threshold)) + np.sum(self.terminal)
+        height = 1
+        for i in reversed(range(len(self.terminal))):
+            if self.terminal[i]:
+                height += self.get_depth(i)
+                break
 
-        _str = json.dumps(j, ensure_ascii=False, indent=2)
-        return _str
+        return height, n_nodes
+

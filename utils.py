@@ -42,20 +42,37 @@ def path_to_dataframe(dataset_path):
         data=file_arff['data'],
         columns=[x[0] for x in file_arff['attributes']],
     )
-    file_df.replace('?', np.nan, inplace=True)
+    file_df = clean_dataset(file_df)
 
-    for column in file_df.columns:
-        raw = raw_type_dict[str(file_df[column].dtype)]
+    return file_df
+
+
+def clean_dataset(df):
+    """
+    Converts the dataset to a format comprehensible to this class.
+    Numeric attributes will be converted to float32, and attributes
+    with object values will be converted to 'category' type.
+
+    :param df: The dataset to be normalized.
+    :type df: pandas.DataFrame
+    :rtype: pandas.DataFrame
+    :return: the normalized DataFrame.
+    """
+
+    df.replace('?', np.nan, inplace=True)
+
+    for column in df.columns:
+        raw = raw_type_dict[str(df[column].dtype)]
         mid = mid_type_dict[raw]
 
         if 'numerical' == mid:
-            file_df[column] = file_df[column].astype(np.float32)
+            df[column] = df[column].astype(np.float32)
         elif 'categorical' == mid:
-            file_df[column] = pd.Categorical(file_df[column])
+            df[column] = pd.Categorical(df[column])
         else:
             raise TypeError('unknown type for dataframe column %s' % column)
 
-    return file_df
+    return df
 
 
 def __get_fold__(params, dataset_path, n_fold):

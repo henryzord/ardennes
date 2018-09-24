@@ -81,5 +81,9 @@ class GraphicalModel(object):
                 individual = row['P']  # type: Individual
                 for j in range(self.n_variables):
                     individual.nodes[j] = np.random.choice(a=self.a, p=self.p[j])
-                individual.update()
-        z = 0
+                    individual.terminal[j] = False
+                    individual.threshold[j] = np.nan
+                individual.__update_after_sampling__()
+                # individual.plot()  # TODO remove!
+                # from matplotlib import pyplot as plt  # TODO remove!
+                # plt.show()  # TODO remove!
