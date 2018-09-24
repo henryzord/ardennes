@@ -32,8 +32,6 @@ class Ardennes(object):
         self.reporter = reporter
 
     def __setup__(self, full_df, train_index, val_index):
-        # mdevice = AvailableDevice(full_df, dataset_info)
-
         raw_individuals = np.array([
                 Individual(
                     full_df=full_df,
@@ -48,6 +46,7 @@ class Ardennes(object):
         population = pd.DataFrame({
             'P': raw_individuals,
             'P_fitness': np.empty(shape=self.n_individuals, dtype=np.float32),
+            'P_quality': np.empty(shape=self.n_individuals, dtype=np.float32),
             'A': np.zeros(self.n_individuals, dtype=np.bool),
         })
 
@@ -64,11 +63,12 @@ class Ardennes(object):
         """
 
         # overrides prior seed
-        # TODO remove this seed!
-        np.random.seed(0)
-        random.seed(0)
+        np.random.seed(None)
+        random.seed(None)
 
-        assert 1 <= int(self.n_individuals * self.decile) <= self.n_individuals, \
+        integer_decile = int(self.n_individuals * self.decile)
+
+        assert 1 <= integer_decile <= self.n_individuals, \
             ValueError('Decile must comprise at least one individual and at maximum the whole population!')
 
         gm, population = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
@@ -78,14 +78,10 @@ class Ardennes(object):
 
         while g < self.n_generations:
             t1 = dt.now()
-            population = gm.sample(population)
+            population = gm.sample(population, elite_threshold=integer_decile)
+            gm = gm.update(population, elite_threshold=integer_decile)
 
-            population = self.split_population(population, self.decile)
-
-            gm.__update_after_sampling__(population)
-
-            # TODO reactivate later!
-            # self.__save__(reporter=self.reporter, generation=g, population=population, gm=gm)
+            self.__save__(reporter=self.reporter, generation=g, population=population, gm=gm)
 
             if self.__early_stop__(population):
                 break
@@ -99,35 +95,48 @@ class Ardennes(object):
 
             g += 1
 
-        self.predictor = self.get_best_individual(population)
+        self.predictor = self.__get_best_individual__(population)
         self.trained = True
         return self
 
-    def split_population(self, population, decile):
+    def predict(self, X):
         """
 
-        :param population:
-        :type population: pandas.DataFrame
-        :param decile:
+        :type X: pandas.DataFrame
+        :param X:
         :return:
+        :rtype: numpy.ndarray
         """
 
-        integer_decile = int(self.n_individuals * decile)
+        if not self.trained:
+            raise AttributeError('ardennes was not yet trained, so it can\'t make predictions')
 
-        population.sort_values(by='P_fitness', axis=0, inplace=True, ascending=False)
-        population.loc[population.index[:integer_decile], 'A'] = True
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError('ardennes requires a pandas.DataFrame parameter for casting predictions')
 
-        return population
+        preds = self.predictor.predict(X)
+        return preds
 
     @staticmethod
-    def get_best_individual(population):
-        outer_fitness = [0.5 * (ind.P.train_acc_score + ind.P.val_acc_score) for (i, ind) in population.iterrows()]
-        return population.loc[np.argmax(outer_fitness)]
+    def __early_stop__(population):
+        return population.P.min() == population.P.max()
+
+    @staticmethod
+    def __get_best_individual__(population):
+        population.sort_values(by='P_quality', ascending=False)
+        return population.loc[population.index[0]]
 
     @property
     def tree_height(self):
-        if self.trained:
-            return self.predictor.height
+        if not self.trained:
+            raise AttributeError('ardennes was not yet trained, so it can\'t make predictions')
+        return self.predictor.height
+
+    @property
+    def n_nodes(self):
+        if not self.trained:
+            raise AttributeError('ardennes was not yet trained, so it can\'t make predictions')
+        return self.predictor.n_nodes
 
     @staticmethod
     def __save__(reporter, generation, population, gm):
@@ -136,14 +145,6 @@ class Ardennes(object):
             reporter.save_gm(generation=generation, gm=gm)
         except AttributeError:
             pass
-
-    @staticmethod
-    def __early_stop__(population):
-        return population.P.min() == population.P.max()
-
-    def predict(self, test_set):
-        y_test_pred = list(self.predictor.predict(test_set))
-        return y_test_pred
 
 
 def train_ardennes(dataset_path, output_path, params_path, n_fold, n_run):
