@@ -105,6 +105,8 @@ class DecisionTree(HeapTree):
             # since the probability of generating the class at D is 100%
             cls.n_nodes = cls.get_node_count(cls.max_depth - 1)
 
+            cls.stored_threshold = dict()
+
             cls.initialized = True
 
     def __init__(self, max_depth, full_df, train_index, val_index):
@@ -174,66 +176,6 @@ class DecisionTree(HeapTree):
 
         return dataset, attr_values
 
-    # TODO test without it
-    # def nodes_at_depth(self, depth):
-    #     """
-    #     Selects all nodes which are in the given level.
-    #
-    #     :type depth: int
-    #     :param depth: The level to pick
-    #     :rtype: list of dict
-    #     :return: A list of the nodes at the given level.
-    #     """
-    #     depths = {k: self.depth_of(k) for k in self._shortest_path.keys()}
-    #     at_level = []
-    #     for k, d in depths.items():
-    #         if d == depth:
-    #             at_level.append(self.tree.node[k])
-    #     return at_level
-    #
-    # def parents_of(self, node_id):
-    #     """
-    #     The parents of the given node.
-    #
-    #     :type node_id: int
-    #     :param node_id: The id of the node, starting from zero (root).
-    #     :rtype: list of int
-    #     :return: A list of parents of this node, excluding the node itself.
-    #     """
-    #     parents = copy.deepcopy(self._shortest_path[node_id])
-    #     parents.remove(node_id)
-    #     return parents
-    #
-    # def height_and_label_to(self, node_id):
-    #     """
-    #     Returns a dictionary where the keys are the depth of each one
-    #     of the parents, and the values the label of the parents.
-    #
-    #     :param node_id: ID of the node in the decision tree.
-    #     :return:
-    #     """
-    #     parents = self.parents_of(node_id)
-    #     parent_labels = {
-    #         self.tree.node[p]['level']: (
-    #             self.tree.node[p]['label'] if
-    #             self.tree.node[p]['label'] not in DecisionTree.dataset_info.class_labels else
-    #             DecisionTree.dataset_info.target_attr
-    #         ) for p in parents
-    #         }
-    #     return parent_labels
-    #
-    # def depth_of(self, node_id):
-    #     """
-    #     The depth which a node lies in the tree.
-    #
-    #     :type node_id: int
-    #     :param node_id: The id of the node, starting from zero (root).
-    #     :rtype: int
-    #     :return: Depth of the node, starting with zero (root).
-    #     """
-    #
-    #     return len(self._shortest_path[node_id]) - 1
-
     def __update_after_sampling__(self):
         arg_threshold = self.train_index + self.val_index
 
@@ -251,7 +193,20 @@ class DecisionTree(HeapTree):
         self.fitness = self.train_acc_score
         self.quality = 0.5 * (self.train_acc_score + self.val_acc_score)
 
-        self.height, self.n_nodes = self.get_tree_info()
+        self.height = self.get_height()
+        self.n_nodes = self.get_n_nodes()
+
+    def get_height(self):
+        height = 1
+        for i in reversed(range(len(self.terminal))):
+            if self.terminal[i]:
+                height += self.get_depth(i)
+                break
+
+        return height
+
+    def get_n_nodes(self):
+        return len(self.threshold) - np.sum(np.isnan(self.threshold)) + np.sum(self.terminal)
 
     def __predict__(self, full_df, predictions):
 
@@ -294,37 +249,6 @@ class DecisionTree(HeapTree):
 
         return self.__predict__(full_df, predictions)
 
-    def to_matrix(self):
-        """
-        Converts the inner decision tree from this class to a matrix with n_nodes
-        rows and [Left, Right, Terminal, Attribute, Threshold] attributes.
-        """
-        tree = self.tree
-
-        matrix = pd.DataFrame(
-            index=tree.node.keys(),
-            columns=['left', 'right', 'terminal', 'attribute', 'threshold']
-        )
-
-        conv_dict = {k: i for i, k in enumerate(matrix.index)}
-
-        for node_id, node in tree.node.iteritems():
-            label_index = self.dataset_info.class_label_index[node['label']] if \
-                              node['terminal'] else self.dataset_info.attribute_index[node['label']]
-
-            matrix.loc[node_id] = [
-                conv_dict[self.get_left_child_id(node['node_id'])] if self.get_left_child_id(node_id) in conv_dict else None,
-                conv_dict[self.get_right_child_id(node['node_id'])] if self.get_right_child_id(node_id) in conv_dict else None,
-                node['terminal'],
-                label_index,
-                node['threshold']
-            ]
-
-        matrix.index = [conv_dict[x] for x in matrix.index]
-        matrix = matrix.astype(np.float32)
-
-        return matrix
-
     def __same_branches__(self, children_left, children_right):
         res = (self.terminal[children_left] and self.terminal[children_right]) and \
                (self.nodes[children_left] == self.nodes[children_right])
@@ -363,12 +287,12 @@ class DecisionTree(HeapTree):
 
             if not self.terminal[node_id]:  # continues the process
                 children_id = (self.get_left_child_id(node_id), self.get_right_child_id(node_id))
-                for child_id, child_subset in zip(children_id, [subset_left, subset_right]):
+                for c, child_id, child_subset in zip(range(len(children_id)), children_id, [subset_left, subset_right]):
                     self.__set_node__(
                         node_id=child_id,
                         subset_index=child_subset,
                         parent_labels=parent_labels + [label],
-                        coordinates=coordinates
+                        coordinates=coordinates + [c]
                     )
 
                 # if both branches are terminal, and they share the same class label:
@@ -412,40 +336,51 @@ class DecisionTree(HeapTree):
 
         return subset_left, subset_right
 
-    def __store_threshold__(self, node_label, parent_labels, coordinates, threshold):
+    @classmethod
+    def __store_threshold__(cls, node_label, parent_labels, coordinates, threshold):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
-        self.__class__.thresholds[key] = threshold
+        cls.stored_threshold[key] = threshold
 
-    def __retrieve_threshold__(self, node_label, parent_labels, coordinates):
+    @classmethod
+    def __retrieve_threshold__(cls, node_label, parent_labels, coordinates):
         key = '[' + ','.join(parent_labels + [node_label]) + '][' + ','.join([str(c) for c in coordinates]) + ']'
-        return self.__class__.thresholds[key]
+        return cls.stored_threshold[key]
 
     def __set_numerical__(self, node_label, node_id, subset_index, parent_labels, coordinates):
-        # TODO not using memory for retrieving already-set thresholds!
-        # try:
-        #     best_threshold = self.__retrieve_threshold__(node_label, parent_labels, coordinates)
-        #     meta, subsets = self.__subsets_and_meta__(
-        #         node_label=node_label,
-        #         node_id=node_id,
-        #         node_level=node_level,
-        #         subset_index=subset_index,
-        #         threshold=best_threshold,
-        #     )
-        # except KeyError as ke:
-        unique_vals = sorted(self.full_df.loc[subset_index, node_label].unique())
+        try:
+            best_threshold = self.__retrieve_threshold__(
+                node_label=node_label,
+                parent_labels=parent_labels,
+                coordinates=coordinates
+            )
+        except KeyError as ke:
+            unique_vals = sorted(self.full_df.loc[subset_index, node_label].unique())
 
-        if len(unique_vals) > 1:
+            if len(unique_vals) <= 1:
+                return self.__set_terminal__(
+                    node_label=node_label,
+                    node_id=node_id,
+                    subset_index=subset_index,
+                    parent_labels=parent_labels,
+                    coordinates=coordinates,
+                )
+
             candidates = np.array(
                 [(a + b) / 2. for a, b in zip(unique_vals[::2], unique_vals[1::2])], dtype=np.float32
             )
-            gains = gain_ratio(self.full_df.values, subset_index, self.attr_index[node_label], candidates, len(self.attr_values[self.class_attr_name]))
+            gains = gain_ratio(
+                dataset=self.full_df.values,
+                subset_index=subset_index,
+                attribute_index=self.attr_index[node_label],
+                candidates=candidates,
+                n_classes=len(self.attr_values[self.class_attr_name])
+            )
 
             argmax = np.argmax(gains)
-
             best_gain = gains[argmax]
 
             if best_gain <= 0:
-                subset_left, subset_right = self.__set_terminal__(
+                return self.__set_terminal__(
                     node_label=node_label,
                     node_id=node_id,
                     subset_index=subset_index,
@@ -454,26 +389,21 @@ class DecisionTree(HeapTree):
                 )
             else:
                 best_threshold = candidates[argmax]
-                # self.__store_threshold__(node_label, parent_labels, coordinates, best_threshold)  # TODO deactivated
 
-                self.terminal[node_id] = False
-                self.nodes[node_id] = node_label
-                self.threshold[node_id] = best_threshold
+                self.__class__.__store_threshold__(
+                    node_label=node_label,
+                    parent_labels=parent_labels,
+                    coordinates=coordinates,
+                    threshold=best_threshold
+                )
 
-                less_or_equal = (self.full_df[node_label] <= best_threshold).values.ravel()
-                subset_left = less_or_equal & subset_index
-                subset_right = np.invert(less_or_equal) & subset_index
+        self.terminal[node_id] = False
+        self.nodes[node_id] = node_label
+        self.threshold[node_id] = best_threshold
 
-        else:
-            subset_left, subset_right = self.__set_terminal__(
-                node_label=node_label,
-                node_id=node_id,
-                subset_index=subset_index,
-                parent_labels=parent_labels,
-                coordinates=coordinates,
-            )
-        # except Exception as e:
-        #     raise e
+        less_or_equal = (self.full_df[node_label] <= best_threshold).values.ravel()
+        subset_left = less_or_equal & subset_index
+        subset_right = np.invert(less_or_equal) & subset_index
 
         return subset_left, subset_right
 
@@ -512,7 +442,6 @@ class DecisionTree(HeapTree):
                 graph.add_node(
                     current_node,
                     label=tree.nodes[current_node],
-                    # threshold=tree.threshold[current_node],
                     color=self._inner_node_color
                 )
 
@@ -528,6 +457,13 @@ class DecisionTree(HeapTree):
         _tree = __add_local__(tree=self, current_node=0, graph=nx.Graph())
         return _tree
 
+    def to_matrix(self):
+        """
+        Converts the inner decision tree from this class to a matrix with n_nodes
+        rows and [Left, Right, Terminal, Attribute, Threshold] attributes.
+        """
+        raise NotImplementedError('not implemented yet!')
+
     def to_dict(self):
         raise NotImplementedError('not implemented yet!')
 
@@ -536,14 +472,3 @@ class DecisionTree(HeapTree):
 
     def to_json(self):
         raise NotImplementedError('not implemented yet!')
-
-    def get_tree_info(self):
-        n_nodes = len(self.threshold) - np.sum(np.isnan(self.threshold)) + np.sum(self.terminal)
-        height = 1
-        for i in reversed(range(len(self.terminal))):
-            if self.terminal[i]:
-                height += self.get_depth(i)
-                break
-
-        return height, n_nodes
-

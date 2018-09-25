@@ -74,9 +74,7 @@ class Ardennes(object):
         gm, population = self.__setup__(full_df=full_df, train_index=train_index, val_index=val_index)
 
         # main loop
-        g = 0
-
-        while g < self.n_generations:
+        for g in range(self.n_generations):
             t1 = dt.now()
             population = gm.sample(population, elite_threshold=integer_decile)
             gm = gm.update(population, elite_threshold=integer_decile)
@@ -92,8 +90,6 @@ class Ardennes(object):
                 print('generation %02.d: best: %.4f median: %.4f time elapsed: %f' % (
                     g, population.P_fitness.max(), median, (dt.now() - t1).total_seconds()
                 ))
-
-            g += 1
 
         self.predictor = self.__get_best_individual__(population)
         self.trained = True

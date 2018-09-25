@@ -38,6 +38,8 @@ class BaseReporter(object):
         self.set_names = set_names
         self.dataset_name = dataset_name
 
+        self.predictions = [np.empty(size, dtype=np.object) for size in self.set_sizes]
+
         self.n_run = n_run
         self.n_fold = n_fold
         self.n_variables = n_variables
@@ -268,9 +270,9 @@ class EDAReporter(BaseReporter):
             writer = csv.writer(f, delimiter=',')
 
             counter = 0
-            for set_name, set_size, set_x, set_y in zip(self.set_names, self.set_sizes, self.Xs, self.ys):
+            for set_name, set_size, set_x, set_y, set_preds in zip(self.set_names, self.set_sizes, self.Xs, self.ys, self.predictions):
                 for i, individual in population.iterrows():
-                    preds = individual['P'].predict(set_x)
+                    preds = individual['P'].predict(set_x, predictions=set_preds)
                     results = []
                     for metric_name, metric_func in EDAReporter.metrics:
                         results += [metric_func(y_true=set_y, y_pred=preds)]
