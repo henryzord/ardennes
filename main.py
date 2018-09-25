@@ -140,11 +140,12 @@ class Ardennes(object):
 
     @staticmethod
     def __save__(reporter, generation, population, gm):
-        try:
-            reporter.save_population(generation=generation, population=population)
-            reporter.save_gm(generation=generation, gm=gm)
-        except AttributeError:
-            pass
+        # try:
+        reporter.save_population(generation=generation, population=population)
+        reporter.save_gm(generation=generation, gm=gm)
+        z =0
+        # except AttributeError:
+        #     pass
 
 
 def train_ardennes(dataset_path, output_path, params_path, n_fold, n_run):
@@ -169,7 +170,7 @@ def train_ardennes(dataset_path, output_path, params_path, n_fold, n_run):
         shuffle=True, random_state=params['random_state'], stratify=rest_y
     )
 
-    n_classes = len(np.unique(rest_y))
+    n_variables = GraphicalModel.get_n_variables(params['max_height'])
 
     X_train = rest_df.loc[train_index, rest_df.columns[:-1]]
     y_train = rest_df.loc[train_index, rest_df.columns[-1]]
@@ -183,10 +184,11 @@ def train_ardennes(dataset_path, output_path, params_path, n_fold, n_run):
     val_index_bool[val_index] = True
 
     reporter = EDAReporter(
-        Xs=[X_train, X_val],
-        ys=[y_train, y_val],
-        n_classes=n_classes,
-        set_names=['train', 'val'],
+        Xs=[X_train, X_val, X_test],
+        ys=[y_train, y_val, y_test],
+        n_variables=n_variables,
+        column_names=rest_df.columns,
+        set_names=['train', 'val', 'test'],
         dataset_name=dataset_name,
         n_fold=n_fold,
         n_run=n_run,

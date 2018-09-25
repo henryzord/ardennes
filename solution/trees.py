@@ -130,12 +130,12 @@ class DecisionTree(HeapTree):
                 longest_word = max(longest_word, str(v))
 
         longest_word_length = max(map(len, [longest_word] + list(self.full_df.columns)))
-        nodes_dtype = '<U%d' % (longest_word_length + 1)  # +1 for NULL character
+        self.nodes_dtype = '<U%d' % (longest_word_length + 1)  # +1 for NULL character
 
-        self.nodes = np.empty(self.n_nodes, dtype=np.dtype(nodes_dtype))
+        self.nodes = np.empty(self.n_nodes, dtype=np.dtype(self.nodes_dtype))
         self.threshold = np.empty(self.n_nodes, dtype=np.float32)
         self.terminal = np.empty(self.n_nodes, dtype=np.bool)
-        self.predictions = np.empty(len(self.full_df), dtype=nodes_dtype)
+        self.predictions = np.empty(len(self.full_df), dtype=self.nodes_dtype)
 
         self.train_acc_score = None
         self.val_acc_score = None
@@ -266,7 +266,7 @@ class DecisionTree(HeapTree):
                     pass
                     label = self.nodes[current_node]
                     threshold = self.threshold[current_node]
-                    value = full_df.loc[i, label]
+                    value = full_df.iloc[i][label]
 
                     go_left = value <= threshold
                     if go_left:
@@ -290,7 +290,7 @@ class DecisionTree(HeapTree):
         :return:
         """
         if predictions is None:
-            predictions = np.empty(len(full_df), dtype=np.int32)
+            predictions = np.empty(len(full_df), dtype=self.nodes_dtype)
 
         return self.__predict__(full_df, predictions)
 

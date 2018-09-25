@@ -82,3 +82,7 @@ class GraphicalModel(object):
         population.sort_values(by='P_fitness', axis=0, inplace=True, ascending=False)
         population.loc[population.index[:elite_threshold], 'A'] = True
         return population
+
+    @staticmethod
+    def get_n_variables(max_height):
+        return DecisionTree.get_node_count(max_height - 2)

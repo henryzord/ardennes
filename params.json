@@ -1,6 +1,6 @@
 {
   "random_state": 0,
-  "n_folds": 10,
+  "n_folds": 3,
   "n_individuals": 10,
   "n_generations": 10,
   "decile": 0.5,

@@ -5,7 +5,7 @@ import json
 import os
 
 from main import train_ardennes
-from reporter import BaselineReporter
+from reporter import BaselineReporter, EDAReporter
 from utils import get_dataset_name
 
 
@@ -125,5 +125,4 @@ if __name__ == '__main__':
         n_runs=args.runs,
         n_jobs=args.jobs
     )
-    # TODO reactivate
-    # BaselineReporter.generate_summary(args.m, args.r)
+    EDAReporter.generate_summary(path_read=args.m, path_out=args.r)

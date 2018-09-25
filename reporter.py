@@ -29,18 +29,19 @@ class BaseReporter(object):
 
     def __init__(
             self, Xs, ys,
-            n_classes,
+            n_variables, column_names,
             set_names, dataset_name, n_fold, n_run, output_path
     ):
         self.Xs = Xs
         self.ys = ys
-        self.set_sizes = map(len, self.ys)
+        self.set_sizes = list(map(len, self.ys))
         self.set_names = set_names
         self.dataset_name = dataset_name
 
         self.n_run = n_run
         self.n_fold = n_fold
-        self.n_classes = n_classes
+        self.n_variables = n_variables
+        self.column_names = column_names
         self.output_path = output_path
 
     @staticmethod
@@ -79,13 +80,14 @@ class BaselineReporter(BaseReporter):
     A class for reporting the partial results of baseline algorithms.
     """
 
-    def __init__(self, Xs, ys, n_classes, set_names, dataset_name, n_fold, n_run, output_path, algorithm):
+    def __init__(self, Xs, ys, n_variables, column_names, set_names, dataset_name, n_fold, n_run, output_path, algorithm):
         """
         Initializes a reporter, which will follow the EDA throughout evolution,
             reporting the performance of its population.
         :param Xs: Predictive attributes of subsets (e.g., train, validation, test).
         :param ys: Labels of subsets (e.g., train, validation, test).
-        :param n_classes: Number of classes in the problem.
+        :param n_variables: Number of classes in the problem.
+        :param column_names: name of columns in dataset.
         :param set_names: Name of the sets (e.g., train, validation, test).
         :param dataset_name: Name of the tested dataset.
         :param n_fold: Current fold index.
@@ -97,7 +99,8 @@ class BaselineReporter(BaseReporter):
         super(BaselineReporter, self).__init__(
             Xs=Xs,
             ys=ys,
-            n_classes=n_classes,
+            n_variables=n_variables,
+            column_names=column_names,
             set_names=set_names,
             dataset_name=dataset_name,
             n_fold=n_fold,
@@ -199,19 +202,19 @@ class BaselineReporter(BaseReporter):
         result_df.to_csv(path_out, index=True, sep=',', float_format='%0.8f')
 
 
-# TODO adapt this class to needs of ardennes
 class EDAReporter(BaseReporter):
     """
     A class for reporting the partial results of the Ensemble class.
     """
 
-    def __init__(self, Xs, ys, n_classes, set_names, dataset_name, n_fold, n_run, output_path):
+    def __init__(self, Xs, ys, n_variables, column_names, set_names, dataset_name, n_fold, n_run, output_path):
         """
         Initializes a reporter, which will follow the EDA throughout evolution, reporting the performance of its
             population.
         :param Xs: Predictive attributes of subsets (e.g., train, validation, test).
         :param ys: Labels of subsets (e.g., train, validation, test).
-        :param n_classes: Number of classes in the problem.
+        :param n_variables: Number of variables for the graphical model.
+        :param column_names: name of columns in dataset.
         :param set_names: Name of the sets (e.g., train, validation, test).
         :param dataset_name: Name of the tested dataset.
         :param n_fold: Current fold index.
@@ -222,7 +225,8 @@ class EDAReporter(BaseReporter):
         super(EDAReporter, self).__init__(
             Xs=Xs,
             ys=ys,
-            n_classes=n_classes,
+            n_variables=n_variables,
+            column_names=column_names,
             set_names=set_names,
             dataset_name=dataset_name,
             n_fold=n_fold,
@@ -239,20 +243,20 @@ class EDAReporter(BaseReporter):
             n_fold=self.n_fold, n_run=self.n_run, reason='gm'
         )
 
-        # with open(self.population_file, 'w') as f:
-        #     writer = csv.writer(f, delimiter=',')
-        #     writer.writerow(
-        #         ['dataset', 'n_fold', 'n_run', 'generation', 'set_name', 'set_size', 'elite', 'fitness'] +
-        #         [a for a, b in EDAReporter.metrics] +
-        #         ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
-        #     )
-        #
-        # with open(self.gm_file, 'w') as f:
-        #     writer = csv.writer(f, delimiter=',')
-        #     writer.writerow(
-        #         ['dataset', 'n_fold', 'n_run', 'generation', 'scale'] +
-        #         ['w_%d_%d' % (a, b) for a, b in list(it.product(np.arange(self.n_classifiers), np.arange(self.n_classes)))]
-        #     )
+        with open(self.population_file, 'w') as f:
+            writer = csv.writer(f, delimiter=',')
+            writer.writerow(
+                ['dataset', 'n_fold', 'n_run', 'generation', 'set_name', 'set_size',
+                 'elite', 'height', 'n_nodes', 'fitness', 'quality'] +
+                [a for a, b in EDAReporter.metrics]
+            )
+
+        with open(self.gm_file, 'w') as f:
+            writer = csv.writer(f, delimiter=',')
+            writer.writerow(
+                ['dataset', 'n_fold', 'n_run', 'generation'] +
+                ['node_%d_%s' % (d, s) for d, s in it.product(range(n_variables), column_names)]
+            )
 
     def save_population(self, generation, population):
         """
@@ -264,18 +268,17 @@ class EDAReporter(BaseReporter):
             writer = csv.writer(f, delimiter=',')
 
             counter = 0
-            for i, individual in population.iterrows():
-                ravel_weights = ensemble.voting_weights.ravel().tolist()
-
-                for set_name, set_size, set_x, set_y in list(zip(self.set_names, self.set_sizes, self.Xs, self.ys)):
-                    preds = ensemble.predict(set_x)
+            for set_name, set_size, set_x, set_y in zip(self.set_names, self.set_sizes, self.Xs, self.ys):
+                for i, individual in population.iterrows():
+                    preds = individual['P'].predict(set_x)
                     results = []
                     for metric_name, metric_func in EDAReporter.metrics:
                         results += [metric_func(y_true=set_y, y_pred=preds)]
 
                     writer.writerow(
-                        [self.dataset_name, self.n_fold, self.n_run, generation, set_name, set_size, elite, fitness] +
-                        results + ravel_weights
+                        [self.dataset_name, self.n_fold, self.n_run, generation, set_name, set_size] +
+                        [individual['A'], individual['P'].height, individual['P'].n_nodes, individual['P'].fitness, individual['P'].quality] +
+                        results
                     )
                     counter += 1
 
@@ -287,8 +290,8 @@ class EDAReporter(BaseReporter):
         with open(self.gm_file, 'a') as f:
             writer = csv.writer(f, delimiter=',')
             writer.writerow(
-                [self.dataset_name, self.n_fold, self.n_run, generation, scale] +
-                loc.ravel().tolist()
+                [self.dataset_name, self.n_fold, self.n_run, generation] +
+                gm.p.ravel().tolist()
             )
 
     @staticmethod
