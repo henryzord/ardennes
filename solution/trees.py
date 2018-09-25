@@ -95,7 +95,7 @@ class DecisionTree(HeapTree):
                 k: v for k, v in zip(full_df.columns, range(len(cls.pred_attr_names) + 1))
             }
             _attr_backward = {
-                k: v for k, v in zip(range(len(cls.pred_attr_names) + 1), cls.pred_attr_names + [cls.class_attr_name])
+                k: v for k, v in zip(range(len(cls.pred_attr_names) + 1), full_df.columns)
             }
             _attr_forward.update(_attr_backward)
             cls.attr_index = _attr_forward

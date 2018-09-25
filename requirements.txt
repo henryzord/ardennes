@@ -8,3 +8,4 @@ pathlib2
 pyopencl
 liac-arff
 pygraphviz
+plotly

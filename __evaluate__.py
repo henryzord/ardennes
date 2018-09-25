@@ -1,23 +1,15 @@
 # coding=utf-8
 
-import StringIO
 import csv
 import itertools as it
 import json
 import os
 import warnings
-from datetime import datetime as dt
+from io import StringIO
 
 import networkx as nx
 import pandas as pd
-from matplotlib import pyplot as plt
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
-
-from preprocessing.dataset import path_to_dataframe
-from treelib import Ardennes
-from treelib.node import *
-from treelib.utils import DatabaseHandler
 
 __author__ = 'Henry Cagnini'
 
@@ -168,76 +160,12 @@ def evaluate_j48(datasets_path, intermediary_path):
                 ]
                 count_row += 1
 
-        print df
+        print(df)
         json.dump(json_results, open('j48_results.json', 'w'), indent=2)
         df.to_csv('j48_results.csv', sep=',', quotechar='\"', index=False)
 
     finally:
         jvm.stop()
-
-
-def crunch_result_file(results_path):
-    results_file = json.load(
-        open(results_path, 'r')
-    )
-
-    n_runs = len(results_file['runs'].keys())
-    some_run = results_file['runs'].keys()[0]
-    n_datasets = len(results_file['runs'][some_run].keys())
-
-    df = pd.DataFrame(
-        columns=['run', 'dataset', 'test_acc', 'height', 'n_nodes'],
-        index=np.arange(n_runs * n_datasets),
-        dtype=np.object
-    )
-
-    dtypes = dict(
-        run=np.float32, dataset=np.object, test_acc=np.float32,
-        height=np.float32, n_nodes=np.float32
-    )
-
-    for k, v in dtypes.iteritems():
-        df[k] = df[k].astype(v)
-
-    count_row = 0
-    for n_run, run in results_file['runs'].iteritems():
-        for dataset_name, dataset in run.iteritems():
-                conf_matrix = np.array(dataset['confusion_matrix'], dtype=np.float32)
-
-                test_acc = np.diag(conf_matrix).sum() / conf_matrix.sum()
-
-                height_mean = np.mean(dataset['height'])
-                n_nodes_mean = np.mean(dataset['n_nodes'])
-
-                df.loc[count_row] = [
-                    int(n_run), str(dataset_name), float(test_acc),
-                    float(height_mean), float(n_nodes_mean)
-                ]
-                count_row += 1
-
-    print df
-
-    grouped = df.groupby(by=['dataset'])['test_acc', 'height', 'n_nodes']
-    final = grouped.aggregate([np.mean, np.std])
-
-    print final
-
-    final.to_csv(results_path.split('.')[0] + '.csv', sep=',', quotechar='\"')
-
-
-def crunch_evolution_data(path_results, criteria):
-    df = pd.read_csv(path_results)
-    for criterion in criteria:
-        df.boxplot(column=criterion, by='iteration')
-        plt.savefig(path_results.split('.')[0] + '_%s.pdf' % criterion, bbox_inches='tight', format='pdf')
-        plt.close()
-
-
-def generation_statistics(path_results):
-    df = pd.read_csv(path_results)
-    gb = df.groupby(by='iteration')
-    meta = gb.agg([np.min, np.max, np.median, np.mean, np.std])
-    meta.to_csv('iteration_statistics.csv')
 
 
 def crunch_graphical_model(pgm_path, path_datasets):
@@ -250,14 +178,14 @@ def crunch_graphical_model(pgm_path, path_datasets):
 
         node_labels = dict()
 
-        for node_id in xrange(series.shape[1]):
+        for node_id in range(series.shape[1]):
             probs = series[:, node_id]
 
             G.add_node(
                 node_id,
                 attr_dict=dict(
                     color=max(probs),
-                    probs='<br>'.join(['%2.3f : %s' % (y, x) for x, y in it.izip(columns, probs)])
+                    probs='<br>'.join(['%2.3f : %s' % (y, x) for x, y in zip(columns, probs)])
                 )
             )
             parent = get_parent(node_id)
