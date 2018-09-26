@@ -4,5 +4,5 @@
   "n_individuals": 10,
   "n_generations": 10,
   "decile": 0.5,
-  "max_height": 9
+  "max_height": 2
 }

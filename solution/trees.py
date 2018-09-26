@@ -102,8 +102,7 @@ class DecisionTree(HeapTree):
 
             cls.full_df, cls.attr_values = cls.__normalize_dataset__(full_df)
 
-            # since the probability of generating the class at D is 100%
-            cls.n_nodes = cls.get_node_count(cls.max_depth - 1)
+            cls.n_nodes = cls.get_node_count(cls.max_depth)
 
             cls.stored_threshold = dict()
 

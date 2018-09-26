@@ -15,8 +15,7 @@ class GraphicalModel(object):
 
         self.a = full_df.columns
 
-        # since the probability of generating the class at D is 100%
-        self.n_variables = DecisionTree.get_node_count(self.max_depth - 1)
+        self.n_variables = DecisionTree.get_node_count(self.max_depth)
 
         self.p = np.empty(
             (self.n_variables, len(self.a)), dtype=np.float32

@@ -1,0 +1,2 @@
+,accuracy mean,accuracy std,precision-micro mean,precision-micro std,precision-macro mean,precision-macro std,precision-weighted mean,precision-weighted std,recall-micro mean,recall-micro std,recall-macro mean,recall-macro std,recall-weighted mean,recall-weighted std,f1-micro mean,f1-micro std,f1-macro mean,f1-macro std,f1-weighted mean,f1-weighted std
+iris,0.33333334,0.00000000,0.33333334,0.00000000,0.11111111,0.00000000,0.11111111,0.00000000,0.33333334,0.00000000,0.33333334,0.00000000,0.33333334,0.00000000,0.33333334,0.00000000,0.16666667,0.00000000,0.16666667,0.00000000
